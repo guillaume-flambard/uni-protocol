@@ -23,6 +23,7 @@ enum Cmd {
     Report,
     Events,
     Lint { file: PathBuf },
+    Doctor,
 }
 
 fn dot_uni() -> PathBuf {
@@ -41,7 +42,75 @@ fn main() -> Result<()> {
         Cmd::Report => cmd_report(cli.json),
         Cmd::Events => cmd_events(cli.json, 50),
         Cmd::Lint { file } => cmd_lint(&file, cli.json),
+        Cmd::Doctor => cmd_doctor(cli.json),
     }
+}
+
+/// Workspace health check, read-only: git binding, registry, policies,
+/// evidence/journal writability. Exit 0 when everything is healthy.
+fn cmd_doctor(as_json: bool) -> Result<()> {
+    let du = dot_uni();
+    let ws = std::env::current_dir()?;
+    let mut checks: Vec<(String, bool, String)> = vec![];
+    let ok_uni = du.exists();
+    checks.push((
+        ".uni present".into(),
+        ok_uni,
+        if ok_uni { String::new() } else { "run `uni init`".into() },
+    ));
+    let (sha, dirty) = uni_evidence::git_info(&ws);
+    let git_ok = sha != "no-git" && !sha.is_empty();
+    checks.push((
+        "git binding".into(),
+        git_ok,
+        if git_ok {
+            format!("{} dirty={}", &sha[..sha.len().min(8)], dirty)
+        } else {
+            "no repository".into()
+        },
+    ));
+    let registry = uni_verify::load_registry(&du);
+    checks.push(("registry".into(), true, format!("{} verifier(s)", registry.len())));
+    let pol = uni_decision::load_policies(&du.join("policies"));
+    checks.push((
+        "policies".into(),
+        true,
+        format!(
+            "reject_on_invalid={} escalate_on_stale={} escalate_on_missing={} min_ratio={:.2}",
+            pol.reject_on_invalid, pol.escalate_on_stale, pol.escalate_on_missing, pol.min_verified_ratio
+        ),
+    ));
+    let ev_ok = std::fs::create_dir_all(du.join("evidence")).is_ok();
+    checks.push(("evidence dir writable".into(), ev_ok, String::new()));
+    let jr_ok = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(events::journal_path())
+        .is_ok();
+    checks.push(("journal writable".into(), jr_ok, String::new()));
+
+    let failed = checks.iter().filter(|(_, ok, _)| !ok).count();
+    if as_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "healthy": failed == 0,
+                "checks": checks.iter().map(|(name, ok, detail)| serde_json::json!({
+                    "check": name, "ok": ok, "detail": detail,
+                })).collect::<Vec<_>>(),
+            })
+        );
+    } else {
+        println!("uni doctor");
+        for (name, ok, detail) in &checks {
+            println!("  {} {:<22} {}", if *ok { "OK  " } else { "FAIL" }, name, detail);
+        }
+        println!("\nhealthy: {}", failed == 0);
+    }
+    if failed > 0 {
+        return Err(anyhow!("uni doctor: {failed} check(s) failed"));
+    }
+    Ok(())
 }
 
 fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {

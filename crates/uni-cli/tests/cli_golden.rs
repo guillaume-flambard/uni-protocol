@@ -218,3 +218,19 @@ VERIFY x
     let r1 = out(&["verify", "c.uni"], &dir);
     assert!(r1.contains("Accepted"), "{r1}");
 }
+
+/// v0.13: doctor — healthy exit 0 on a prepared workspace, failure exit without .uni.
+#[test]
+fn golden_doctor_healthy_and_fail() {
+    let dup = manifest_dir().parent().unwrap().parent().unwrap().to_path_buf();
+    let ok = bin_state(&dup);
+    assert!(ok, "uni repo doctor must be healthy");
+    let dir = std::env::temp_dir().join(format!("uni-doc-{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let out = Command::new(bin()).args(["doctor"]).current_dir(&dir).output().unwrap();
+    assert_ne!(out.status.code(), Some(0), "doctor must fail without .uni");
+}
+fn bin_state(root: &std::path::PathBuf) -> bool {
+    Command::new(bin()).args(["doctor"]).current_dir(root).output().map(|o| o.status.success()).unwrap_or(false)
+}
