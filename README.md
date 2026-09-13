@@ -67,6 +67,12 @@ timeout = 30
 `expect` = output must contain; `expect_not` = output must not contain; `files` = content-bound
 evidence invalidation by SHA-256 over watched files.
 
+## Documentation
+
+Start at [docs/index.md](docs/index.md): why UNI, quickstart, language,
+claims, evidence, verification, decisions, GitHub, writing verifiers,
+specification.
+
 ## Dogfood & tests
 
 ```bash

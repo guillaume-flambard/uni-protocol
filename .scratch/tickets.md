@@ -22,3 +22,4 @@
 - [x] v0.12 — PolicyProvider seam: trait + TomlPolicy (local) + OpaPolicy (outbound opa eval, graceful fallback, arg order fixed, rego bundle .uni/policies/opa.rego), provider selection in verify, OPA shim golden test. 28 tests green, 0 warnings. DONE
 - [x] v0.13 — `uni doctor` healthcheck. DONE.
 - [x] v0.14 — Stack independence examples: Python (unittest) + Node (node --test) contracts both ACCEPTED, registry expectations tuned to real reporter output (spec-reporter ℹ chars, glob paths), quickstart + language docs, lint in capability map, candidate DSL gitignore, CI verifies all 4 stacks, golden stack-independence test (skips when runtime absent). 30 tests green. DONE
+- [x] v0.15 — PRD §24 docs set: why-uni, claims, evidence, verification, decisions, github-integration, writing-verifiers, specification + docs/index, all written from the shipped binary (trust-boundary phrasing fixed against real code, Node reporter gotcha documented). DONE
