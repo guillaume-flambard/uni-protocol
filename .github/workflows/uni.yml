@@ -1,0 +1,12 @@
+name: uni
+on: [push, pull_request]
+jobs:
+  assurance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - run: ./target/release/uni verify examples/hello/hello.uni
+      - run: ./target/release/uni verify examples/multi/multi.uni
+      - run: ./target/release/uni verify examples/booking/booking.uni

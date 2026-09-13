@@ -1,0 +1,7 @@
+[verifiers]
+"project.check" = "cargo check"
+"project.tests" = "cargo test"
+"project.build" = "cargo build"
+"test.true" = "true"
+"test.false" = "false"
+"e2e.smoke" = "npx playwright test --reporter=list"

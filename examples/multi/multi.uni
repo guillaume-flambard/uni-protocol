@@ -1,0 +1,20 @@
+VERSION 0.1
+DOMAIN software
+INTENT multi-demo
+GOAL
+  Multiple claims with invariant.
+CLAIM a REQUIRED
+  ENSURE first holds
+CLAIM b REQUIRED
+  ENSURE second holds
+INVARIANT no-evil CRITICAL
+  ENSURE no evil
+VERIFY a
+  USING test.true
+VERIFY b
+  USING test.true
+VERIFY no-evil
+  USING test.true
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

@@ -1,0 +1,12 @@
+VERSION 0.1
+DOMAIN software
+INTENT hello
+GOAL
+  Binary builds.
+CLAIM binary-builds REQUIRED
+  ENSURE binary builds
+VERIFY binary-builds
+  USING project.check
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

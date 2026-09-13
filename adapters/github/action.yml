@@ -1,0 +1,14 @@
+name: "UNI Verify"
+description: "Verify UNI outcome contracts (Outcome Assurance)"
+inputs:
+  contract:
+    description: "Path to .uni contract"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - run: ${{ github.action_path }}/../../target/release/uni verify ${{ inputs.contract }}
+      shell: bash
+branding:
+  icon: "check-circle"
+  color: "green"

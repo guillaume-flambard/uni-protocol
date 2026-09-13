@@ -1,0 +1,10 @@
+[package]
+name = "uni-ir"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uni-parser = { path = "../uni-parser" }

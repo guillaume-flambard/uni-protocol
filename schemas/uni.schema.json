@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uni-protocol.dev/schemas/uni-0.1.json",
+  "title": "UNI IR 0.1",
+  "type": "object",
+  "required": ["uni_version", "intent", "claims", "verification", "acceptance"],
+  "properties": {
+    "uni_version": {"type": "string", "const": "0.1"},
+    "intent": {
+      "type": "object",
+      "required": ["id", "domain", "goal"],
+      "properties": {
+        "id": {"type": "string"},
+        "domain": {"type": "string"},
+        "goal": {"type": "string"}
+      }
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "required", "critical", "ensure"],
+        "properties": {
+          "id": {"type": "string"},
+          "kind": {"type": "string", "enum": ["claim", "invariant"]},
+          "required": {"type": "boolean"},
+          "critical": {"type": "boolean"},
+          "ensure": {"type": "string"}
+        }
+      }
+    },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "verifier_ref"],
+        "properties": {
+          "claim_id": {"type": "string"},
+          "verifier_ref": {"type": "string"},
+          "inline_shell": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "properties": {
+        "require_verified": {"type": "boolean"},
+        "allow_critical_failures": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

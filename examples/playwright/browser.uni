@@ -1,0 +1,12 @@
+VERSION 0.1
+DOMAIN software
+INTENT checkout-smoke
+GOAL
+  Critical user journey passes in a real browser.
+CLAIM journey REQUIRED
+  ENSURE smoke journey passes
+VERIFY journey
+  USING test.true
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

@@ -1,0 +1,20 @@
+VERSION 0.1
+DOMAIN software
+INTENT booking.cancel
+GOAL
+  Cancel a confirmed booking safely.
+CLAIM booking-state REQUIRED
+  ENSURE booking.status == cancelled
+CLAIM inventory REQUIRED
+  ENSURE inventory.available == inventory.before + booking.seats
+INVARIANT ledger-consistency CRITICAL
+  ENSURE ledger.balance == expected.balance
+VERIFY booking-state
+  USING test.true
+VERIFY inventory
+  USING test.true
+VERIFY ledger-consistency
+  USING test.true
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0
