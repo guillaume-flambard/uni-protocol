@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+mod events;
 use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
 
@@ -20,6 +21,7 @@ enum Cmd {
     Inspect { file: PathBuf },
     ImportSpeckit { dir: PathBuf },
     Report,
+    Events,
 }
 
 fn dot_uni() -> PathBuf {
@@ -36,7 +38,33 @@ fn main() -> Result<()> {
         Cmd::Inspect { file } => cmd_inspect(&file, cli.json),
         Cmd::ImportSpeckit { dir } => cmd_import_speckit(&dir, cli.json),
         Cmd::Report => cmd_report(cli.json),
+        Cmd::Events => cmd_events(cli.json, 50),
     }
+}
+
+fn cmd_events(as_json: bool, max: usize) -> Result<()> {
+    let evts = events::read_all()?;
+    let n = evts.len();
+    if as_json {
+        for e in &evts {
+            println!("{}", serde_json::to_string(e)?);
+        }
+    } else {
+        for e in evts.iter().skip(n.saturating_sub(max)) {
+            let attrs: Vec<String> = e
+                .attributes
+                .iter()
+                .map(|(k, v)| match v {
+                    serde_json::Value::String(s) => format!("{k}={s}"),
+                    other => format!("{k}={other}"),
+                })
+                .collect();
+            println!("{:<22} {} {}", e.event, e.timestamp, attrs.join(" "));
+        }
+        println!("
+{n} events (append-only .uni/events.jsonl)");
+    }
+    Ok(())
 }
 
 /// CI/PR-facing view of the last decision: stable shape, no volatile fields
@@ -149,6 +177,13 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
     // 1) Try persisted evidence first (cheap, content-addressed).
     let mut stored = vec![];
     let mut need_run = vec![];
+    let mut journal: Vec<events::Event> = vec![events::Event {
+        name: "IntentVerified",
+        attrs: vec![
+            ("uni.intent.id".into(), ir.intent.id.clone()),
+            ("uni.contract.version".into(), ir.uni_version.clone()),
+        ],
+    }];
     for v in &ir.verification {
         // content-bound evidence: hash computed from the verifier's watched files
         let current_ah = registry
@@ -156,13 +191,30 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
             .and_then(|spec| uni_verify::artifact_hash(spec, &ws));
         match uni_evidence::load_valid_for_claim(&du, &v.claim_id, &cur_sha, cur_dirty, current_ah.as_deref())
         {
-            Some(ev) => stored.push(ev),
+            Some(ev) => {
+                journal.push(events::Event {
+                    name: "EvidenceReused",
+                    attrs: vec![
+                        ("uni.claim.id".into(), v.claim_id.clone()),
+                        ("uni.intent.id".into(), ir.intent.id.clone()),
+                    ],
+                });
+                stored.push(ev)
+            }
             None => need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone())),
         }
     }
     // 2) Re-run only for missing/stale/invalid claims.
     for (claim_id, ref_r, inline) in need_run {
         let spec = uni_verify::resolve_command(&ref_r, inline.as_deref(), &registry)?;
+        journal.push(events::Event {
+            name: "EvidenceRun",
+            attrs: vec![
+                ("uni.claim.id".into(), claim_id.clone()),
+                ("uni.verifier.id".into(), ref_r.clone()),
+                ("uni.intent.id".into(), ir.intent.id.clone()),
+            ],
+        });
         let mut ev = uni_verify::run_spec(&claim_id, &spec, &ws, 300)?;
         if uni_evidence::is_stale(&ev, &cur_sha, cur_dirty) {
             ev.state = uni_evidence::EvidenceState::Stale;
@@ -177,6 +229,19 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
         "reason": decision.reason,
         "claims": decision.claims,
     });
+    journal.push(events::Event {
+        name: "DecisionIssued",
+        attrs: vec![
+            ("uni.intent.id".into(), ir.intent.id.clone()),
+            ("uni.decision.state".into(), format!("{:?}", decision.decision)),
+            ("uni.assurance.level".into(), format!("A{}", match decision.decision {
+                uni_decision::Decision::Accepted => 2,
+                uni_decision::Decision::Rejected => 1,
+                _ => 0,
+            })),
+        ],
+    });
+    events::append(&journal)?;
     uni_evidence::save_json(&du.join("decisions").join("last.json"), &last)?;
     if as_json {
         println!(

@@ -110,3 +110,21 @@ fn golden_report_stability() {
     // reason and decision survive
     assert!(v["reason"].is_string());
 }
+
+/// v0.8: append-only event journal, second verify appends cache-hit events.
+#[test]
+fn golden_events_journal() {
+    let root = manifest_dir().parent().unwrap().parent().unwrap().to_path_buf();
+    assert_eq!(run(&["verify", "examples/hello/hello.uni"], &root), 0);
+    let j = Command::new(bin()).args(["events", "--json"]).current_dir(&root).output().unwrap();
+    let text = String::from_utf8_lossy(&j.stdout);
+    let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+    assert!(lines.len() >= 3, "at least IntentVerified + Evidence + DecisionIssued, got {lines:?}");
+    let last = serde_json::Value::from(serde_json::from_str::<serde_json::Value>(lines[lines.len() - 1]).unwrap());
+    assert_eq!(last["event"], "DecisionIssued");
+    assert!(last["attributes"]["uni.intent.id"].is_string());
+    assert!(last["attributes"]["uni.assurance.level"].is_string());
+    // for a repeat run, cache hits appear as EvidenceReused events
+    let texts: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
+    assert!(texts.iter().any(|l| l.contains("\"EvidenceReused\"")));
+}
