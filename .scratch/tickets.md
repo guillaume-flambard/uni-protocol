@@ -9,3 +9,4 @@
 - [x] T7 — GitHub CI (`.github/workflows/uni.yml` + `adapters/github/action.yml`). Blocked by: T6. DONE.
 - [x] P5 — SpecKit importer minimal (`uni import-speckit` → candidate JSON, review required). DONE.
 - [x] v0.2a — Proptest determinism + truth table + critical rejection, exhaustive decision matrix, parser fixtures. DONE.
+- [x] v0.2b — Persisted-evidence pipeline (re-run only when stale/missing/invalid), STALE-never-masks-new-commit e2e git fixture, registry security tests (inline shell refused, unknown ref refused), CLI golden tests. DONE. Next: decision-matrix CLI report, then 50-issue study.

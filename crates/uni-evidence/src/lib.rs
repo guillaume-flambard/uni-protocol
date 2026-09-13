@@ -66,5 +66,34 @@ pub fn save_json(path: &std::path::Path, value: &impl Serialize) -> Result<()> {
 
 pub fn is_stale(ev: &Evidence, current_sha: &str, current_dirty: bool) -> bool {
     // Any commit change or dirty transition invalidates bound evidence (FR-013 minimal).
-    ev.commit_sha != current_sha || (current_dirty && !ev.workspace_dirty)
+    ev.commit_sha != current_sha || ev.workspace_dirty != current_dirty
+}
+
+#[derive(Debug, Clone, serde::Serialize, Deserialize)]
+pub struct EvidenceBundle {
+    pub by_claim: Vec<Evidence>,
+}
+
+pub fn load_json<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Option<T> {
+    std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str(&t).ok())
+}
+
+/// Load persisted evidence for a claim; re-validate against current git state.
+/// Stale/absent evidence is NOT trusted: caller must re-run the verifier.
+pub fn load_valid_for_claim(
+    dot_uni: &std::path::Path,
+    claim_id: &str,
+    cur_sha: &str,
+    cur_dirty: bool,
+) -> Option<Evidence> {
+    let path = evidence_path(dot_uni, claim_id);
+    let mut ev: Evidence = load_json(&path)?;
+    if is_stale(&ev, cur_sha, cur_dirty) {
+        ev.state = EvidenceState::Stale;
+        return None;
+    }
+    if ev.state == EvidenceState::Invalid {
+        return None;
+    }
+    Some(ev)
 }

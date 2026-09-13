@@ -87,11 +87,21 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
     let (ir, _) = load_contract(file)?;
     let ws = std::env::current_dir()?;
     let du = dot_uni();
-    let evidences = uni_verify::assure_contract(&ir, &du, &ws)?;
-    // persist evidence + stale check against current git
     let (cur_sha, cur_dirty) = uni_evidence::git_info(&ws);
+    let registry = uni_verify::load_registry(&du);
+    // 1) Try persisted evidence first (cheap, content-addressed).
     let mut stored = vec![];
-    for mut ev in evidences {
+    let mut need_run = vec![];
+    for v in &ir.verification {
+        match uni_evidence::load_valid_for_claim(&du, &v.claim_id, &cur_sha, cur_dirty) {
+            Some(ev) => stored.push(ev),
+            None => need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone())),
+        }
+    }
+    // 2) Re-run only for missing/stale/invalid claims.
+    for (claim_id, ref_r, inline) in need_run {
+        let cmd = uni_verify::resolve_command(&ref_r, inline.as_deref(), &registry)?;
+        let mut ev = uni_verify::run_shell(&claim_id, &cmd, &ws, 300)?;
         if uni_evidence::is_stale(&ev, &cur_sha, cur_dirty) {
             ev.state = uni_evidence::EvidenceState::Stale;
         }
