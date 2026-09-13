@@ -8,4 +8,4 @@
 - [x] T6 — Playwright pipeline entry (browser.uni + registry `e2e.smoke`). Blocked by: T5. DONE (smoke verifier wired; real Playwright run is per-project).
 - [x] T7 — GitHub CI (`.github/workflows/uni.yml` + `adapters/github/action.yml`). Blocked by: T6. DONE.
 - [x] P5 — SpecKit importer minimal (`uni import-speckit` → candidate JSON, review required). DONE.
-- [ ] Next (v0.2): decision property-based tests, stale/inval­idation fixtures, decision matrix golden tests, 50-issue study.
+- [x] v0.2a — Proptest determinism + truth table + critical rejection, exhaustive decision matrix, parser fixtures. DONE.

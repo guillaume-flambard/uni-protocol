@@ -10,3 +10,6 @@ serde_json.workspace = true
 uni-ir = { path = "../uni-ir" }
 uni-evidence = { path = "../uni-evidence" }
 chrono.workspace = true
+
+[dev-dependencies]
+proptest = "1"

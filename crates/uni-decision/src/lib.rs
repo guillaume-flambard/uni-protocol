@@ -10,7 +10,7 @@ pub enum Decision {
     Escalated,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClaimResult {
     pub claim_id: String,
     pub required: bool,
@@ -19,7 +19,7 @@ pub struct ClaimResult {
     pub detail: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DecisionResult {
     pub decision: Decision,
     pub claims: Vec<ClaimResult>,
@@ -175,5 +175,148 @@ mod tests {
             evaluate(&ir, &[ev(EvidenceState::Invalid, 1)]).decision,
             Decision::Rejected
         );
+    }
+}
+
+#[cfg(test)]
+mod property_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn ir_n(n_required: usize, n_critical: usize) -> Ir {
+        let mut claims = vec![];
+        for i in 0..n_required {
+            claims.push(uni_ir::ClaimIr {
+                id: format!("r{i}"),
+                kind: "claim".into(),
+                required: true,
+                critical: false,
+                ensure: "e".into(),
+            });
+        }
+        for i in 0..n_critical {
+            claims.push(uni_ir::ClaimIr {
+                id: format!("c{i}"),
+                kind: "invariant".into(),
+                required: true,
+                critical: true,
+                ensure: "e".into(),
+            });
+        }
+        Ir {
+            uni_version: "0.1".into(),
+            intent: uni_ir::IntentIr {
+                id: "x".into(),
+                domain: "software".into(),
+                goal: "g".into(),
+            },
+            claims,
+            verification: vec![],
+            acceptance: uni_ir::AcceptanceIr {
+                require_verified: true,
+                allow_critical_failures: 0,
+            },
+        }
+    }
+
+    fn ev_of(state: EvidenceState, code: i32) -> impl Fn(String) -> Evidence {
+        move |claim_id: String| Evidence {
+            id: format!("{claim_id}-ev"),
+            claim_id,
+            producer: "t".into(),
+            command: "c".into(),
+            exit_code: code,
+            output_hash: "h".into(),
+            output_excerpt: "".into(),
+            commit_sha: "s".into(),
+            workspace_dirty: false,
+            state: state.clone(),
+            created_at: chrono::Utc::now(),
+            duration_ms: 1,
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn determinism(n in 0usize..4, m in 0usize..3) {
+            let ir = ir_n(n, m);
+            let mk = ev_of(EvidenceState::Valid, 0);
+            let evs: Vec<Evidence> = ir.claims.iter().map(|c| mk(c.id.clone())).collect();
+            let d1 = evaluate(&ir, &evs);
+            let d2 = evaluate(&ir, &evs);
+            assert_eq!((d1.decision, d1.claims), (d2.decision, d2.claims));
+        }
+
+        #[test]
+        fn all_valid_required_is_accepted(n in 0usize..5) {
+            let ir = ir_n(n, 0);
+            let mk = ev_of(EvidenceState::Valid, 0);
+            let evs: Vec<Evidence> = ir.claims.iter().map(|c| mk(c.id.clone())).collect();
+            assert_eq!(evaluate(&ir, &evs).decision, Decision::Accepted);
+        }
+
+        #[test]
+        fn any_invalid_critical_rejected(n in 0usize..4, m in 1usize..3) {
+            let ir = ir_n(n, m);
+            let mut evs: Vec<Evidence> = vec![];
+            let mk_ok = ev_of(EvidenceState::Valid, 0);
+            let mk_bad = ev_of(EvidenceState::Invalid, 1);
+            for (i, c) in ir.claims.iter().enumerate() {
+                // first critical claim fails
+                if c.critical && evs.iter().all(|e| e.state != EvidenceState::Invalid) && i >= n {
+                    evs.push(mk_bad(c.id.clone()));
+                } else {
+                    evs.push(mk_ok(c.id.clone()));
+                }
+            }
+            prop_assert_eq!(evaluate(&ir, &evs).decision, Decision::Rejected);
+        }
+    }
+}
+
+#[cfg(test)]
+mod decision_matrix {
+    use super::*;
+
+    // Exhaustive truth table: {valid, missing, stale, invalid} evidence per claim type.
+    #[test]
+    fn required_claim_matrix() {
+        let ir = Ir {
+            uni_version: "0.1".into(),
+            intent: uni_ir::IntentIr { id: "x".into(), domain: "s".into(), goal: "g".into() },
+            claims: vec![uni_ir::ClaimIr {
+                id: "a".into(), kind: "claim".into(), required: true, critical: false, ensure: "e".into(),
+            }],
+            verification: vec![],
+            acceptance: uni_ir::AcceptanceIr { require_verified: true, allow_critical_failures: 0 },
+        };
+        let mk = |st: EvidenceState, code: i32| Evidence {
+            id: "a-e".into(), claim_id: "a".into(), producer: "t".into(), command: "c".into(),
+            exit_code: code, output_hash: "h".into(), output_excerpt: "".into(),
+            commit_sha: "s".into(), workspace_dirty: false, state: st,
+            created_at: chrono::Utc::now(), duration_ms: 1,
+        };
+        // valid + exit 0 → Accepted
+        assert_eq!(evaluate(&ir, &[mk(EvidenceState::Valid, 0)]).decision, Decision::Accepted);
+        // valid but exit != 0 → EvidenceRequired (no critical)
+        assert_eq!(evaluate(&ir, &[mk(EvidenceState::Valid, 1)]).decision, Decision::EvidenceRequired);
+        // missing
+        assert_eq!(evaluate(&ir, &[]).decision, Decision::EvidenceRequired);
+        // stale → needs revalidation
+        assert_eq!(evaluate(&ir, &[mk(EvidenceState::Stale, 0)]).decision, Decision::EvidenceRequired);
+        // invalid
+        assert_eq!(evaluate(&ir, &[mk(EvidenceState::Invalid, 1)]).decision, Decision::EvidenceRequired);
+
+        // critical: missing → EvidenceRequired (cannot silently accept), invalid → REJECTED
+        let mut irc = ir.clone();
+        irc.claims[0].critical = true;
+        assert_eq!(evaluate(&irc, &[mk(EvidenceState::Valid, 0)]).decision, Decision::Accepted);
+        assert_eq!(evaluate(&irc, &[mk(EvidenceState::Invalid, 1)]).decision, Decision::Rejected);
+        // partial: 2 required, one valid one missing
+        let mut ir2 = ir.clone();
+        ir2.claims.push(uni_ir::ClaimIr {
+            id: "b".into(), kind: "claim".into(), required: true, critical: false, ensure: "e".into(),
+        });
+        assert_eq!(evaluate(&ir2, &[mk(EvidenceState::Valid, 0)]).decision, Decision::EvidenceRequired);
     }
 }
