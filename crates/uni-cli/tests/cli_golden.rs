@@ -1,6 +1,19 @@
 use std::process::Command;
 use std::path::{Path, PathBuf};
 
+fn git(cwd: &PathBuf, args: &[&str]) {
+    assert!(Command::new("git").args(args).current_dir(cwd).status().unwrap().success());
+}
+
+fn out(cmd: &[&str], cwd: &PathBuf) -> String {
+    let o = Command::new(bin()).args(cmd).current_dir(cwd).output().unwrap();
+    format!(
+        "code={}\n{}",
+        o.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&o.stdout)
+    )
+}
+
 fn bin() -> &'static str {
     env!("CARGO_BIN_EXE_uni")
 }
@@ -160,4 +173,48 @@ VERIFY x
 ").unwrap();
     let o2 = Command::new(bin()).args(["lint", "c.uni"]).current_dir(&dir).output().unwrap();
     assert_eq!(o2.status.code(), Some(0), "{o2:?}");
+}
+
+/// v0.12: OPA adapter — when a rego bundle + a shim `opa` binary exist,
+/// the provider resolves from the bundle; absent opa falls back to TOML.
+#[test]
+fn golden_policy_provider_opa_fallback() {
+    // isolated workspace: no opa binary intercept needed — create one that works.
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let dir = std::env::temp_dir().join(format!("uni-ppa-{}",
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()));
+    let shim_dir = dir.join("shim");
+    std::fs::create_dir_all(&shim_dir).unwrap();
+    std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
+    std::fs::create_dir_all(dir.join("policies")).unwrap();
+    std::fs::write(dir.join("policies/opa.rego"),
+"package uni\nrules = {\"escalate_on_stale\": true, \"reject_on_invalid\": true, \"min_verified_ratio\": 0.0}\n").unwrap();
+    let path_env = format!("{}/bin:/bin:/usr/bin", shim_dir.display());
+    let shim = shim_dir.join("opa");
+    std::fs::write(&shim, r#"#!/bin/sh
+if [ "$1" = "version" ]; then exit 0; fi
+echo '[{"escalate_on_stale": true, "reject_on_invalid": true, "min_verified_ratio": 0.5}]'
+"#).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let env_path = std::env::var("PATH").unwrap_or_default();
+    std::env::set_var("PATH", format!("{path_env}:{env_path}"));
+
+    std::fs::write(dir.join(".uni/config.toml"),
+"[verifiers]\n\"p\" = \"true\"\n").unwrap();
+    std::fs::write(dir.join("c.uni"), "VERSION 0.1
+DOMAIN software
+INTENT ppa
+GOAL
+  g
+CLAIM x REQUIRED
+  ENSURE g
+VERIFY x
+  USING p
+").unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    let r1 = out(&["verify", "c.uni"], &dir);
+    assert!(r1.contains("Accepted"), "{r1}");
 }

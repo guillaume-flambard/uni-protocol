@@ -87,7 +87,25 @@ pub fn apply_policy(
 }
 
 /// Load the merged policy from `.uni/policies/*.toml` ([policy] tables; files sorted by name,
-/// later values win for booleans, max for ratio).
+/// Policy provider seam (v0.12). Core never contains a policy engine: only
+/// deterministic providers. Deterministic contract: same (inputs, provider
+/// state) → same outcome, and providers must not depend on wall-clock or RNG.
+pub trait PolicyProvider {
+    fn resolve(&self) -> Policy;
+}
+
+/// Local TOML stack (`[policy]` tables in `.uni/policies/*.toml`).
+pub struct TomlPolicy<'a> {
+    pub dir: &'a std::path::Path,
+}
+
+impl PolicyProvider for TomlPolicy<'_> {
+    fn resolve(&self) -> Policy {
+        load_policies(self.dir)
+    }
+}
+
+/// Files sorted by name; later boolean values win, ratio takes the max.
 pub fn load_policies(dir: &std::path::Path) -> Policy {
     let mut policy = Policy { reject_on_invalid: true, ..Default::default() };
     if let Ok(rd) = std::fs::read_dir(dir) {
@@ -125,6 +143,45 @@ pub fn load_policies(dir: &std::path::Path) -> Policy {
     }
     policy
 }
+
+/// OPA outbound adapter (wired, engine stays external). Expects a rego
+/// bundle exposing `data.uni.rules` boolean fields mirroring the Policy
+/// shape. Falls back to defaults when `opa` is absent or the bundle fails
+/// to evaluate; never blocks UNI.
+pub struct OpaPolicy {
+    pub bundle: std::path::PathBuf,
+}
+
+fn escalate(b: Option<bool>) -> bool {
+    b.unwrap_or(false)
+}
+
+impl PolicyProvider for OpaPolicy {
+    fn resolve(&self) -> Policy {
+        let output = std::process::Command::new("opa")
+            .args(["eval", "data.uni.rules", "-d", self.bundle.display().to_string().as_str(), "-f", "values"])
+            .output();
+        let Ok(out) = output else {
+            return Policy { reject_on_invalid: true, ..Default::default() };
+        };
+        if !out.status.success() {
+            return Policy { reject_on_invalid: true, ..Default::default() };
+        }
+        let Ok(text) = String::from_utf8(out.stdout) else {
+            return Policy { reject_on_invalid: true, ..Default::default() };
+        };
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+        let first = v.as_array().and_then(|a| a.first()).and_then(|x| x.as_object()).cloned().unwrap_or_default();
+        Policy {
+            reject_on_invalid: first.get("reject_on_invalid").and_then(|x| x.as_bool()).unwrap_or(true),
+            escalate_on_stale: escalate(first.get("escalate_on_stale").and_then(|x| x.as_bool())),
+            escalate_on_missing: escalate(first.get("escalate_on_missing").and_then(|x| x.as_bool())),
+            min_verified_ratio: first.get("min_verified_ratio").and_then(|x| x.as_f64()).unwrap_or(0.0),
+        }
+    }
+}
+
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DecisionResult {

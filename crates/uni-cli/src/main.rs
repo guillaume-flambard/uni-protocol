@@ -285,7 +285,22 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
         uni_evidence::save_json(&uni_evidence::evidence_path(&du, &ev.claim_id), &ev)?;
         stored.push(ev);
     }
-    let policy = uni_decision::load_policies(&du.join("policies"));
+    // Policy source selection: OPA bundle when both rego + opa binary exist, else TOML stack.
+    let opa_bundle = du.join("policies/opa.rego");
+    let policies_dir = du.join("policies");
+    let opa_available = opa_bundle.exists()
+        && std::process::Command::new("opa")
+            .arg("version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+    let provider: Box<dyn uni_decision::PolicyProvider> = if opa_available {
+        Box::new(uni_decision::OpaPolicy { bundle: opa_bundle })
+    } else {
+        Box::new(uni_decision::TomlPolicy { dir: &policies_dir })
+    };
+    let policy = provider.resolve();
+    
     let decision = uni_decision::apply_policy(uni_decision::evaluate_intent(&ir, &stored), &policy);
     let last = serde_json::json!({
         "intent": {"id": ir.intent.id, "domain": ir.intent.domain, "goal": ir.intent.goal},
