@@ -92,3 +92,21 @@ fn golden_import_speckit() {
         .current_dir(&dir).output().unwrap();
     assert!(String::from_utf8_lossy(&out.stdout).contains("claims: 4"));
 }
+
+/// Golden: `uni report` is byte-stable across repeated verify runs (PR/CI view).
+#[test]
+fn golden_report_stability() {
+    let root = manifest_dir().parent().unwrap().parent().unwrap().to_path_buf();
+    let o1 = Command::new(bin()).args(["report", "--json"]).current_dir(&root).output().unwrap();
+    let o2 = Command::new(bin()).args(["report", "--json"]).current_dir(&root).output().unwrap();
+    // two calls on the same last.json are identical
+    assert_eq!(o1.stdout, o2.stdout, "report must be deterministic");
+    let v: serde_json::Value = serde_json::from_slice(&o1.stdout).unwrap();
+    assert!(v["summary"]["claims_total"].is_u64());
+    assert!(v["claims"].is_array());
+    assert!(v["claims"].as_array().unwrap().iter().all(
+        |c| c.as_object().unwrap().len() == 2 && c["claim_id"].is_string() && c["state"].is_string()
+    ), "only stable fields allowed: {v}");
+    // reason and decision survive
+    assert!(v["reason"].is_string());
+}

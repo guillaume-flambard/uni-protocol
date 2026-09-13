@@ -7,6 +7,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release
-      - run: ./target/release/uni verify examples/hello/hello.uni
-      - run: ./target/release/uni verify examples/multi/multi.uni
-      - run: ./target/release/uni verify examples/booking/booking.uni
+      - name: Verify outcomes
+        run: |
+          ./target/release/uni verify examples/hello/hello.uni
+          ./target/release/uni verify examples/multi/multi.uni
+          ./target/release/uni verify examples/booking/booking.uni
+      - name: UNI Assurance (PR check view)
+        run: ./target/release/uni report >> "$GITHUB_STEP_SUMMARY"

@@ -19,6 +19,7 @@ enum Cmd {
     Explain { claim_or_intent: Option<String> },
     Inspect { file: PathBuf },
     ImportSpeckit { dir: PathBuf },
+    Report,
 }
 
 fn dot_uni() -> PathBuf {
@@ -34,7 +35,63 @@ fn main() -> Result<()> {
         Cmd::Explain { claim_or_intent } => cmd_explain(claim_or_intent, cli.json),
         Cmd::Inspect { file } => cmd_inspect(&file, cli.json),
         Cmd::ImportSpeckit { dir } => cmd_import_speckit(&dir, cli.json),
+        Cmd::Report => cmd_report(cli.json),
     }
+}
+
+/// CI/PR-facing view of the last decision: stable shape, no volatile fields
+/// (no timestamps, durations, excerpts). One byte change = real state change.
+fn stable_report() -> Result<serde_json::Value> {
+    let path = dot_uni().join("decisions").join("last.json");
+    let text = std::fs::read_to_string(&path).context("no decision yet (run uni verify first)")?;
+    let v: serde_json::Value = serde_json::from_str(&text)?;
+    let claims = v["claims"].as_array().cloned().unwrap_or_default();
+    let total = claims.len();
+    let verified = claims.iter().filter(|c| c["state"] == "Valid").count();
+    Ok(serde_json::json!({
+        "intent": v.as_object().and_then(|o| o.get("intent")).cloned().unwrap_or(serde_json::Value::Null),
+        "decision": v["decision"],
+        "reason": v["reason"],
+        "summary": {"claims_total": total, "claims_verified": verified},
+        "claims": claims.iter().map(|c| serde_json::json!({
+            "claim_id": c["claim_id"], "state": c["state"],
+        })).collect::<Vec<_>>(),
+    }))
+}
+
+fn cmd_report(as_json: bool) -> Result<()> {
+    let r = stable_report()?;
+    if as_json {
+        println!("{}", serde_json::to_string_pretty(&r)?);
+        return Ok(());
+    }
+    println!("UNI Assurance");
+    println!("-------------");
+    if let Some(i) = r["intent"].as_object() {
+        println!("Intent      {}", i.get("id").and_then(|x| x.as_str()).unwrap_or("?"));
+    }
+    let s = &r["summary"];
+    println!("Claims      {}/{} verified",
+        s["claims_verified"], s["claims_total"]);
+    let a = assurance_level_x(&r);
+    println!("Assurance   A{a} ({})", match a {
+        0 => "DECLARED", 1 => "ARTIFACT", 2 => "VERIFIED",
+        3 => "INDEPENDENTLY_VERIFIED", 4 => "ATTESTED", _ => "?",
+    });
+    if let Some(claims) = r["claims"].as_array() {
+        println!("\nClaims");
+        for c in claims {
+            let mark = match c["state"].as_str() {
+                Some("Valid") => "PASS",
+                Some("Stale") => "STALE",
+                _ => "FAIL",
+            };
+            println!("  {:<24} {mark}", c["claim_id"].as_str().unwrap_or("?"));
+        }
+    }
+    println!("\nDecision    {}", r["decision"].as_str().unwrap_or("?"));
+    println!("Reason      {}", r["reason"].as_str().unwrap_or("?"));
+    Ok(())
 }
 
 fn cmd_init() -> Result<()> {
@@ -109,7 +166,13 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
         stored.push(ev);
     }
     let decision = uni_decision::evaluate_intent(&ir, &stored);
-    uni_evidence::save_json(&du.join("decisions").join("last.json"), &decision)?;
+    let last = serde_json::json!({
+        "intent": {"id": ir.intent.id, "domain": ir.intent.domain, "goal": ir.intent.goal},
+        "decision": decision.decision,
+        "reason": decision.reason,
+        "claims": decision.claims,
+    });
+    uni_evidence::save_json(&du.join("decisions").join("last.json"), &last)?;
     if as_json {
         println!(
             "{}",
