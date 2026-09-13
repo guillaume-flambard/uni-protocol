@@ -14,8 +14,8 @@ tasks/<id>/
 ## Run
 ```bash
 python3 run.py --agent fixture            # ground-truth fixture replay
-python3 run.py --agent codex              # real Codex implementer (wire-in: agent_codex)
-python3 run.py --agent claude             # real Claude implementer
+python3 run.py --agent codex              # real Codex implementer (wire-in: agent_codex; codex CLI absent on this machine)
+python3 run.py --agent claude             # real Claude implementer (blocked 2026-09-13: org disabled Claude Code subscription; wire-in armed)
 python3 collect.py results.csv            # agreement metrics
 ```
 Then fill the `human_review` column (1 accept / 0 reject, blind review) and re-run collect.
