@@ -4,3 +4,6 @@
 .uni/artifacts/
 .uni/contracts/candidate-*.uni
 .uni/events.jsonl
+
+experiments/study-50/tasks/**/Cargo.lock
+experiments/study-50/tasks/**/target/
