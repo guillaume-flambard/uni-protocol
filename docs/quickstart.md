@@ -15,5 +15,5 @@ cargo build --release
 Exit codes: 0 = ACCEPTED, 1 = REJECTED / EVIDENCE_REQUIRED / ESCALATED.
 
 Stack-independent: the same three claims work with `cargo test`,
-`python3 -m unittest`, or `node --test` — the registry maps verifier
+`python3 -m unittest`, or `node --test` - the registry maps verifier
 names to trusted commands (see `examples/` and `README.md`).

@@ -1,4 +1,4 @@
-# UNI — Outcome Assurance Protocol
+# UNI - Outcome Assurance Protocol
 
 **Never trust "done" from an agent. Verify the outcome.**
 
@@ -19,20 +19,20 @@ Rust workspace, single CLI binary `uni`. Deterministic. Filesystem-only. No clou
 | Evidence | `uni verify <contract>` | runs trusted-registry verifiers; incremental, git-+content-bound evidence; STALE on commit or watched-file change |
 | | `uni explain` | claims table + per-claim evidence detail (PRD §16 UX) |
 | Policy | `.uni/policies/*.toml` | reject_on_invalid, escalate_on_stale/missing, min_verified_ratio (deterministic) |
-| Decision | — | truth table → policy → ACCEPTED/REJECTED/EVIDENCE_REQUIRED/ESCALATED |
+| Decision | - | truth table → policy → ACCEPTED/REJECTED/EVIDENCE_REQUIRED/ESCALATED |
 | Audit | `uni report` | byte-stable CI/PR view (`GitHub step summary` ready) |
 | | `uni events` | append-only journal with `uni.*` attributes (OTel-ready) |
 | Health | `uni doctor` | workspace healthcheck (git, registry, policies, writability) |
 | Study | `experiments/study-50/` | harness + metrics (agent self-report vs UNI vs human) |
 
 Stack independence verified in CI: `examples/` covers Rust, Python (unittest),
-and Node (`node --test`) — same contract model, different verifiers.
+and Node (`node --test`) - same contract model, different verifiers.
 
 ## DSL (closed vocabulary v0.1)
 
 `VERSION DOMAIN INTENT GOAL CLAIM REQUIRE ENSURE INVARIANT FORBID VERIFY ACCEPT REJECT ESCALATE`
 
-Example — `examples/booking/booking.uni`:
+Example - `examples/booking/booking.uni`:
 
 ```
 VERSION 0.1
@@ -85,4 +85,4 @@ Study results so far: UNI 100% agreement on 5-task sample, agent self-report 80%
 
 ## Constitution
 
-`constitution.md` — UNI is the outcome assurance layer. LLMs propose, humans/policies authorize, verifiers prove, UNI decides. Spec source: `specs/001-uni-software-v01/spec.md`.
+`constitution.md` - UNI is the outcome assurance layer. LLMs propose, humans/policies authorize, verifiers prove, UNI decides. Spec source: `specs/001-uni-software-v01/spec.md`.

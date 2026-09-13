@@ -1,4 +1,4 @@
-# Plan — 002 expect_not
+# Plan - 002 expect_not
 
 - VerifierSpec gains expect_not: String. Parsed from table field like expect, default "".
 - run_spec: if !spec.expect_not.is_empty() && excerpt.contains(expect_not) → Invalid.

@@ -1,4 +1,4 @@
-# UNI — agent rules
+# UNI - agent rules
 
 - Constitution: `constitution.md`. Spec source: `specs/001-uni-software-v01/spec.md` (canonical, no duplicate spec).
 - Tickets: `.scratch/tickets.md`. Workflow: implement (TDD at `assure()`) → code-review → `uni verify` → `uni explain` → merge.

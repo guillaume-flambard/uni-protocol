@@ -1,4 +1,4 @@
-# ADR-001 — High seam, filesystem, JSON-only v0.1
+# ADR-001 - High seam, filesystem, JSON-only v0.1
 
 - Seam: `assure(contract, workspace) -> AssuranceResult` / `evaluate(intent) -> Decision`. Parser/store/verifiers are internals.
 - Storage: `.uni/` filesystem content-addressed. No Postgres (deferred to team/cloud phase).

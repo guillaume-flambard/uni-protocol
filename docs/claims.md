@@ -6,15 +6,15 @@ acceptance until every required claim is backed by valid evidence.
 
 ## Kinds
 
-- `CLAIM <id> REQUIRED | OPTIONAL` — a positive statement of the outcome.
+- `CLAIM <id> REQUIRED | OPTIONAL` - a positive statement of the outcome.
   `ENSURE <text>` gives the human-readable obligation (v0.1: `ensure` is
   documentation; verification lives in `VERIFY`).
-- `INVARIANT <id> CRITICAL` — a statement that must never break. A critical
+- `INVARIANT <id> CRITICAL` - a statement that must never break. A critical
   claim with Invalid evidence yields REJECTED, not merely EVIDENCE_REQUIRED.
-- `FORBID <expr>` — compiled to a critical invariant claim
+- `FORBID <expr>` - compiled to a critical invariant claim
   (`forbid-N`, ensure `FORBID <expr>`). Prove it with an `expect_not` verifier
   (see `verification.md` and `examples/forbid/`).
-- `REQUIRE <expr>` — carried into the IR `constraints` array (v0.1: recorded,
+- `REQUIRE <expr>` - carried into the IR `constraints` array (v0.1: recorded,
   not yet enforced by the engine).
 
 ## Example

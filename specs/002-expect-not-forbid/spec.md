@@ -1,4 +1,4 @@
-# Feature 002 — expect_not matcher + FORBID enforcement (v0.7)
+# Feature 002 - expect_not matcher + FORBID enforcement (v0.7)
 
 ### Requirements
 - **FR-101**: `[verifiers."x"]` accepts an optional `expect_not` field.

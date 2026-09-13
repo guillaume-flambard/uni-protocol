@@ -1,4 +1,4 @@
-# Plan — SPEC-001 UNI Software v0.1
+# Plan - SPEC-001 UNI Software v0.1
 
 Language: Rust 1.98 workspace (`crates/*`), single CLI binary `uni`.
 

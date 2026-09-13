@@ -1,4 +1,4 @@
-# UNI DSL v0.1 — closed vocabulary
+# UNI DSL v0.1 - closed vocabulary
 
 `VERSION DOMAIN INTENT GOAL CLAIM REQUIRE ENSURE INVARIANT FORBID VERIFY ACCEPT REJECT ESCALATE`
 
@@ -30,7 +30,7 @@ ACCEPT WHEN
 - INVARIANT: claim that must never break; CRITICAL marks rejection (vs. evidence gap).
 - FORBID: prohibition compiled to a critical invariant claim; prove it with an `expect_not` verifier.
 - REQUIRE: constraints carried in the IR (v0.1: recorded, engine enforces later).
-- VERIFY <claim> USING <registry-key> | shell "cmd" — commands run ONLY from
+- VERIFY <claim> USING <registry-key> | shell "cmd" - commands run ONLY from
   `.uni/config.toml [verifiers]` (trusted registry). Expect/expect_not/files/timeout fields per verifier.
 - ACCEPT WHEN is deterministic; LLMs may draft contracts (human approves candidates).
 

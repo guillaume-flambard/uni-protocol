@@ -1,4 +1,4 @@
-# UNI — context
+# UNI - context
 
 Outcome Assurance Protocol: Intent → Claims → Evidence → Policy → Decision.
 Rust workspace (`crates/*`), CLI binary `uni`. High seam `assure(contract, workspace)`.

@@ -1,4 +1,4 @@
-# Study-50 — agent self-report vs UNI vs human review (PRD §20)
+# Study-50 - agent self-report vs UNI vs human review (PRD §20)
 
 Driver + analyzer for the outcome-assurance experiment.
 
