@@ -6,3 +6,8 @@
 "test.false" = "false"
 "e2e.smoke" = "npx playwright test --reporter=list"
 "test.fail" = "false"
+[verifiers."forbid.dirty-write"]
+run = "! grep -Rn 'EVIL_WRITE' examples/forbid/sources.txt"
+expect_not = "EVIL_WRITE"
+files = ["examples/forbid/sources.txt"]
+timeout = 30

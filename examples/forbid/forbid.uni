@@ -1,0 +1,12 @@
+VERSION 0.1
+DOMAIN software
+INTENT forbid-demo
+GOAL
+  No direct writes to the ledger.
+CLAIM no-evil-write REQUIRED
+  ENSURE sources contain no EVIL_WRITE patterns
+VERIFY no-evil-write
+  USING forbid.dirty-write
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

@@ -150,7 +150,12 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
     let mut stored = vec![];
     let mut need_run = vec![];
     for v in &ir.verification {
-        match uni_evidence::load_valid_for_claim(&du, &v.claim_id, &cur_sha, cur_dirty) {
+        // content-bound evidence: hash computed from the verifier's watched files
+        let current_ah = registry
+            .get(&v.verifier_ref)
+            .and_then(|spec| uni_verify::artifact_hash(spec, &ws));
+        match uni_evidence::load_valid_for_claim(&du, &v.claim_id, &cur_sha, cur_dirty, current_ah.as_deref())
+        {
             Some(ev) => stored.push(ev),
             None => need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone())),
         }

@@ -153,6 +153,7 @@ mod tests {
             state,
             created_at: chrono::Utc::now(),
             duration_ms: 1,
+            artifact_hash: String::new(),
         }
     }
     #[test]
@@ -233,6 +234,7 @@ mod property_tests {
             state: state.clone(),
             created_at: chrono::Utc::now(),
             duration_ms: 1,
+            artifact_hash: String::new(),
         }
     }
 
@@ -294,7 +296,7 @@ mod decision_matrix {
             id: "a-e".into(), claim_id: "a".into(), producer: "t".into(), command: "c".into(),
             exit_code: code, output_hash: "h".into(), output_excerpt: "".into(),
             commit_sha: "s".into(), workspace_dirty: false, state: st,
-            created_at: chrono::Utc::now(), duration_ms: 1,
+            created_at: chrono::Utc::now(), duration_ms: 1, artifact_hash: String::new(),
         };
         // valid + exit 0 → Accepted
         assert_eq!(evaluate(&ir, &[mk(EvidenceState::Valid, 0)]).decision, Decision::Accepted);

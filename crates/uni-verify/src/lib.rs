@@ -18,6 +18,9 @@ use uni_ir::Ir;
 pub struct VerifierSpec {
     pub run: String,
     pub expect: String,
+    pub expect_not: String,
+    /// globs of files whose content this evidence is bound to (content-addressed evidence)
+    pub files: Vec<String>,
     pub timeout: u64,
 }
 
@@ -35,13 +38,23 @@ pub fn load_registry(dot_uni: &std::path::Path) -> std::collections::HashMap<Str
     if let Some(t) = val.get("verifiers").and_then(|v| v.as_table()) {
         for (k, v) in t {
             if let Some(s) = v.as_str() {
-                out.insert(k.clone(), VerifierSpec { run: s.to_string(), expect: String::new(), timeout: DEFAULT_TIMEOUT_SECS });
+                out.insert(k.clone(), VerifierSpec { run: s.to_string(), expect: String::new(), expect_not: String::new(), files: vec![], timeout: DEFAULT_TIMEOUT_SECS });
             } else if let Some(tbl) = v.as_table() {
                 let run = tbl.get("run").and_then(|r| r.as_str()).unwrap_or("").to_string();
                 let expect = tbl.get("expect").and_then(|e| e.as_str()).unwrap_or("").to_string();
+                let expect_not = tbl.get("expect_not").and_then(|e| e.as_str()).unwrap_or("").to_string();
+                let files = tbl
+                    .get("files")
+                    .and_then(|f| f.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 let timeout = tbl.get("timeout").and_then(|t| t.as_integer()).unwrap_or(DEFAULT_TIMEOUT_SECS as i64) as u64;
                 if !run.is_empty() {
-                    out.insert(k.clone(), VerifierSpec { run, expect, timeout });
+                    out.insert(k.clone(), VerifierSpec { run, expect, expect_not, files, timeout });
                 }
             }
         }
@@ -60,10 +73,10 @@ pub fn resolve_command(
     if verifier_ref == "shell" {
         let cmd = inline_shell.ok_or_else(|| anyhow!("shell verifier needs a command"))?;
         if registry.is_empty() {
-            return Ok(VerifierSpec { run: cmd.to_string(), expect: String::new(), timeout: DEFAULT_TIMEOUT_SECS }); // bootstrap
+            return Ok(VerifierSpec { run: cmd.to_string(), expect: String::new(), expect_not: String::new(), files: vec![], timeout: DEFAULT_TIMEOUT_SECS }); // bootstrap
         }
         if registry.values().any(|v| v.run == cmd) {
-            return Ok(VerifierSpec { run: cmd.to_string(), expect: String::new(), timeout: DEFAULT_TIMEOUT_SECS });
+            return Ok(VerifierSpec { run: cmd.to_string(), expect: String::new(), expect_not: String::new(), files: vec![], timeout: DEFAULT_TIMEOUT_SECS });
         }
         return Err(anyhow!(
             "inline shell command not in trusted registry (.uni/config.toml [verifiers]): {cmd}"
@@ -83,6 +96,64 @@ pub fn resolve_command(
     Ok(trusted.clone())
 }
 
+/// Content-addressed hash over the files a verifier watches (FR-010/FR-013).
+/// Pattern semantics: matched against path RELATIVE to workspace; `*` within a
+/// segment, `**` across segments; prefix/suffix matching otherwise.
+pub fn artifact_hash(spec: &VerifierSpec, workspace: &std::path::Path) -> Option<String> {
+    if spec.files.is_empty() {
+        return None;
+    }
+    let matches_glob = |rel: &str, pat: &str| -> bool {
+        // tokenize both sides; '**' eats anything
+        let pat_parts: Vec<&str> = pat.split('/').collect();
+        let rel_parts: Vec<&str> = rel.split('/').collect();
+        fn m(p: &[&str], r: &[&str]) -> bool {
+            if p.is_empty() {
+                return r.is_empty();
+            }
+            match p[0] {
+                "**" => (0..=r.len()).any(|i| m(&p[1..], &r[i..])),
+                "*" => {
+                    if r.is_empty() {
+                        false
+                    } else {
+                        m(&p[1..], &r[1..])
+                    }
+                }
+                seg => r.first() == Some(&seg) && m(&p[1..], &r[1..]),
+            }
+        }
+        m(&pat_parts, &rel_parts)
+    };
+    let mut matched: Vec<(String, Option<String>)> = vec![];
+    let skip = ["target", ".git", ".uni"];
+    let mut stack = vec![workspace.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for e in rd.flatten() {
+                let path = e.path();
+                let rel = path
+                    .strip_prefix(workspace)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                if path.is_dir() {
+                    if !skip.contains(&path.file_name().and_then(|n| n.to_str()).unwrap_or("")) {
+                        stack.push(path.clone());
+                    }
+                } else if spec.files.iter().any(|g| matches_glob(&rel, g)) {
+                    let content = std::fs::read(&path).ok().map(|b| sha256_hex(&b));
+                    matched.push((rel, content));
+                }
+            }
+        }
+    }
+    let acc: String = matched
+        .iter()
+        .map(|(rel, h)| format!("{rel}:{h:?};"))
+        .collect();
+    Some(sha256_hex(acc.as_bytes()))
+}
+
 pub fn run_spec(
     claim_id: &str,
     spec: &VerifierSpec,
@@ -90,7 +161,11 @@ pub fn run_spec(
     timeout_secs: u64,
 ) -> Result<Evidence> {
     let mut ev = run_shell(claim_id, &spec.run, workspace, timeout_secs)?;
+    ev.artifact_hash = artifact_hash(spec, workspace).unwrap_or_default();
     if !spec.expect.is_empty() && !ev.output_excerpt.contains(&spec.expect) {
+        ev.state = EvidenceState::Invalid;
+    }
+    if !spec.expect_not.is_empty() && ev.output_excerpt.contains(&spec.expect_not) {
         ev.state = EvidenceState::Invalid;
     }
     Ok(ev)
@@ -140,6 +215,7 @@ pub fn run_shell(
         },
         created_at: chrono::Utc::now(),
         duration_ms: start.elapsed().as_millis(),
+        artifact_hash: String::new(),
     })
 }
 

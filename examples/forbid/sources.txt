@@ -1,0 +1,2 @@
+// clean module
+ledger_read_only()

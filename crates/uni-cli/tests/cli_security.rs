@@ -122,3 +122,46 @@ VERIFY x
     assert_ne!(o.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&o.stderr).contains("unknown verifier"));
 }
+
+/// v0.7: content-bound evidence — changing a watched file invalidates cached
+/// evidence even inside the same commit, then re-verifies (FR-010/FR-013).
+#[test]
+fn expect_not_and_content_binding_variance() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let dir = std::env::temp_dir().join(format!("uni-content-test-{}",
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
+    std::fs::create_dir_all(dir.join("sources")).unwrap();
+    std::fs::write(dir.join(".uni/config.toml"),
+"[verifiers.\"no.evil\"]\nrun = \"! grep -Rn 'EVIL' sources\"\nexpect_not = \"EVIL\"\nfiles = [\"sources/**\"]\ntimeout = 60\n").unwrap();
+    std::fs::write(dir.join("sources/lib.txt"), "ledger_read_only();\n").unwrap();
+    std::fs::write(dir.join("c.uni"), "VERSION 0.1
+DOMAIN software
+INTENT content-bound
+GOAL
+  clean
+CLAIM x REQUIRED
+  ENSURE no EVIL
+VERIFY x
+  USING no.evil
+").unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+
+    // clean tree → Accepted
+    let r1 = out(&["verify", "c.uni"], &dir);
+    assert!(r1.contains("Accepted"), "{r1}");
+
+    // same commit, but watched file content changes → cached evidence stale, re-run fails, blocked
+    std::fs::write(dir.join("sources/lib.txt"), "EVIL_WRITE(ledger);\n").unwrap();
+    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    assert_ne!(o.status.code(), Some(0), "content change must invalidate cached evidence");
+    let stdout = String::from_utf8_lossy(&o.stdout);
+    assert!(stdout.contains("no valid evidence") || stdout.contains("FAIL"), "{stdout}");
+
+    // restored content matches the original hash → cached evidence valid again
+    std::fs::write(dir.join("sources/lib.txt"), "ledger_read_only();\n").unwrap();
+    let r3 = out(&["verify", "c.uni"], &dir);
+    assert!(r3.contains("Accepted"), "{r3}");
+}

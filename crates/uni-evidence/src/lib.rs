@@ -24,6 +24,9 @@ pub struct Evidence {
     pub state: EvidenceState,
     pub created_at: DateTime<Utc>,
     pub duration_ms: u128,
+    /// sha256 over watched files content (empty = not content-bound)
+    #[serde(default)]
+    pub artifact_hash: String,
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -85,10 +88,16 @@ pub fn load_valid_for_claim(
     claim_id: &str,
     cur_sha: &str,
     cur_dirty: bool,
+    current_artifact_hash: Option<&str>,
 ) -> Option<Evidence> {
     let path = evidence_path(dot_uni, claim_id);
     let mut ev: Evidence = load_json(&path)?;
     if is_stale(&ev, cur_sha, cur_dirty) {
+        ev.state = EvidenceState::Stale;
+        return None;
+    }
+    // content-bound evidence must match the watched files' current content (FR-010/FR-013)
+    if !ev.artifact_hash.is_empty() && current_artifact_hash != Some(ev.artifact_hash.as_str()) {
         ev.state = EvidenceState::Stale;
         return None;
     }
