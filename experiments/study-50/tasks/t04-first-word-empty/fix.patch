@@ -1,0 +1,29 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index ed5a3ea..6bc2319 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,5 +1,4 @@
+ /// First word of a sentence.
+ pub fn first_word(s: &str) -> &str {
+-    // BUG: panics on empty string
+-    s.split(' ').next().unwrap()
++    s.split_once(' ').map(|(w, _)| w).unwrap_or(s)
+ }
+diff --git a/tests/it.rs b/tests/it.rs
+index c55c66e..42244b8 100644
+--- a/tests/it.rs
++++ b/tests/it.rs
+@@ -4,3 +4,13 @@ use mini_app::first_word;
+ fn normal_sentence() {
+     assert_eq!(first_word("hello world"), "hello");
+ }
++
++#[test]
++fn empty_string() {
++    assert_eq!(first_word(""), "");
++}
++
++#[test]
++fn whitespace_only() {
++    assert_eq!(first_word("   "), "");
++}

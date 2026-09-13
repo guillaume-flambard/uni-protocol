@@ -14,15 +14,15 @@ def main(path):
         print("no rows"); return
     agent_accept = sum(1 for r in rows if r["agent_done"] == "1")
     human_accept = sum(1 for r in rows if r["human_review"] == "1")
-    uni_accept = sum(1 for r in rows if r["uni_decision"] == "ACCEPTED")
+    uni_accept = sum(1 for r in rows if r["uni_decision"].upper() == "ACCEPTED")
 
     # Correlation-style agreement
-    both = sum(1 for r in rows if r["human_review"] == "1" and r["uni_decision"] == "ACCEPTED")
-    agree_uni_human = both / n
+    both = sum(1 for r in rows if r["human_review"] == "1" and r["uni_decision"].upper() == "ACCEPTED")
+    agree_uni_human = both / max(1, human_accept)
     agree_agent_human = human_accept / n  # agent accepts everything
 
     # Critical: UNI ACCEPTED but human rejected (silent false accept)
-    false_accept = sum(1 for r in rows if r["human_review"] == "0" and r["uni_decision"] == "ACCEPTED")
+    false_accept = sum(1 for r in rows if r["human_review"] == "0" and r["uni_decision"].upper() == "ACCEPTED")
     # Coverage: UNI correctly blocked what human also rejected
     true_blocks = sum(1 for r in rows if r["human_review"] == "0" and r["uni_decision"] != "ACCEPTED")
     human_reject = n - human_accept

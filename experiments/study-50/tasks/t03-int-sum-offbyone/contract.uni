@@ -1,0 +1,20 @@
+VERSION 0.1
+DOMAIN software
+INTENT study-t03
+GOAL
+  sum_to includes the upper bound.
+CLAIM sum-basic REQUIRED
+  ENSURE sum_to(3) == 6
+CLAIM sum-one REQUIRED
+  ENSURE sum_to(1) == 1
+INVARIANT tests-green CRITICAL
+  ENSURE all tests pass
+VERIFY sum-basic
+  USING mini.t.sum.basic
+VERIFY sum-one
+  USING mini.t.sum.one
+VERIFY tests-green
+  USING mini.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

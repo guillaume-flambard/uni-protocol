@@ -1,0 +1,20 @@
+VERSION 0.1
+DOMAIN software
+INTENT study-t05
+GOAL
+  bump applies percent increase correctly.
+CLAIM bump-basic REQUIRED
+  ENSURE bump(100,10) == 110
+CLAIM bump-floor REQUIRED
+  ENSURE bump(99,50) == 148
+INVARIANT tests-green CRITICAL
+  ENSURE all tests pass
+VERIFY bump-basic
+  USING mini.t.bump.basic
+VERIFY bump-floor
+  USING mini.t.bump.floor
+VERIFY tests-green
+  USING mini.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

@@ -87,18 +87,15 @@ def run_task(task_dir, agent_name, out_rows, keep_dir):
     with open(os.path.join(work, ".uni", "config.toml"), "w") as f:
         f.write("""[verifiers]
 "mini.tests" = "cargo test"
-
-[verifiers."mini.t.add"]
-run = "cargo test add_works -- --exact"
-expect = "test result: ok. 1 passed"
-
-[verifiers."mini.t.clamp.lower"]
-run = "cargo test clamp_lower_works -- --exact"
-expect = "test result: ok. 1 passed"
-
-[verifiers."mini.t.clamp.upper"]
-run = "cargo test clamp_upper_works -- --exact"
-expect = "test result: ok. 1 passed"
+"mini.t.add" = {"run" = "cargo test add_works -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.clamp.lower" = {"run" = "cargo test clamp_lower_works -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.clamp.upper" = {"run" = "cargo test clamp_upper_works -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.sum.basic" = {"run" = "cargo test sum_three -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.sum.one" = {"run" = "cargo test sum_one -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.first.normal" = {"run" = "cargo test normal_sentence -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.first.empty" = {"run" = "cargo test empty_string -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.bump.basic" = {"run" = "cargo test bump_ten -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.bump.floor" = {"run" = "cargo test bump_floor -- --exact", "expect" = "test result: ok. 1 passed"}
 """)
 
     # agent implements

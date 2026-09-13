@@ -1,0 +1,20 @@
+VERSION 0.1
+DOMAIN software
+INTENT study-t04
+GOAL
+  first_word handles empty input.
+CLAIM normal REQUIRED
+  ENSURE normal sentence works
+CLAIM empty REQUIRED
+  ENSURE empty string returns empty
+INVARIANT tests-green CRITICAL
+  ENSURE all tests pass
+VERIFY normal
+  USING mini.t.first.normal
+VERIFY empty
+  USING mini.t.first.empty
+VERIFY tests-green
+  USING mini.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0
