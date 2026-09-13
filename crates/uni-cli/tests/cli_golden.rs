@@ -234,3 +234,25 @@ fn golden_doctor_healthy_and_fail() {
 fn bin_state(root: &std::path::PathBuf) -> bool {
     Command::new(bin()).args(["doctor"]).current_dir(root).output().map(|o| o.status.success()).unwrap_or(false)
 }
+
+/// v0.14: stack independence — python + nodejs examples verify green.
+/// Skips silently when the runtime is missing (CI ubuntu has both).
+#[test]
+fn golden_stack_independence() {
+    let root = manifest_dir().parent().unwrap().parent().unwrap().to_path_buf();
+    for (contract, runtime) in [
+        ("examples/python/contract.uni", "python3"),
+        ("examples/nodejs/contract.uni", "node"),
+    ] {
+        let has = Command::new("which").arg(runtime).stdout(std::process::Stdio::null()).status().map(|s| s.success()).unwrap_or(false);
+        if !has {
+            continue;
+        }
+        assert_eq!(
+            run(&["verify", contract], &root),
+            0,
+            "{contract} must ACCEPT with {} available",
+            runtime
+        );
+    }
+}

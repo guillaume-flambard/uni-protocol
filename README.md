@@ -15,13 +15,18 @@ Rust workspace, single CLI binary `uni`. Deterministic. Filesystem-only. No clou
 | Contract | `uni init` | creates `.uni/{config.toml,contracts,evidence,decisions,policies} + uni/intents` |
 | | `uni compile | inspect` | `.uni` DSL → canonical JSON IR (schema `schemas/uni.schema.json`) |
 | | `uni import-speckit <dir>` | Spec Kit spec.md/plan.md → **candidate** DSL for human review |
+| | `uni lint <contract>` | preflight without execution (coverage, registry refs, duplicates) |
 | Evidence | `uni verify <contract>` | runs trusted-registry verifiers; incremental, git-+content-bound evidence; STALE on commit or watched-file change |
 | | `uni explain` | claims table + per-claim evidence detail (PRD §16 UX) |
 | Policy | `.uni/policies/*.toml` | reject_on_invalid, escalate_on_stale/missing, min_verified_ratio (deterministic) |
 | Decision | — | truth table → policy → ACCEPTED/REJECTED/EVIDENCE_REQUIRED/ESCALATED |
 | Audit | `uni report` | byte-stable CI/PR view (`GitHub step summary` ready) |
 | | `uni events` | append-only journal with `uni.*` attributes (OTel-ready) |
+| Health | `uni doctor` | workspace healthcheck (git, registry, policies, writability) |
 | Study | `experiments/study-50/` | harness + metrics (agent self-report vs UNI vs human) |
+
+Stack independence verified in CI: `examples/` covers Rust, Python (unittest),
+and Node (`node --test`) — same contract model, different verifiers.
 
 ## DSL (closed vocabulary v0.1)
 

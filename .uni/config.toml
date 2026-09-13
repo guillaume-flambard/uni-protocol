@@ -11,3 +11,23 @@ run = "! grep -Rn 'EVIL_WRITE' examples/forbid/sources.txt"
 expect_not = "EVIL_WRITE"
 files = ["examples/forbid/sources.txt"]
 timeout = 30
+
+[verifiers."py.tests"]
+run = "cd examples/python && python3 -m unittest discover -p 'test_*.py'"
+expect = "OK"
+
+[verifiers."py.t.floor"]
+run = "cd examples/python && python3 -m unittest test_pricing.Pricing.test_floor"
+expect = "OK"
+
+[verifiers."node.tests"]
+run = "node --test examples/nodejs/*.test.mjs"
+expect = "ℹ fail 0"
+
+[verifiers."node.t.dash"]
+run = 'node --test --test-name-pattern "spaces become dashes" examples/nodejs/slug.test.mjs'
+expect = "pass 1"
+
+[verifiers."node.t.lower"]
+run = 'node --test --test-name-pattern "lowercased" examples/nodejs/slug.test.mjs'
+expect = "pass 1"

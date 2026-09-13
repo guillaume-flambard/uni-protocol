@@ -1,0 +1,20 @@
+VERSION 0.1
+DOMAIN software
+INTENT node-slug
+GOAL
+  Slug lowercases and dashes.
+CLAIM dash REQUIRED
+  ENSURE spaces become dashes
+CLAIM lower REQUIRED
+  ENSURE output is lowercase
+INVARIANT tests-green CRITICAL
+  ENSURE node test suite has no failures
+VERIFY dash
+  USING node.t.dash
+VERIFY lower
+  USING node.t.lower
+VERIFY tests-green
+  USING node.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

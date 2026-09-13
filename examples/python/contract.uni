@@ -1,0 +1,16 @@
+VERSION 0.1
+DOMAIN software
+INTENT python-pricing
+GOAL
+  Discount floors, never rounds up.
+CLAIM floor REQUIRED
+  ENSURE 99 at 50 percent is 49
+INVARIANT tests-green CRITICAL
+  ENSURE unittest suite OK
+VERIFY floor
+  USING py.t.floor
+VERIFY tests-green
+  USING py.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0
