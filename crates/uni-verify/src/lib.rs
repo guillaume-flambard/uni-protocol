@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use std::collections::HashMap;
 use std::time::Instant;
 use uni_evidence::{git_info, sha256_hex, Evidence, EvidenceState};
 use uni_ir::Ir;

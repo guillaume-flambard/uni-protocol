@@ -513,3 +513,76 @@ mod policy_tests {
         assert!((p.min_verified_ratio - 0.5).abs() < f64::EPSILON);
     }
 }
+
+#[cfg(test)]
+mod policy_property {
+    use super::*;
+    use proptest::prelude::*;
+    use uni_ir::{ClaimIr, IntentIr, Ir};
+
+    fn ir_n(n: usize) -> Ir {
+        Ir {
+            uni_version: "0.1".into(),
+            intent: IntentIr { id: "x".into(), domain: "s".into(), goal: "g".into() },
+            claims: (0..n)
+                .map(|i| ClaimIr {
+                    id: format!("c{i}"),
+                    kind: "claim".into(),
+                    required: true,
+                    critical: false,
+                    ensure: "e".into(),
+                })
+                .collect(),
+            verification: vec![],
+            acceptance: uni_ir::AcceptanceIr { require_verified: true, allow_critical_failures: 0 },
+        }
+    }
+    fn ev(claim: &str, state: EvidenceState, code: i32) -> Evidence {
+        Evidence {
+            id: format!("{claim}-e"),
+            claim_id: claim.into(),
+            producer: "t".into(),
+            command: "c".into(),
+            exit_code: code,
+            output_hash: "h".into(),
+            output_excerpt: "".into(),
+            commit_sha: "s".into(),
+            workspace_dirty: false,
+            state,
+            created_at: chrono::Utc::now(),
+            duration_ms: 1,
+            artifact_hash: String::new(),
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn policy_determinism(n in 1usize..5,
+                             s0 in prop::sample::select(vec![0usize,1usize,2usize,3usize]),
+                             s1 in prop::sample::select(vec![0usize,1usize,2usize,3usize]),
+                             ratio in 0.0f64..=1.0) {
+            let ir = ir_n(n);
+            let state_of = |sel: usize| match sel {
+                1 => (EvidenceState::Invalid, 1),
+                2 => (EvidenceState::Stale, 0),
+                _ => (EvidenceState::Valid, 0),
+            };
+            let evs: Vec<Evidence> = (0..n)
+                .map(|i: usize| {
+                    let sel = if i == 0 { s0 } else if i == 1 { s1 } else { 0 };
+                    let (state, code) = state_of(sel);
+                    ev(&format!("c{i}"), state, code)
+                })
+                .collect();
+            let policy = Policy {
+                reject_on_invalid: true,
+                escalate_on_stale: n % 2 == 0,
+                escalate_on_missing: false,
+                min_verified_ratio: ratio,
+            };
+            let d1 = apply_policy(evaluate(&ir, &evs), &policy);
+            let d2 = apply_policy(evaluate(&ir, &evs), &policy);
+            assert_eq!((d1.decision, d1.reason, d1.claims), (d2.decision, d2.reason, d2.claims));
+        }
+    }
+}
