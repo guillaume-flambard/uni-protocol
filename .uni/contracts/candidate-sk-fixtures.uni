@@ -1,0 +1,24 @@
+VERSION 0.1
+DOMAIN software
+INTENT candidate-sk-fixtures
+GOAL
+  Imported from Spec Kit (candidate — review required).
+CLAIM fr-001 REQUIRED
+  ENSURE Users can log in with valid credentials
+CLAIM fr-002 REQUIRED
+  ENSURE Expired tokens are rejected
+CLAIM scenario-03 REQUIRED
+  ENSURE fresh tokens accepted
+CLAIM requirement REQUIRED
+  ENSURE Requirement contracts compile fast
+VERIFY fr-001
+  USING project.tests
+VERIFY fr-002
+  USING project.tests
+VERIFY scenario-03
+  USING project.tests
+VERIFY requirement
+  USING project.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

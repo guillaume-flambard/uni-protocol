@@ -49,3 +49,46 @@ fn golden_verify_exit_codes() {
 }
 
 fn _unused(p: &Path) {}
+
+/// Golden: speckit importer extracts markdown FR + scenarios into a candidate DSL file.
+#[test]
+fn golden_import_speckit() {
+    let dir = std::env::temp_dir().join(format!("sk-import-{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/contracts")).unwrap();
+    std::fs::write(dir.join("constitution.md"), "# Constitution\n").unwrap();
+    std::fs::write(dir.join("plan.md"), "# Plan\n").unwrap();
+    std::fs::write(dir.join("spec.md"),
+"- **FR-001**: alpha works
+- **FR-002**: beta rejects
+
+#### Scenario: gamma path
+- [ ] checkbox claim one
+").unwrap();
+    let o = Command::new(bin()).args(["import-speckit", dir.to_str().unwrap()])
+        .current_dir(&dir).output().unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let contracts_dir = dir.join(".uni/contracts");
+    let mut dsl_path = None;
+    for e in std::fs::read_dir(&contracts_dir).unwrap() {
+        let p = e.unwrap().path();
+        if p.extension().map(|e| e == "uni").unwrap_or(false) {
+            dsl_path = Some(p.clone());
+        }
+    }
+    let dsl_path = dsl_path.expect("candidate DSL written");
+    let dsl = std::fs::read_to_string(&dsl_path).unwrap();
+    assert!(dsl.contains("CLAIM fr-001"), "{dsl}");
+    assert!(dsl.contains("CLAIM fr-002"), "{dsl}");
+    assert!(dsl.contains("CLAIM scenario-03"), "{dsl}");
+    assert!(dsl.contains("CLAIM check-04"), "{dsl}");
+    // the candidate must parse back with the same parser
+    let mut dsl_path: std::path::PathBuf = std::fs::read_dir(&contracts_dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|ee| ee.path()))
+        .find(|p| p.extension().map(|e| e == "uni").unwrap_or(false))
+        .expect("candidate DSL written");
+    let out = Command::new(bin()).args(["compile", dsl_path.to_str().unwrap()])
+        .current_dir(&dir).output().unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("claims: 4"));
+}

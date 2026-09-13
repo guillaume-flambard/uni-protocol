@@ -18,7 +18,10 @@ use uni_ir::Ir;
 pub struct VerifierSpec {
     pub run: String,
     pub expect: String,
+    pub timeout: u64,
 }
+
+const DEFAULT_TIMEOUT_SECS: u64 = 300;
 
 pub fn load_registry(dot_uni: &std::path::Path) -> std::collections::HashMap<String, VerifierSpec> {
     let path = dot_uni.join("config.toml");
@@ -32,12 +35,13 @@ pub fn load_registry(dot_uni: &std::path::Path) -> std::collections::HashMap<Str
     if let Some(t) = val.get("verifiers").and_then(|v| v.as_table()) {
         for (k, v) in t {
             if let Some(s) = v.as_str() {
-                out.insert(k.clone(), VerifierSpec { run: s.to_string(), expect: String::new() });
+                out.insert(k.clone(), VerifierSpec { run: s.to_string(), expect: String::new(), timeout: DEFAULT_TIMEOUT_SECS });
             } else if let Some(tbl) = v.as_table() {
                 let run = tbl.get("run").and_then(|r| r.as_str()).unwrap_or("").to_string();
                 let expect = tbl.get("expect").and_then(|e| e.as_str()).unwrap_or("").to_string();
+                let timeout = tbl.get("timeout").and_then(|t| t.as_integer()).unwrap_or(DEFAULT_TIMEOUT_SECS as i64) as u64;
                 if !run.is_empty() {
-                    out.insert(k.clone(), VerifierSpec { run, expect });
+                    out.insert(k.clone(), VerifierSpec { run, expect, timeout });
                 }
             }
         }
@@ -56,10 +60,10 @@ pub fn resolve_command(
     if verifier_ref == "shell" {
         let cmd = inline_shell.ok_or_else(|| anyhow!("shell verifier needs a command"))?;
         if registry.is_empty() {
-            return Ok(VerifierSpec { run: cmd.to_string(), expect: String::new() }); // bootstrap
+            return Ok(VerifierSpec { run: cmd.to_string(), expect: String::new(), timeout: DEFAULT_TIMEOUT_SECS }); // bootstrap
         }
         if registry.values().any(|v| v.run == cmd) {
-            return Ok(VerifierSpec { run: cmd.to_string(), expect: String::new() });
+            return Ok(VerifierSpec { run: cmd.to_string(), expect: String::new(), timeout: DEFAULT_TIMEOUT_SECS });
         }
         return Err(anyhow!(
             "inline shell command not in trusted registry (.uni/config.toml [verifiers]): {cmd}"
@@ -157,7 +161,7 @@ pub fn assure_contract(
     let mut out = vec![];
     for v in &ir.verification {
         let spec = resolve_command(&v.verifier_ref, v.inline_shell.as_deref(), &registry)?;
-        out.push(run_spec(&v.claim_id, &spec, workspace, 300)?);
+        out.push(run_spec(&v.claim_id, &spec, workspace, spec.timeout)?);
     }
     Ok(out)
 }
