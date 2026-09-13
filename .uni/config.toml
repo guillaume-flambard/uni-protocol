@@ -5,3 +5,4 @@
 "test.true" = "true"
 "test.false" = "false"
 "e2e.smoke" = "npx playwright test --reporter=list"
+"test.fail" = "false"

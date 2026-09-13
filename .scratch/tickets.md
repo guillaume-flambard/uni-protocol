@@ -10,3 +10,4 @@
 - [x] P5 — SpecKit importer minimal (`uni import-speckit` → candidate JSON, review required). DONE.
 - [x] v0.2a — Proptest determinism + truth table + critical rejection, exhaustive decision matrix, parser fixtures. DONE.
 - [x] v0.2b — Persisted-evidence pipeline (re-run only when stale/missing/invalid), STALE-never-masks-new-commit e2e git fixture, registry security tests (inline shell refused, unknown ref refused), CLI golden tests. DONE. Next: decision-matrix CLI report, then 50-issue study.
+- [x] v0.3a — `uni explain` enriched report (claims table, summary 3/3, Assurance A0-A4, per-claim evidence detail, match filter), PRD §16 error UX (`Run: uni verify <claim>`), negative example + study-50 harness (collect.py, false-accept release criterion). DONE. Next: study-50 real data, then v0.4 agent comparison.

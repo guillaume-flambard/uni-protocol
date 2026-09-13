@@ -1,0 +1,11 @@
+VERSION 0.1
+DOMAIN software
+INTENT fail-demo
+GOAL
+  fails
+CLAIM x REQUIRED
+  ENSURE nope
+VERIFY x
+  USING test.fail
+ACCEPT WHEN
+  required_claims == VERIFIED

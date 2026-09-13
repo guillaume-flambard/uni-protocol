@@ -134,6 +134,18 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
         println!("\nDecision: {:?}", decision.decision);
         println!("Reason: {}", decision.reason);
     }
+    if decision.decision != uni_decision::Decision::Accepted
+        && decision.decision != uni_decision::Decision::Rejected
+    {
+        // PRD §16 error UX: propose the exact next command per missing claim.
+        let mut hints = vec![];
+        for c in &decision.claims {
+            if c.state != uni_evidence::EvidenceState::Valid {
+                hints.push(format!("uni verify {}", c.claim_id));
+            }
+        }
+        println!("\nRun:\n  {}", hints.join("\n  "));
+    }
     match decision.decision {
         uni_decision::Decision::Accepted => Ok(()),
         uni_decision::Decision::Rejected => Err(anyhow!("UNI REJECTED")),
@@ -141,15 +153,72 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
     }
 }
 
+fn assurance_level_x(v: &serde_json::Value) -> u8 {
+    match v["decision"].as_str() {
+        Some("Accepted") => 2,
+        Some("Rejected") => 1,
+        _ => 0,
+    }
+}
+
 fn cmd_explain(arg: Option<String>, as_json: bool) -> Result<()> {
     let path = dot_uni().join("decisions").join("last.json");
     let text = std::fs::read_to_string(&path).context("no decision yet (run uni verify first)")?;
-    if as_json || arg.is_none() {
+    let v: serde_json::Value = serde_json::from_str(&text)?;
+    if as_json {
         println!("{text}");
         return Ok(());
     }
-    let _filter = arg.unwrap();
-    println!("{text}");
+    println!("Decision");
+    println!("{}", v["decision"].as_str().unwrap_or("?"));
+
+    println!("\nRequired claims");
+    if let Some(claims) = v["claims"].as_array() {
+        for c in claims {
+            let mark = match c["state"].as_str() {
+                Some("Valid") => "✓",
+                Some("Stale") => "⏳",
+                _ => "✗",
+            };
+            println!("  {mark} {:<24} {}", c["claim_id"].as_str().unwrap_or("?"), c["state"].as_str().unwrap_or("?"));
+        }
+    }
+
+    let summary = v["claims"].as_array().map(|a| {
+        let tested = a.iter().filter(|c| c["state"] == "Valid").count();
+        format!("{}/{} verified", tested, a.len())
+    }).unwrap_or_default();
+    let a = assurance_level_x(&v);
+    println!("\nSummary");
+    println!("  Claims     {summary}");
+    println!("  Assurance  A{a} ({} )", match a { 0 => "DECLARED", 1 => "ARTIFACT", 2 => "VERIFIED", 3 => "INDEPENDENTLY_VERIFIED", 4 => "ATTESTED", _ => "?" });
+    println!("\n{}", v["reason"].as_str().unwrap_or(""));
+
+    if let Some(c) = v["claims"].as_array().and_then(|a| a.iter().find(|c| c["state"] != "Valid")) {
+        let claim_id = c["claim_id"].as_str().unwrap_or("");
+        let ev = uni_evidence::load_json::<uni_evidence::Evidence>(
+            &uni_evidence::evidence_path(&dot_uni(), claim_id));
+        println!("\nCLAIM {claim_id}");
+        match &ev {
+            None => {
+                println!("Status:\nEVIDENCE_REQUIRED\n\nRequired:\n  trusted registry verifier\n\nFound:\n  no valid evidence bound to this commit\n\nRun:\n  uni verify {claim_id}");
+            }
+            Some(e) => {
+                println!("  status       {:?}", e.state);
+                println!("  command      {}", e.command);
+                println!("  exit_code    {}", e.exit_code);
+                println!("  commit       {}", &e.commit_sha[..e.commit_sha.len().min(8)]);
+                println!("  duration_ms  {}", e.duration_ms);
+            }
+        }
+    }
+
+    if let Some(f) = arg {
+        let needle = f.to_lowercase();
+        if !needle.is_empty() && !format!("{text}").to_lowercase().contains(&needle) {
+            println!("\nNo match for '{f}' in last decision.");
+        }
+    }
     Ok(())
 }
 
