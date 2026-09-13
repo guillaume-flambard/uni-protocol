@@ -47,6 +47,10 @@
         "require_verified": {"type": "boolean"},
         "allow_critical_failures": {"type": "integer", "minimum": 0}
       }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {"type": "string"}
     }
   }
 }

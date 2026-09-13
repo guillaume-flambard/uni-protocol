@@ -244,6 +244,7 @@ mod tests {
                 require_verified: true,
                 allow_critical_failures: 0,
             },
+            constraints: vec![],
         }
     }
     fn ev(state: EvidenceState, code: i32) -> Evidence {
@@ -324,6 +325,7 @@ mod property_tests {
                 require_verified: true,
                 allow_critical_failures: 0,
             },
+            constraints: vec![],
         }
     }
 
@@ -398,6 +400,7 @@ mod decision_matrix {
             }],
             verification: vec![],
             acceptance: uni_ir::AcceptanceIr { require_verified: true, allow_critical_failures: 0 },
+            constraints: vec![],
         };
         let mk = |st: EvidenceState, code: i32| Evidence {
             id: "a-e".into(), claim_id: "a".into(), producer: "t".into(), command: "c".into(),
@@ -451,6 +454,7 @@ mod policy_tests {
                 .collect(),
             verification: vec![],
             acceptance: AcceptanceIr { require_verified: true, allow_critical_failures: 0 },
+            constraints: vec![],
         }
     }
     fn ev(claim: &str, state: EvidenceState, code: i32) -> Evidence {
@@ -535,6 +539,7 @@ mod policy_property {
                 .collect(),
             verification: vec![],
             acceptance: uni_ir::AcceptanceIr { require_verified: true, allow_critical_failures: 0 },
+            constraints: vec![],
         }
     }
     fn ev(claim: &str, state: EvidenceState, code: i32) -> Evidence {

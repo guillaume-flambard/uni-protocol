@@ -128,3 +128,36 @@ fn golden_events_journal() {
     let texts: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
     assert!(texts.iter().any(|l| l.contains("\"EvidenceReused\"")));
 }
+
+/// v0.11: lint catches claims without VERIFY (preflight, no execution).
+#[test]
+fn golden_lint_missing_verify() {
+    let dir = std::env::temp_dir().join(format!("uni-lint-{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
+    std::fs::write(dir.join("c.uni"), "VERSION 0.1
+DOMAIN software
+INTENT lint-fail
+GOAL
+  n
+CLAIM ghost REQUIRED
+  ENSURE n
+").unwrap();
+    let o = Command::new(bin()).args(["lint", "c.uni"]).current_dir(&dir).output().unwrap();
+    assert_ne!(o.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&o.stdout);
+    assert!(stdout.contains("missing-verify") && stdout.contains("ghost"), "{stdout}");
+    // clean contract lints green
+    std::fs::write(dir.join("c.uni"), "VERSION 0.1
+DOMAIN software
+INTENT lint-ok
+GOAL
+  n
+CLAIM x REQUIRED
+  ENSURE n
+VERIFY x
+  USING anything
+").unwrap();
+    let o2 = Command::new(bin()).args(["lint", "c.uni"]).current_dir(&dir).output().unwrap();
+    assert_eq!(o2.status.code(), Some(0), "{o2:?}");
+}

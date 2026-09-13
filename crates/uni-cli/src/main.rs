@@ -22,6 +22,7 @@ enum Cmd {
     ImportSpeckit { dir: PathBuf },
     Report,
     Events,
+    Lint { file: PathBuf },
 }
 
 fn dot_uni() -> PathBuf {
@@ -39,7 +40,69 @@ fn main() -> Result<()> {
         Cmd::ImportSpeckit { dir } => cmd_import_speckit(&dir, cli.json),
         Cmd::Report => cmd_report(cli.json),
         Cmd::Events => cmd_events(cli.json, 50),
+        Cmd::Lint { file } => cmd_lint(&file, cli.json),
     }
+}
+
+fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
+    let (ir, _) = load_contract(file)?;
+    let registry = uni_verify::load_registry(&dot_uni());
+    // (severity, kind, message); severity 2 = error, 1 = warning
+    let mut findings: Vec<(u8, String, String)> = vec![];
+    for c in &ir.claims {
+        if !ir.verification.iter().any(|v| v.claim_id == c.id) {
+            findings.push((2, "missing-verify".into(), format!("claim '{}' has no VERIFY", c.id)));
+        }
+    }
+    if !registry.is_empty() {
+        for v in &ir.verification {
+            if v.verifier_ref != "shell" && !registry.contains_key(&v.verifier_ref) {
+                findings.push((1, "unknown-verifier".into(), format!(
+                    "VERIFY {} uses '{}' not found in .uni/config.toml (may fail at verify time)",
+                    v.claim_id, v.verifier_ref
+                )));
+            }
+        }
+    }
+    for (i, a) in ir.verification.iter().enumerate() {
+        for b in ir.verification.iter().skip(i + 1) {
+            if b.claim_id == a.claim_id && b.verifier_ref == a.verifier_ref && b.inline_shell == a.inline_shell {
+                findings.push((1, "duplicate-verify".into(), format!(
+                    "VERIFY '{}' → '{}' declared twice", a.claim_id, a.verifier_ref
+                )));
+            }
+        }
+    }
+    let errors = findings.iter().filter(|(s, _, _)| *s == 2).count();
+    let warns = findings.len() - errors;
+    if as_json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "intent": ir.intent.id,
+                "errors": errors,
+                "warnings": warns,
+                "findings": findings.iter().map(|(sev, kind, msg)| serde_json::json!({
+                    "severity": if *sev == 2 { "error" } else { "warning" },
+                    "kind": kind,
+                    "message": msg,
+                })).collect::<Vec<_>>(),
+            })
+        );
+    } else {
+        println!("uni lint — {}", ir.intent.id);
+        for (sev, kind, msg) in &findings {
+            println!("  {} {kind:<18} {msg}", if *sev == 2 { "ERROR" } else { "WARN " });
+        }
+        if findings.is_empty() {
+            println!("  clean: coverage complete, registry refs ok");
+        }
+        println!("\nerrors={errors} warnings={warns}");
+    }
+    if errors > 0 {
+        return Err(anyhow!("uni lint: {errors} error(s)"));
+    }
+    Ok(())
 }
 
 fn cmd_events(as_json: bool, max: usize) -> Result<()> {

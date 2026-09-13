@@ -10,6 +10,8 @@ pub struct Contract {
     pub claims: Vec<Claim>,
     pub verifications: Vec<Verification>,
     pub acceptance: Acceptance,
+    /// REQUIRE rules collected from the DSL (e.g. "executor != verifier")
+    pub constraints: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -82,6 +84,7 @@ pub fn parse(source: &str) -> Result<Contract> {
         require_verified: true,
         allow_critical_failures: 0,
     };
+    let mut constraints: Vec<String> = vec![];
 
     let mut pending_verify: Option<(String, usize)> = None;
     for (idx, raw) in source.lines().enumerate() {
@@ -150,6 +153,7 @@ pub fn parse(source: &str) -> Result<Contract> {
             let id = parts[0].to_string();
             let required = !parts.iter().any(|p| *p == "OPTIONAL");
             // next line(s) ENSURE ... — handled in second pass? read inline: ENSURE may be same line after?
+            let _ = required;
             claims.push(Claim {
                 id,
                 kind: ClaimKind::Claim,
@@ -238,7 +242,15 @@ pub fn parse(source: &str) -> Result<Contract> {
             }
             continue;
         }
-        if line.starts_with("REJECT") || line.starts_with("ESCALATE") || line.starts_with("REQUIRE") {
+        if line.starts_with("REJECT WHEN") || line.starts_with("ESCALATE WHEN") {
+            continue;
+        }
+        if line.starts_with("REQUIRE") {
+            let expr = line.strip_prefix("REQUIRE").unwrap().trim().to_string();
+            if expr.is_empty() {
+                return Err(anyhow!("line {line_no}: REQUIRE needs an expression"));
+            }
+            constraints.push(expr);
             continue;
         }
         return Err(anyhow!("line {line_no}: unknown directive: {line}"));
@@ -268,6 +280,7 @@ pub fn parse(source: &str) -> Result<Contract> {
         claims,
         verifications,
         acceptance,
+        constraints,
     })
 }
 

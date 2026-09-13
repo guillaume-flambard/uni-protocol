@@ -9,6 +9,9 @@ pub struct Ir {
     pub claims: Vec<ClaimIr>,
     pub verification: Vec<VerificationIr>,
     pub acceptance: AcceptanceIr,
+    /// DSL REQUIRE rules (v0.1: carried through, engine enforces later)
+    #[serde(default)]
+    pub constraints: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,6 +78,7 @@ pub fn compile(c: &Contract) -> Result<Ir> {
             require_verified: c.acceptance.require_verified,
             allow_critical_failures: c.acceptance.allow_critical_failures,
         },
+        constraints: c.constraints.clone(),
     })
 }
 
