@@ -1,0 +1,12 @@
+VERSION 0.1
+DOMAIN software
+INTENT build-green
+GOAL
+  The workspace compiles.
+CLAIM compiles REQUIRED
+  ENSURE typecheck or build passes
+VERIFY compiles
+  USING project.check
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

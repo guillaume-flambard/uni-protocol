@@ -87,6 +87,7 @@ pub fn parse(source: &str) -> Result<Contract> {
     let mut constraints: Vec<String> = vec![];
 
     let mut pending_verify: Option<(String, usize)> = None;
+    let mut pending_forbid: Option<usize> = None;
     for (idx, raw) in source.lines().enumerate() {
         let line_no = idx + 1;
         let line = raw.trim();
@@ -189,7 +190,7 @@ pub fn parse(source: &str) -> Result<Contract> {
             }
             continue;
         }
-        if line.starts_with("FORBID") {
+        if line.starts_with("FORBID") && line.trim() != "FORBID" {
             let expr = line.strip_prefix("FORBID").unwrap().trim().to_string();
             claims.push(Claim {
                 id: format!("forbid-{}", claims.len() + 1),
@@ -198,6 +199,22 @@ pub fn parse(source: &str) -> Result<Contract> {
                 critical: true,
                 ensure: format!("FORBID {expr}"),
                 line: line_no,
+            });
+            continue;
+        }
+        if line == "FORBID" {
+            pending_forbid = Some(line_no);
+            continue;
+        }
+        if pending_forbid.is_some() {
+            let vline = pending_forbid.take().unwrap();
+            claims.push(Claim {
+                id: format!("forbid-{}", claims.len() + 1),
+                kind: ClaimKind::Invariant,
+                required: true,
+                critical: true,
+                ensure: format!("FORBID {line}"),
+                line: vline,
             });
             continue;
         }

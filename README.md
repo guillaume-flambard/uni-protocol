@@ -23,6 +23,7 @@ Rust workspace, single CLI binary `uni`. Deterministic. Filesystem-only. No clou
 | Audit | `uni report` | byte-stable CI/PR view (`GitHub step summary` ready) |
 | | `uni events` | append-only journal with `uni.*` attributes (OTel-ready) |
 | Health | `uni doctor` | workspace healthcheck (git, registry, policies, writability) |
+| Packs | `uni pack list` / `uni pack template <pack> <name>` | Domain Packs: reusable claim templates (`packs/software`) |
 | Study | `experiments/study-50/` | harness + metrics (agent self-report vs UNI vs human) |
 
 Stack independence verified in CI: `examples/` covers Rust, Python (unittest),

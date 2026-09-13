@@ -197,8 +197,8 @@ echo '[{"escalate_on_stale": true, "reject_on_invalid": true, "min_verified_rati
 "#).unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let env_path = std::env::var("PATH").unwrap_or_default();
-    std::env::set_var("PATH", format!("{path_env}:{env_path}"));
+    // PATH is passed to the CHILD only: mutating process env races with other tests.
+    let child_path = format!("{path_env}:{}", std::env::var("PATH").unwrap_or_default());
 
     std::fs::write(dir.join(".uni/config.toml"),
 "[verifiers]\n\"p\" = \"true\"\n").unwrap();
@@ -215,8 +215,14 @@ VERIFY x
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
     git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
-    let r1 = out(&["verify", "c.uni"], &dir);
-    assert!(r1.contains("Accepted"), "{r1}");
+    let o1 = Command::new(bin()).args(["verify", "c.uni"])
+        .current_dir(&dir).env("PATH", &child_path).output().unwrap();
+    let r1 = String::from_utf8_lossy(&o1.stdout).to_string();
+    assert!(o1.status.success() && r1.contains("Accepted"), "{r1}");
+    // and with opa absent the fallback to the TOML stack still accepts
+    let o2 = Command::new(bin()).args(["verify", "c.uni"])
+        .current_dir(&dir).output().unwrap();
+    assert!(o2.status.success(), "opa-absent fallback must not block: {}", String::from_utf8_lossy(&o2.stderr));
 }
 
 /// v0.13: doctor — healthy exit 0 on a prepared workspace, failure exit without .uni.
@@ -255,4 +261,36 @@ fn golden_stack_independence() {
             runtime
         );
     }
+}
+
+/// v0.16: software pack ships, lists, and materializes lint-clean contracts.
+#[test]
+fn golden_software_pack() {
+    let root = manifest_dir().parent().unwrap().parent().unwrap().to_path_buf();
+    let o = Command::new(bin()).args(["pack", "list", "--json"]).current_dir(&root).output().unwrap();
+    assert!(o.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+    let packs = v["packs"].as_array().unwrap();
+    assert!(packs.iter().any(|p| p["name"] == "software"), "{v}");
+    let sw = packs.iter().find(|p| p["name"] == "software").unwrap();
+    assert_eq!(sw["templates"].as_array().unwrap().len(), 3);
+
+    // materialize + lint in a sandbox (repo .uni registry has the referenced keys)
+    let dir = std::env::temp_dir().join(format!("uni-pack-{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
+    std::fs::create_dir_all(dir.join("packs/software/templates")).unwrap();
+    for e in std::fs::read_dir(root.join("packs/software")).unwrap().flatten() {
+        if e.path().extension().map(|x| x == "toml").unwrap_or(false) {
+            std::fs::copy(e.path(), dir.join("packs/software/pack.toml")).unwrap();
+        }
+    }
+    for e in std::fs::read_dir(root.join("packs/software/templates")).unwrap().flatten() {
+        std::fs::copy(e.path(), dir.join("packs/software/templates").join(e.file_name())).unwrap();
+    }
+    assert_eq!(run(&["pack", "template", "software", "tests-pass"], &dir), 0);
+    let lint = Command::new(bin()).args(["lint", "uni/intents/tests-pass.uni"])
+        .current_dir(&dir).output().unwrap();
+    assert!(lint.status.success(), "{}", String::from_utf8_lossy(&lint.stderr));
+    assert!(String::from_utf8_lossy(&lint.stdout).contains("clean"));
 }

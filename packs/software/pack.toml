@@ -1,0 +1,17 @@
+[pack]
+name = "software"
+domain = "software"
+version = "0.1"
+description = "Outcome templates for software work: build, tests, forbidden writes."
+
+[[template]]
+name = "build-green"
+description = "workspace compiles via a trusted check command"
+
+[[template]]
+name = "tests-pass"
+description = "test suite green, per-suite evidence"
+
+[[template]]
+name = "no-forbidden-write"
+description = "FORBID compiled to a critical invariant, proved with expect_not"

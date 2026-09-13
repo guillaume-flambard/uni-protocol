@@ -1,0 +1,12 @@
+VERSION 0.1
+DOMAIN software
+INTENT no-forbidden-write
+GOAL
+  Forbidden patterns never appear in watched sources.
+FORBID
+  direct_write("ledger")
+VERIFY forbid-1
+  USING forbid.dirty-write
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0
