@@ -222,7 +222,8 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
         uni_evidence::save_json(&uni_evidence::evidence_path(&du, &ev.claim_id), &ev)?;
         stored.push(ev);
     }
-    let decision = uni_decision::evaluate_intent(&ir, &stored);
+    let policy = uni_decision::load_policies(&du.join("policies"));
+    let decision = uni_decision::apply_policy(uni_decision::evaluate_intent(&ir, &stored), &policy);
     let last = serde_json::json!({
         "intent": {"id": ir.intent.id, "domain": ir.intent.domain, "goal": ir.intent.goal},
         "decision": decision.decision,
@@ -283,6 +284,7 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
     match decision.decision {
         uni_decision::Decision::Accepted => Ok(()),
         uni_decision::Decision::Rejected => Err(anyhow!("UNI REJECTED")),
+        uni_decision::Decision::Escalated => Err(anyhow!("UNI ESCALATED")),
         _ => Err(anyhow!("UNI EVIDENCE_REQUIRED")),
     }
 }

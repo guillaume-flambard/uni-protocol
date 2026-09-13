@@ -19,6 +19,113 @@ pub struct ClaimResult {
     pub detail: String,
 }
 
+/// Policy layer v0.9: deterministic adjustments on top of the evidence truth table.
+/// Lives in `.uni/policies/*.toml` (`[policy]` table). UNI never invents policy.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct Policy {
+    /// REJECT the outcome when any claim evidence is Invalid (default: current behavior)
+    #[serde(default = "default_true")]
+    pub reject_on_invalid: bool,
+    /// ESCALATE instead of EVIDENCE_REQUIRED when evidence went stale
+    #[serde(default)]
+    pub escalate_on_stale: bool,
+    /// ESCALATE when required claims lack evidence
+    #[serde(default)]
+    pub escalate_on_missing: bool,
+    /// Minimum verified claim ratio: below this, REJECT regardless
+    #[serde(default)]
+    pub min_verified_ratio: f64,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Deterministic policy application on top of the engine result.
+pub fn apply_policy(
+    mut result: DecisionResult,
+    policy: &Policy,
+) -> DecisionResult {
+    let total = result.claims.len();
+    let verified = result.claims.iter().filter(|c| c.state == EvidenceState::Valid).count();
+
+    let ratio: f64 = verified as f64 / total.max(1) as f64;
+    if total > 0 && policy.min_verified_ratio > 0.0 && ratio < policy.min_verified_ratio {
+        result.decision = Decision::Rejected;
+        result.reason = format!(
+            "policy min_verified_ratio: {verified}/{total} below {:.0}%",
+            policy.min_verified_ratio * 100.0
+        );
+        return result;
+    }
+
+    let has_stale = result.claims.iter().any(|c| c.state == EvidenceState::Stale);
+    let has_invalid = result.claims.iter().any(|c| c.state == EvidenceState::Invalid);
+
+    if has_stale
+        && policy.escalate_on_stale
+        && result.decision != Decision::Accepted
+    {
+        result.decision = Decision::Escalated;
+        result.reason = format!("policy escalate_on_stale: {}", result.reason);
+        return result;
+    }
+    let base = format!("{:?}", result.decision);
+    if has_invalid && !policy.reject_on_invalid && base == "Rejected" {
+        result.decision = Decision::Escalated;
+        result.reason = format!("policy reject_on_invalid=false: {}", result.reason);
+        return result;
+    }
+    if has_invalid
+        && policy.escalate_on_missing
+        && base == "EvidenceRequired"
+    {
+        result.decision = Decision::Escalated;
+        result.reason = format!("policy escalate_on_missing: {}", result.reason);
+    }
+    result
+}
+
+/// Load the merged policy from `.uni/policies/*.toml` ([policy] tables; files sorted by name,
+/// later values win for booleans, max for ratio).
+pub fn load_policies(dir: &std::path::Path) -> Policy {
+    let mut policy = Policy { reject_on_invalid: true, ..Default::default() };
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        let mut files: Vec<_> = rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().map(|e| e == "toml").unwrap_or(false))
+            .collect();
+        files.sort();
+        for f in files {
+            let Ok(text) = std::fs::read_to_string(&f) else {
+                continue;
+            };
+            let Ok(val) = text.parse::<toml::Value>() else {
+                continue;
+            };
+            let Some(p) = val.get("policy").and_then(|p| p.as_table()) else {
+                continue;
+            };
+            let get_bool = |k: &str| p.get(k).and_then(|v| v.as_bool());
+            let get_f64 = |k: &str| p.get(k).and_then(|v| v.as_float());
+            if let Some(b) = get_bool("reject_on_invalid") {
+                policy.reject_on_invalid = b;
+            }
+            if let Some(b) = get_bool("escalate_on_stale") {
+                policy.escalate_on_stale = policy.escalate_on_stale || b;
+            }
+            if let Some(b) = get_bool("escalate_on_missing") {
+                policy.escalate_on_missing = policy.escalate_on_missing || b;
+            }
+            if let Some(f) = get_f64("min_verified_ratio") {
+                policy.min_verified_ratio = policy.min_verified_ratio.max(f);
+            }
+        }
+    }
+    policy
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DecisionResult {
     pub decision: Decision,
@@ -320,5 +427,89 @@ mod decision_matrix {
             id: "b".into(), kind: "claim".into(), required: true, critical: false, ensure: "e".into(),
         });
         assert_eq!(evaluate(&ir2, &[mk(EvidenceState::Valid, 0)]).decision, Decision::EvidenceRequired);
+    }
+}
+
+#[cfg(test)]
+mod policy_tests {
+    use super::*;
+    use uni_evidence::EvidenceState;
+    use uni_ir::{AcceptanceIr, ClaimIr, IntentIr, Ir};
+
+    fn ir_claims(n: usize) -> Ir {
+        Ir {
+            uni_version: "0.1".into(),
+            intent: IntentIr { id: "p".into(), domain: "s".into(), goal: "g".into() },
+            claims: (0..n)
+                .map(|i| ClaimIr {
+                    id: format!("c{i}"),
+                    kind: "claim".into(),
+                    required: true,
+                    critical: false,
+                    ensure: "e".into(),
+                })
+                .collect(),
+            verification: vec![],
+            acceptance: AcceptanceIr { require_verified: true, allow_critical_failures: 0 },
+        }
+    }
+    fn ev(claim: &str, state: EvidenceState, code: i32) -> Evidence {
+        Evidence {
+            id: format!("{claim}-e"),
+            claim_id: claim.into(),
+            producer: "t".into(),
+            command: "c".into(),
+            exit_code: code,
+            output_hash: "h".into(),
+            output_excerpt: "".into(),
+            commit_sha: "s".into(),
+            workspace_dirty: false,
+            state,
+            created_at: chrono::Utc::now(),
+            duration_ms: 1,
+            artifact_hash: String::new(),
+        }
+    }
+
+    #[test]
+    fn default_policy_matches_legacy_behavior() {
+        let ir = ir_claims(1);
+        let base = evaluate(&ir, &[]);
+        let out = apply_policy(base, &Policy { reject_on_invalid: true, ..Default::default() });
+        assert_eq!(out.decision, Decision::EvidenceRequired);
+    }
+
+    #[test]
+    fn escalate_on_stale_upgrades_required() {
+        let ir = ir_claims(1);
+        let base = evaluate(&ir, &[ev("c0", EvidenceState::Stale, 0)]);
+        let out = apply_policy(base, &Policy { escalate_on_stale: true, ..Default::default() });
+        assert_eq!(out.decision, Decision::Escalated);
+        assert!(out.reason.contains("escalate_on_stale"));
+    }
+
+    #[test]
+    fn min_verified_ratio_rejects() {
+        let ir = ir_claims(4);
+        let evs: Vec<Evidence> = (0..1).map(|i| ev(&format!("c{i}"), EvidenceState::Valid, 0)).collect();
+        let base = evaluate(&ir, &evs);
+        let out = apply_policy(base, &Policy { min_verified_ratio: 0.75, ..Default::default() });
+        assert_eq!(out.decision, Decision::Rejected);
+        assert!(out.reason.contains("min_verified_ratio"));
+    }
+
+    #[test]
+    fn policies_load_from_toml_stack() {
+        let dir = std::env::temp_dir().join(format!("uni-pol-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("01-base.toml"),
+"[policy]\nescalate_on_stale = true\nmin_verified_ratio = 0.5\n").unwrap();
+        std::fs::write(dir.join("02-override.toml"),
+"[policy]\nreject_on_invalid = false\n").unwrap();
+        let p = load_policies(&dir);
+        assert!(!p.reject_on_invalid);
+        assert!(p.escalate_on_stale);
+        assert!((p.min_verified_ratio - 0.5).abs() < f64::EPSILON);
     }
 }
