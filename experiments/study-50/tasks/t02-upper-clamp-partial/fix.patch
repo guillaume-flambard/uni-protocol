@@ -1,0 +1,17 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 296143e..fd86b52 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -3,9 +3,11 @@ pub fn add(a: i64, b: i64) -> i64 {
+ }
+ 
+ pub fn clamp(x: i64, lo: i64, hi: i64) -> i64 {
+-    // BUG: upper bound never enforced
++    // PARTIAL fix: upper bound clamped wrong (returns lo instead of hi)
+     if x < lo {
+         lo
++    } else if x > hi {
++        lo
+     } else {
+         x
+     }

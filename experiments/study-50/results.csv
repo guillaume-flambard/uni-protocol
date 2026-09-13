@@ -1,0 +1,3 @@
+issue,agent_done,uni_decision,human_review,claims_total,claims_verified
+t01-upper-clamp,1,Accepted,,4,4
+t02-upper-clamp-partial,1,EvidenceRequired,,4,3

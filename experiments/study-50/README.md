@@ -1,22 +1,29 @@
-# Experiment 1 — Agent-done vs UNI-accepted vs human review (PRD §20)
+# Study-50 — agent self-report vs UNI vs human review (PRD §20)
 
-Protocol:
-1. Pick N=50 real GitHub issues in a subject repo (start: uni itself or a Next.js example).
-2. Let a coding agent implement each issue; record `agent_says_done` (always true).
-3. Run UNI: record contract decision (ACCEPTED / REJECTED / EVIDENCE_REQUIRED).
-4. A human reviewer reviews the resulting diff blind to UNI's decision; records accept/reject.
-5. Run `collect.py results.csv`:
+Driver + analyzer for the outcome-assurance experiment.
 
-CSV header: `issue,agent_done,uni_decision,human_review,claims_total,claims_verified`
+## Layout
+```
+tasks/<id>/
+  issue.md          deliverable statement
+  contract.uni      UNI contract (claims + per-test verifiers)
+  base/             starting (buggy) state of the mini repo
+  fix.patch         ground-truth fix (fixture agent mode)
+```
 
-Metrics:
-- Agreement: `uni ACCEPTED & human accept` correlation vs `agent done & human accept`.
-- Never-silently-wrong: any case UNI ACCEPTED but human rejected = critical (blocks release).
-- UNI REJECTED/EEDED & human rejected = true positive detection.
+## Run
+```bash
+python3 run.py --agent fixture            # ground-truth fixture replay
+python3 run.py --agent codex              # real Codex implementer (wire-in: agent_codex)
+python3 run.py --agent claude             # real Claude implementer
+python3 collect.py results.csv            # agreement metrics
+```
+Then fill the `human_review` column (1 accept / 0 reject, blind review) and re-run collect.
 
-Columns meaning:
-- agent_done: always 1 (self-report)
-- human_review: 1 accept, 0 reject
-- uni_decision: ACCEPTED|REJECTED|EVIDENCE_REQUIRED
+## Smoke result (2 tasks, 2026-09-13)
+- t01 correct fix → ACCEPTED (4/4 claims verified).
+- t02 partial fix (upper bound clamped to wrong value) → EvidenceRequired, UNI refuses silently-accepted work.
+- The smoke itself caught a real model hole: 4 claims sharing one `cargo test` verifier all passed while the fix was broken. Registry now supports per-test verifiers (`run` + `expect = "test result: ok. 1 passed"`).
 
-Usage: python3 collect.py results.csv
+## Release criterion
+`false accepts (UNI ACCEPTED but human rejected)` must be 0.

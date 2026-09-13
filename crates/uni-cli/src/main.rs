@@ -100,8 +100,8 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
     }
     // 2) Re-run only for missing/stale/invalid claims.
     for (claim_id, ref_r, inline) in need_run {
-        let cmd = uni_verify::resolve_command(&ref_r, inline.as_deref(), &registry)?;
-        let mut ev = uni_verify::run_shell(&claim_id, &cmd, &ws, 300)?;
+        let spec = uni_verify::resolve_command(&ref_r, inline.as_deref(), &registry)?;
+        let mut ev = uni_verify::run_spec(&claim_id, &spec, &ws, 300)?;
         if uni_evidence::is_stale(&ev, &cur_sha, cur_dirty) {
             ev.state = uni_evidence::EvidenceState::Stale;
         }
@@ -134,7 +134,8 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
         println!("\nDecision: {:?}", decision.decision);
         println!("Reason: {}", decision.reason);
     }
-    if decision.decision != uni_decision::Decision::Accepted
+    if !as_json
+        && decision.decision != uni_decision::Decision::Accepted
         && decision.decision != uni_decision::Decision::Rejected
     {
         // PRD §16 error UX: propose the exact next command per missing claim.

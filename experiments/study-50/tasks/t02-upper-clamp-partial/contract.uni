@@ -1,0 +1,24 @@
+VERSION 0.1
+DOMAIN software
+INTENT study-t01
+GOAL
+  clamp enforces both bounds.
+CLAIM add REQUIRED
+  ENSURE add works
+CLAIM clamp-lower REQUIRED
+  ENSURE lower bound enforced
+CLAIM clamp-upper REQUIRED
+  ENSURE upper bound enforced
+INVARIANT tests-green CRITICAL
+  ENSURE all tests pass
+VERIFY add
+  USING mini.t.add
+VERIFY clamp-lower
+  USING mini.t.clamp.lower
+VERIFY clamp-upper
+  USING mini.t.clamp.upper
+VERIFY tests-green
+  USING mini.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0
