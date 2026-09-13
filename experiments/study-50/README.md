@@ -19,6 +19,8 @@ python3 run.py --agent claude             # real Claude implementer (blocked 202
 python3 collect.py results.csv            # agreement metrics
 ```
 Then fill the `human_review` column (1 accept / 0 reject, blind review) and re-run collect.
+Use `--append` when running one task at a time, and `--keep` to preserve the
+workspace for diff review. Results so far: [RESULTS-2026-09-13.md](RESULTS-2026-09-13.md).
 
 ## Smoke result (2 tasks, 2026-09-13)
 - t01 correct fix → ACCEPTED (4/4 claims verified).

@@ -40,24 +40,48 @@ def agent_fixture(task, work):
     code, out, err = sh(["git", "apply", "--whitespace=nowarn", patch], work)
     if code != 0:
         print(f"  [agent] patch failed in {task}: {out}{err}", file=sys.stderr)
-    sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qam", "agent-fix"], work)
+    sh(["git", "add", "-A"], work)
+    sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "agent-fix"], work)
     return code == 0
 
 def agent_codex(task, work):
     code, out, err = sh(["codex", "exec", "implement the issue described in issue.md"], work)
     if code != 0:
         print(f"  [agent] codex failed: {out[:400]}", file=sys.stderr)
-    sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qam", "agent-fix"], work)
+    sh(["git", "add", "-A"], work)
+    sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "agent-fix"], work)
     return code == 0
 
 def agent_claude(task, work):
     code, out, err = sh(["claude", "-p", "implement the issue described in issue.md"], work)
     if code != 0:
         print(f"  [agent] claude failed: {out[:400]}", file=sys.stderr)
-    sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qam", "agent-fix"], work)
+    sh(["git", "add", "-A"], work)
+    sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "agent-fix"], work)
     return code == 0
 
-AGENTS = {"fixture": agent_fixture, "codex": agent_codex, "claude": agent_claude}
+
+def agent_opencode(task, work):
+    issue = open(os.path.join(task, "issue.md")).read()
+    prompt = ("Read issue.md in this repository and implement the requested change.\n\n"
+              + issue
+              + "\n\nOnly modify source and test files. Run the full test suite before finishing. "
+                "Reply with exactly DONE or FAILED at the end.")
+    code, out, err = sh([
+        "opencode", "run", "--pure", "--auto",
+        "-m", os.environ.get("UNI_AGENT_MODEL", "bai/qwen3.8-flash"),
+        prompt,
+    ], work)
+    tail = (out or "").strip().splitlines()
+    print(f"    agent tail: {tail[-1][:80] if tail else '(none)'}")
+    if code != 0:
+        print(f"  [agent] opencode failed: {err[:300]}", file=sys.stderr)
+    sh(["git", "add", "-A"], work)
+    sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "agent-fix"], work)
+    return code == 0
+
+AGENTS = {"fixture": agent_fixture, "codex": agent_codex, "claude": agent_claude,
+          "opencode": agent_opencode}
 
 def run_task(task_dir, agent_name, out_rows, keep_dir):
     tid = os.path.basename(task_dir.rstrip("/"))
@@ -123,6 +147,18 @@ def run_task(task_dir, agent_name, out_rows, keep_dir):
         "claims_verified": claims_verified,
     })
     print(f"  {tid}: {decision} ({claims_verified}/{n_claims} claims)")
+
+    # guard: real agents may be tempted to edit the fixture task tree itself.
+    # Detect and reset any drift under experiments/study-50/tasks.
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    tasks_rel = os.path.join("experiments", "study-50", "tasks")
+    st = subprocess.run(["git", "-C", repo, "status", "--porcelain", "--", tasks_rel],
+                        capture_output=True, text=True)
+    if st.stdout.strip():
+        print("  [guard] agent modified task fixtures, resetting:\n" + st.stdout.rstrip(),
+              file=sys.stderr)
+        subprocess.run(["git", "-C", repo, "checkout", "--", tasks_rel])
+
     if keep_dir:
         print(f"  (kept: {work})")
     else:
@@ -137,9 +173,13 @@ if __name__ == "__main__":
     ap.add_argument("--out", default="results.csv")
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--only", default=None)
+    ap.add_argument("--append", action="store_true", help="keep existing rows in --out")
     args = ap.parse_args()
     keep_dir = args.keep
     rows = []
+    if args.append and os.path.exists(args.out):
+        with open(args.out, newline="") as f:
+            rows = [r for r in csv.DictReader(f)]
     for name in sorted(os.listdir(args.tasks)):
         path = os.path.join(args.tasks, name)
         if not os.path.isdir(path) or not os.path.exists(os.path.join(path, "contract.uni")):

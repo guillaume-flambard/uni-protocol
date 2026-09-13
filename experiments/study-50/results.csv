@@ -1,6 +1,8 @@
 issue,agent_done,uni_decision,human_review,claims_total,claims_verified
-t01-upper-clamp,1,Accepted,1,4,4
+t01-upper-clamp,1,EvidenceRequired,0,4,3
 t02-upper-clamp-partial,1,EvidenceRequired,0,4,3
-t03-int-sum-offbyone,1,Accepted,1,3,3
-t04-first-word-empty,1,Accepted,1,3,3
-t05-async-order,1,Accepted,1,3,3
+t03-int-sum-offbyone,1,EvidenceRequired,0,3,1
+t04-first-word-empty,1,EvidenceRequired,0,3,2
+t05-async-order,1,Rejected,0,3,0
+t01-upper-clamp#rerun,1,EvidenceRequired,0,4,3
+t05-async-order#rerun,1,Rejected,0,3,0
