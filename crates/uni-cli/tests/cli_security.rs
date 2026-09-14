@@ -1,6 +1,14 @@
 use std::process::Command;
 use std::path::PathBuf;
 
+fn mk_repo(tag: &str) -> PathBuf {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let dir = std::env::temp_dir().join(format!("uni-{}-{}", tag,
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
+    dir
+}
+
 fn bin() -> &'static str {
     env!("CARGO_BIN_EXE_uni")
 }
@@ -164,4 +172,38 @@ VERIFY x
     std::fs::write(dir.join("sources/lib.txt"), "ledger_read_only();\n").unwrap();
     let r3 = out(&["verify", "c.uni"], &dir);
     assert!(r3.contains("Accepted"), "{r3}");
+}
+
+/// v0.18 regression: evidence must NOT be reusable across contracts sharing a
+/// claim id (cache isolation by verifier fingerprint).
+#[test]
+fn evidence_cannot_cross_contract_boundary() {
+    let dir = mk_repo("evidence-isolation");
+    std::fs::write(dir.join(".uni/config.toml"),
+        "[verifiers]\n\"ok\" = \"true\"\n\"bad\" = \"false\"\n").unwrap();
+    std::fs::write(dir.join("c1.uni"), "VERSION 0.1\nDOMAIN software\nINTENT c1\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING ok\n").unwrap();
+    std::fs::write(dir.join("c2.uni"), "VERSION 0.1\nDOMAIN software\nINTENT c2\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING bad\n").unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base"]);
+
+    let o1 = Command::new(bin()).args(["verify", "c1.uni"]).current_dir(&dir).output().unwrap();
+    assert_eq!(o1.status.code(), Some(0), "c1 should ACCEPT");
+    let o2 = Command::new(bin()).args(["verify", "c2.uni"]).current_dir(&dir).output().unwrap();
+    assert_ne!(o2.status.code(), Some(0), "c2 must NOT reuse c1 evidence for claim x");
+}
+
+/// v0.18 regression: expect_not is matched against the FULL output, not the
+/// 2000-char excerpt (forbidden content beyond the window must invalidate).
+#[test]
+fn expect_not_beyond_excerpt_window_invalidates() {
+    let dir = mk_repo("expect-not-window");
+    std::fs::write(dir.join(".uni/config.toml"),
+        "[verifiers.\"catbig\"]\nrun = \"printf x%.0s $(seq 3000) && echo EVIL_TAIL\"\nexpect_not = \"EVIL_TAIL\"\n").unwrap();
+    std::fs::write(dir.join("c.uni"), "VERSION 0.1\nDOMAIN software\nINTENT c3\nGOAL\n g\nCLAIM y REQUIRED\n  ENSURE clean\nVERIFY y\n  USING catbig\n").unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base"]);
+    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    assert_ne!(o.status.code(), Some(0), "hidden EVIL_TAIL must invalidate evidence");
 }

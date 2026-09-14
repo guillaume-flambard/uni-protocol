@@ -415,8 +415,13 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
         let current_ah = registry
             .get(&v.verifier_ref)
             .and_then(|spec| uni_verify::artifact_hash(spec, &ws));
-        match uni_evidence::load_valid_for_claim(&du, &v.claim_id, &cur_sha, cur_dirty, current_ah.as_deref())
-        {
+        let fingerprint = match registry.get(&v.verifier_ref) {
+            Some(spec) => uni_verify::spec_fingerprint(&v.verifier_ref, spec),
+            None => format!("inline:{}", &v.verifier_ref),
+        };
+        match uni_evidence::load_valid_for_claim(
+            &du, &v.claim_id, &fingerprint, &cur_sha, cur_dirty, current_ah.as_deref(),
+        ) {
             Some(ev) => {
                 journal.push(events::Event {
                     name: "EvidenceReused",
@@ -441,11 +446,12 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
                 ("uni.intent.id".into(), ir.intent.id.clone()),
             ],
         });
-        let mut ev = uni_verify::run_spec(&claim_id, &spec, &ws, 300)?;
+        let fingerprint = uni_verify::spec_fingerprint(&ref_r, &spec);
+        let mut ev = uni_verify::run_spec(&claim_id, &ref_r, &spec, &ws, spec.timeout)?;
         if uni_evidence::is_stale(&ev, &cur_sha, cur_dirty) {
             ev.state = uni_evidence::EvidenceState::Stale;
         }
-        uni_evidence::save_json(&uni_evidence::evidence_path(&du, &ev.claim_id), &ev)?;
+        uni_evidence::save_json(&uni_evidence::evidence_path(&du, &ev.claim_id, &fingerprint), &ev)?;
         stored.push(ev);
     }
     // Policy source selection: OPA bundle when both rego + opa binary exist, else TOML stack.
@@ -573,8 +579,7 @@ fn cmd_explain(arg: Option<String>, as_json: bool) -> Result<()> {
 
     if let Some(c) = v["claims"].as_array().and_then(|a| a.iter().find(|c| c["state"] != "Valid")) {
         let claim_id = c["claim_id"].as_str().unwrap_or("");
-        let ev = uni_evidence::load_json::<uni_evidence::Evidence>(
-            &uni_evidence::evidence_path(&dot_uni(), claim_id));
+        let ev = uni_evidence::latest_for_claim(&dot_uni(), claim_id);
         println!("\nCLAIM {claim_id}");
         match &ev {
             None => {

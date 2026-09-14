@@ -27,6 +27,10 @@ pub struct Evidence {
     /// sha256 over watched files content (empty = not content-bound)
     #[serde(default)]
     pub artifact_hash: String,
+    /// sha256(ref|run|expect|expect_not|files): isolates the cache per verifier spec.
+    /// Without it, two contracts sharing a claim id could reuse each other's evidence.
+    #[serde(default)]
+    pub fingerprint: String,
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -55,8 +59,26 @@ pub fn git_info(workspace: &std::path::Path) -> (String, bool) {
     (sha, dirty)
 }
 
-pub fn evidence_path(dot_uni: &std::path::Path, claim_id: &str) -> std::path::PathBuf {
-    dot_uni.join("evidence").join(format!("{claim_id}.json"))
+pub fn evidence_path(dot_uni: &std::path::Path, claim_id: &str, fingerprint: &str) -> std::path::PathBuf {
+    dot_uni.join("evidence").join(format!("{claim_id}__{fingerprint}.json"))
+}
+
+/// Find any evidence file for a claim (newest first) - for explain/detail views.
+pub fn latest_for_claim(dot_uni: &std::path::Path, claim_id: &str) -> Option<Evidence> {
+    let dir = dot_uni.join("evidence");
+    let rd = std::fs::read_dir(dir).ok()?;
+    let mut best: Option<Evidence> = None;
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.starts_with(&format!("{claim_id}__")) && name.ends_with(".json") {
+            if let Some(ev) = load_json::<Evidence>(&e.path()) {
+                if best.as_ref().map(|b: &Evidence| ev.created_at > b.created_at).unwrap_or(true) {
+                    best = Some(ev);
+                }
+            }
+        }
+    }
+    best
 }
 
 pub fn save_json(path: &std::path::Path, value: &impl Serialize) -> Result<()> {
@@ -86,12 +108,16 @@ pub fn load_json<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Opti
 pub fn load_valid_for_claim(
     dot_uni: &std::path::Path,
     claim_id: &str,
+    fingerprint: &str,
     cur_sha: &str,
     cur_dirty: bool,
     current_artifact_hash: Option<&str>,
 ) -> Option<Evidence> {
-    let path = evidence_path(dot_uni, claim_id);
+    let path = evidence_path(dot_uni, claim_id, fingerprint);
     let mut ev: Evidence = load_json(&path)?;
+    if ev.fingerprint != fingerprint {
+        return None; // foreign or pre-fingerprint artifact
+    }
     if is_stale(&ev, cur_sha, cur_dirty) {
         ev.state = EvidenceState::Stale;
         return None;

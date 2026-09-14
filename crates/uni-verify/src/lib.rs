@@ -153,29 +153,45 @@ pub fn artifact_hash(spec: &VerifierSpec, workspace: &std::path::Path) -> Option
     Some(sha256_hex(acc.as_bytes()))
 }
 
+/// Cache-isolating identity of a verifier spec (prevents evidence reuse
+/// across contracts that merely share a claim id).
+pub fn spec_fingerprint(verifier_ref: &str, spec: &VerifierSpec) -> String {
+    let seed = format!(
+        "{verifier_ref}|{}|{}|{}|{}",
+        spec.run,
+        spec.expect,
+        spec.expect_not,
+        spec.files.join(",")
+    );
+    sha256_hex(seed.as_bytes())[..12].to_string()
+}
+
 pub fn run_spec(
     claim_id: &str,
+    verifier_ref: &str,
     spec: &VerifierSpec,
     workspace: &std::path::Path,
     timeout_secs: u64,
 ) -> Result<Evidence> {
-    let mut ev = run_shell(claim_id, &spec.run, workspace, timeout_secs)?;
+    let (mut ev, full_output) = run_shell(claim_id, &spec.run, workspace, timeout_secs)?;
     ev.artifact_hash = artifact_hash(spec, workspace).unwrap_or_default();
-    if !spec.expect.is_empty() && !ev.output_excerpt.contains(&spec.expect) {
+    ev.fingerprint = spec_fingerprint(verifier_ref, spec);
+    // expectations are checked against the FULL output, never the truncated excerpt
+    if !spec.expect.is_empty() && !full_output.contains(&spec.expect) {
         ev.state = EvidenceState::Invalid;
     }
-    if !spec.expect_not.is_empty() && ev.output_excerpt.contains(&spec.expect_not) {
+    if !spec.expect_not.is_empty() && full_output.contains(&spec.expect_not) {
         ev.state = EvidenceState::Invalid;
     }
     Ok(ev)
 }
 
-pub fn run_shell(
+fn run_shell(
     claim_id: &str,
     command: &str,
     workspace: &std::path::Path,
     timeout_secs: u64,
-) -> Result<Evidence> {
+) -> Result<(Evidence, String)> {
     let start = Instant::now();
     let (commit_sha, workspace_dirty) = git_info(workspace);
     // Minimal timeout: run via `timeout` when available, else direct.
@@ -195,9 +211,10 @@ pub fn run_shell(
             .output()?
     };
     let combined = [output.stdout.clone(), output.stderr.clone()].concat();
-    let excerpt: String = String::from_utf8_lossy(&combined).chars().take(2000).collect();
+    let full_output = String::from_utf8_lossy(&combined).to_string();
+    let excerpt: String = full_output.chars().take(2000).collect();
     let code = output.status.code().unwrap_or(-1);
-    Ok(Evidence {
+    let ev = Evidence {
         id: format!("{claim_id}-{}", &sha256_hex(command.as_bytes())[..8]),
         claim_id: claim_id.to_string(),
         producer: "shell-verifier".into(),
@@ -215,7 +232,9 @@ pub fn run_shell(
         created_at: chrono::Utc::now(),
         duration_ms: start.elapsed().as_millis(),
         artifact_hash: String::new(),
-    })
+        fingerprint: String::new(),
+    };
+    Ok((ev, full_output))
 }
 
 fn which_timeout() -> bool {
@@ -236,7 +255,7 @@ pub fn assure_contract(
     let mut out = vec![];
     for v in &ir.verification {
         let spec = resolve_command(&v.verifier_ref, v.inline_shell.as_deref(), &registry)?;
-        out.push(run_spec(&v.claim_id, &spec, workspace, spec.timeout)?);
+        out.push(run_spec(&v.claim_id, &v.verifier_ref, &spec, workspace, spec.timeout)?);
     }
     Ok(out)
 }
