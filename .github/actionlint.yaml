@@ -1,0 +1,5 @@
+# Labels of the lab self-hosted runner (installed by lab-infra's github-runner
+# role). Declared here so actionlint validates the workflows without guessing.
+self-hosted-runner:
+  labels:
+    - uni-protocol
