@@ -35,3 +35,4 @@
 - [x] v0.4.1 — collect.py 2x2 matrix (TA/FA/FR/TR), FAR primary, FRR, precision/recall, agent baseline from real self-report, cost columns, CI exit. DONE
 - [x] v0.4.2 — harness repaired: --dir pinned, issue.md copied, pre-flight baseline guard (aborts if the base already satisfies the contract), fixture reset before+after with fatal untracked drift, durable agent diff artifacts, real self-report captured. DONE
 - [x] v0.4.3 — 6 real-agent tasks run and human-reviewed: 4 TA / 0 FA / 1 FR / 1 TR; FAR 0%, FRR 20%; H1 and H2 NOT supported on this sample. Prior n=7 run invalidated (harness bug) and kept for the record. DONE
+- [x] v0.5.1/2 — `uni brief`: deterministic work order (claims, obligations, resolved verifier command, expect/expect_not, watched files, extracted test selector), markdown byte-stable + --json + atomic --out, unresolvable-verifier reporting, 2 golden tests + selector unit tests, docs/brief.md. DONE

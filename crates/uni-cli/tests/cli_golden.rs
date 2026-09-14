@@ -315,3 +315,47 @@ fn golden_import_speckit_markdown_shapes() {
     assert!(dsl.contains("CLAIM check-03"), "{dsl}");
     assert!(dsl.contains("CLAIM check-04"), "{dsl}");
 }
+
+/// v0.5: the work order names the exact test a claim's verifier selects, so an
+/// agent cannot be penalised for a naming guess. Guidance only, deterministic.
+#[test]
+fn golden_brief_names_required_test() {
+    let dir = std::env::temp_dir().join(format!("uni-brief-{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
+    std::fs::write(dir.join(".uni/config.toml"),
+        "[verifiers]\n\"mini.upper\" = {\"run\" = \"cargo test clamp_upper_works -- --exact\", \"expect\" = \"test result: ok. 1 passed\"}\n").unwrap();
+    std::fs::write(dir.join("c.uni"), "VERSION 0.1\nDOMAIN software\nINTENT brief-demo\nGOAL\n g\nCLAIM upper REQUIRED\n  ENSURE clamps above\nVERIFY upper\n  USING mini.upper\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n").unwrap();
+
+    let o = Command::new(bin()).args(["brief", "c.uni"]).current_dir(&dir).output().unwrap();
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    let md = String::from_utf8_lossy(&o.stdout).to_string();
+    assert!(md.contains("clamp_upper_works"), "{md}");
+    assert!(md.contains("test result: ok. 1 passed"), "{md}");
+    assert!(!md.contains("Warning"), "{md}");
+
+    // Byte-stable: same inputs, same bytes (it can be committed and diffed).
+    let o2 = Command::new(bin()).args(["brief", "c.uni"]).current_dir(&dir).output().unwrap();
+    assert_eq!(o.stdout, o2.stdout, "brief must be deterministic");
+
+    // --out writes atomically and says so on stderr.
+    let o3 = Command::new(bin()).args(["brief", "c.uni", "--out", "brief.md"]).current_dir(&dir).output().unwrap();
+    assert_eq!(o3.status.code(), Some(0));
+    let written = std::fs::read_to_string(dir.join("brief.md")).unwrap();
+    assert_eq!(written.trim_end(), md.trim_end());
+}
+
+/// v0.5: an unresolvable verifier is reported in the brief instead of silenced.
+#[test]
+fn golden_brief_reports_unresolvable_verifier() {
+    let dir = std::env::temp_dir().join(format!("uni-brief-bad-{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
+    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"known\" = \"true\"\n").unwrap();
+    std::fs::write(dir.join("c.uni"), "VERSION 0.1\nDOMAIN software\nINTENT brief-bad\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nCLAIM y REQUIRED\n  ENSURE h\nVERIFY x\n  USING known\nVERIFY y\n  USING ghost\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n").unwrap();
+    let o = Command::new(bin()).args(["brief", "c.uni"]).current_dir(&dir).output().unwrap();
+    assert_eq!(o.status.code(), Some(0));
+    let md = String::from_utf8_lossy(&o.stdout).to_string();
+    assert!(md.contains("NOT RESOLVABLE"), "{md}");
+    assert!(md.contains("ghost"), "{md}");
+}

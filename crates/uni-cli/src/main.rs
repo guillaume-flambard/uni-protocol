@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+mod brief;
 mod bundle;
 mod events;
 use clap::{Parser, Subcommand};
@@ -48,6 +49,13 @@ enum Cmd {
     },
     /// List authorized verifier bindings.
     Bindings,
+    /// Emit the deterministic work order for an implementing agent
+    /// (claims + the exact evidence each one requires). Guidance, not authority.
+    Brief {
+        file: PathBuf,
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     #[command(subcommand)]
     Bundle(BundleCmd),
 }
@@ -95,6 +103,7 @@ fn main() -> Result<()> {
         }
         Cmd::Bindings => cmd_bindings(cli.json),
         Cmd::Bundle(sub) => cmd_bundle(sub, cli.json),
+        Cmd::Brief { file, out } => cmd_brief(&file, out.as_deref(), cli.json),
     }
 }
 
@@ -177,6 +186,34 @@ fn cmd_pack(sub: PackCmd, as_json: bool) -> Result<()> {
                 println!("wrote {}\nedit claims + verifier refs, then: uni lint {}", dst.display(), dst.display());
             }
         }
+    }
+    Ok(())
+}
+
+fn cmd_brief(file: &Path, out: Option<&Path>, as_json: bool) -> Result<()> {
+    let (ir, _) = load_contract(file)?;
+    let du = dot_uni();
+    let registry = uni_verify::load_registry(&du);
+    let registry_text = std::fs::read_to_string(du.join("config.toml")).unwrap_or_default();
+    let (claims, problems) = brief::build(&ir, &registry);
+    let body = if as_json {
+        serde_json::to_string_pretty(&brief::to_json(&ir, &claims, &problems, &brief::registry_hash(&registry_text))?)?
+    } else {
+        brief::to_markdown(&ir, &claims, &problems)
+    };
+    match out {
+        Some(path) => {
+            if let Some(p) = path.parent() {
+                std::fs::create_dir_all(p)?;
+            }
+            let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
+            std::fs::write(&tmp, format!("{body}\n"))?;
+            std::fs::rename(&tmp, path)?;
+            if !as_json {
+                eprintln!("brief written: {}", path.display());
+            }
+        }
+        None => println!("{body}"),
     }
     Ok(())
 }
