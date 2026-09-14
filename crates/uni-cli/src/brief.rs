@@ -132,7 +132,9 @@ pub fn to_json(
             "verifier": b.verifier_ref,
             "evidence": b.spec.as_ref().map(|s| serde_json::json!({
                 "kind": s.kind,
-                "command": s.run,
+                // The token is never handed to the worker: it is replaced by the
+                // placeholder an authorizing human will fill in.
+                "command": s.run.replace(uni_verify::SELECTOR_TOKEN, "<your-test-name>"),
                 "expect": s.expect,
                 "expect_not": s.expect_not,
                 "files": s.files,

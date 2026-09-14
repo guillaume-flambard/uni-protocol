@@ -272,6 +272,12 @@ pub fn run_spec(
     let mut ev = build_evidence(claim_id, verifier.name(), &outcome.command, &outcome, workspace);
     ev.duration_ms = started.elapsed().as_millis();
     ev.artifact_hash = artifact_hash(spec, workspace).unwrap_or_default();
+    // Evidence Completeness Principle: a verifier that declares watched files
+    // it cannot observe has not covered its subject. Storing that as "no
+    // binding" would let a later appearance of the files count as a cache hit.
+    if !spec.files.is_empty() && ev.artifact_hash.is_empty() {
+        ev.state = EvidenceState::Invalid;
+    }
     ev.fingerprint = spec_fingerprint(verifier_ref, spec, &actor.id);
     ev.actor = actor.clone();
     ev.executor = executor.clone();

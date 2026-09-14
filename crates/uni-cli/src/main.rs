@@ -416,29 +416,48 @@ fn cmd_doctor(as_json: bool) -> Result<()> {
 fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
     let (ir, _) = load_contract(file)?;
     let registry = uni_verify::load_registry(&dot_uni());
-    // (severity, kind, message); severity 2 = error, 1 = warning
-    let mut findings: Vec<(u8, String, String)> = vec![];
+    // severity 2 = error, 1 = warning. The claim id travels as data: it used to
+    // be re-parsed out of the message text, which any wording change broke.
+    struct Finding {
+        severity: u8,
+        kind: &'static str,
+        claim_id: String,
+        message: String,
+    }
+    let mut findings: Vec<Finding> = vec![];
+    // A local macro, not a closure: the closure would borrow `findings` for its
+    // whole lifetime and block the reads below.
+    macro_rules! push {
+        ($sev:expr, $kind:expr, $cid:expr, $msg:expr) => {
+            findings.push(Finding {
+                severity: $sev,
+                kind: $kind,
+                claim_id: $cid.to_string(),
+                message: $msg,
+            })
+        };
+    }
     for c in &ir.claims {
         if !ir.verification.iter().any(|v| v.claim_id == c.id) {
-            findings.push((2, "missing-verify".into(), format!("claim '{}' has no VERIFY", c.id)));
+            push!(2, "missing-verify", &c.id, format!("claim '{}' has no VERIFY", c.id));
         }
     }
     if !registry.is_empty() {
         for v in &ir.verification {
             if v.verifier_ref != "shell" && !registry.contains_key(&v.verifier_ref) {
-                findings.push((1, "unknown-verifier".into(), format!(
+                push!(1, "unknown-verifier", &v.claim_id, format!(
                     "VERIFY {} uses '{}' not found in .uni/config.toml (may fail at verify time)",
                     v.claim_id, v.verifier_ref
-                )));
+                ));
             }
         }
     }
     for (i, a) in ir.verification.iter().enumerate() {
         for b in ir.verification.iter().skip(i + 1) {
             if b.claim_id == a.claim_id && b.verifier_ref == a.verifier_ref && b.inline_shell == a.inline_shell {
-                findings.push((1, "duplicate-verify".into(), format!(
+                push!(1, "duplicate-verify", &a.claim_id, format!(
                     "VERIFY '{}' → '{}' declared twice", a.claim_id, a.verifier_ref
-                )));
+                ));
             }
         }
     }
@@ -458,19 +477,16 @@ fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
             None => false,
         };
         if !ok {
-            findings.push((1, "selector-template".into(), format!(
+            push!(1, "selector-template", &v.claim_id, format!(
                 "claim '{}' uses selector template '{}' without an authorized selector binding (run: uni bind --claim {} --verifier {} --selector <test-name>)",
                 v.claim_id, v.verifier_ref, v.claim_id, v.verifier_ref
-            )));
+            ));
         }
     }
     let selector_flagged: Vec<String> = findings
         .iter()
-        .filter(|(_, kind, _)| kind == "selector-template")
-        .filter_map(|(_, _, msg)| {
-            // the claim id is the token after the first quote
-            msg.split('\'').nth(1).map(|s| s.to_string())
-        })
+        .filter(|f| f.kind == "selector-template")
+        .map(|f| f.claim_id.clone())
         .collect();
     for v in ir.verification.iter().filter(|v| v.requirement.is_some()) {
         if selector_flagged.contains(&v.claim_id) {
@@ -479,13 +495,13 @@ fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
         let req = v.requirement.as_deref().unwrap_or("");
         match uni_evidence::binding::load_binding(&dot_uni(), &v.claim_id) {
             Some(b) if b.verifier_ref == v.verifier_ref && b.requirement == req => {}
-            _ => findings.push((1, "unbound-requirement".into(), format!(
-                "claim '{}' has a REQUIRE but no matching authorized binding (run: uni bind --claim {} --verifier {})",
+            _ => push!(1, "unbound-requirement", &v.claim_id, format!(
+                "claim '{}' has a REQUIRE but no matching authorized binding (run: uni bind --claim {} --verifier {} --requirement '...')",
                 v.claim_id, v.claim_id, v.verifier_ref
-            ))),
+            )),
         }
     }
-    let errors = findings.iter().filter(|(s, _, _)| *s == 2).count();
+    let errors = findings.iter().filter(|f| f.severity == 2).count();
     let warns = findings.len() - errors;
     if as_json {
         println!(
@@ -494,17 +510,18 @@ fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
                 "intent": ir.intent.id,
                 "errors": errors,
                 "warnings": warns,
-                "findings": findings.iter().map(|(sev, kind, msg)| serde_json::json!({
-                    "severity": if *sev == 2 { "error" } else { "warning" },
-                    "kind": kind,
-                    "message": msg,
+                "findings": findings.iter().map(|f| serde_json::json!({
+                    "severity": if f.severity == 2 { "error" } else { "warning" },
+                    "kind": f.kind,
+                    "claim_id": f.claim_id,
+                    "message": f.message,
                 })).collect::<Vec<_>>(),
             })
         );
     } else {
         println!("uni lint — {}", ir.intent.id);
-        for (sev, kind, msg) in &findings {
-            println!("  {} {kind:<18} {msg}", if *sev == 2 { "ERROR" } else { "WARN " });
+        for f in &findings {
+            println!("  {} {:<18} {}", if f.severity == 2 { "ERROR" } else { "WARN " }, f.kind, f.message);
         }
         if findings.is_empty() {
             println!("  clean: coverage complete, registry refs ok");
@@ -649,9 +666,6 @@ fn cmd_inspect(file: &Path, as_json: bool) -> Result<()> {
     cmd_compile(file, as_json)
 }
 
-/// v0.2 authorization gate for resolution requirements. Returns the binding
-/// hash the evidence must carry, or fails hard: a requirement without a
-/// matching authorized binding never executes. `None` requirement = no gate.
 /// Authorized resolution of a claim's verification (v0.4).
 #[derive(Default)]
 struct Resolution {
@@ -674,6 +688,13 @@ fn require_binding(
     if !is_template && requirement.is_none() {
         return Ok(Resolution::default());
     }
+    // The remediation must name the act that actually works: a template needs
+    // a selector, a plain REQUIRE needs its requirement text.
+    let remediation = if is_template {
+        format!("uni bind --claim {claim_id} --verifier {verifier_ref} --selector <test-name>")
+    } else {
+        format!("uni bind --claim {claim_id} --verifier {verifier_ref} --requirement '{req}'")
+    };
     match uni_evidence::binding::load_binding(du, claim_id) {
         Some(b) if b.verifier_ref == verifier_ref && b.requirement == req => {
             if is_template && b.selector.as_deref().unwrap_or("").trim().is_empty() {
@@ -687,13 +708,13 @@ fn require_binding(
             })
         }
         Some(b) => Err(anyhow!(
-            "claim '{claim_id}' was rebound (bound: requirement '{}' verifier '{}' selector {:?}; contract expects requirement '{req}' on verifier '{verifier_ref}'); re-authorize with: uni bind --claim {claim_id} --verifier {verifier_ref} --selector <test-name>",
+            "claim '{claim_id}' was rebound (bound: requirement '{}' verifier '{}' selector {:?}; contract expects requirement '{req}' on verifier '{verifier_ref}'); re-authorize with: {remediation}",
             b.requirement,
             b.verifier_ref,
             b.selector,
         )),
         None => Err(anyhow!(
-            "claim '{claim_id}' needs an authorized binding (requirement '{req}', template {is_template}) but none exists; authorize with: uni bind --claim {claim_id} --verifier {verifier_ref} --selector <test-name>"
+            "claim '{claim_id}' needs an authorized binding (requirement '{req}', template {is_template}) but none exists; authorize with: {remediation}"
         )),
     }
 }

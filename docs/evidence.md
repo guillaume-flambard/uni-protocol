@@ -42,10 +42,15 @@ seven dimensions (Verification Context, v0.2):
 
 1. **Git binding** (`is_stale`): if HEAD moved or dirty-state changed since the
    run, the stored evidence is Stale and `uni verify` re-runs the verifier.
-   Dirtiness excludes `.uni/` runtime files (a verify never invalidates its
-   own fresh evidence through the files it writes; concurrent verifies stay
-   consistent). Trust-relevant `.uni` changes are covered by registry/policy
-   hashes instead.
+   Dirtiness means "tracked content changed". It excludes `.uni/` runtime
+   files (a verify must not invalidate its own fresh evidence, and concurrent
+   verifies must stay consistent) and untracked files (build output such as
+   `target/` is not code, and a verifier that compiles would otherwise stale
+   its own proof). Trust-relevant `.uni` changes are covered by registry and
+   policy hashes; new source files are covered by the verifier re-running, and
+   by `files` globs where a claim declares its subject. Residual risk, stated
+   plainly: an untracked file that no verifier observes does not by itself
+   invalidate evidence. Declare the subject with `files` when that matters.
 2. **Content binding** (`artifact_hash`): if a verifier declares `files` globs,
    the evidence stores a sha256 over those files' contents. Any change inside the
    same commit invalidates it. This is what stops a previously accepted outcome

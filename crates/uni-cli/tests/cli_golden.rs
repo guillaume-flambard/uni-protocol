@@ -463,4 +463,8 @@ fn golden_brief_explains_selector_templates() {
     let j = Command::new(bin()).args(["--json", "brief", "c.uni"]).current_dir(&dir).output().unwrap();
     let v: serde_json::Value = serde_json::from_slice(&j.stdout).unwrap();
     assert_eq!(v["claims"][0]["selector_template"], true, "{v}");
+    // The machine-readable work order must not leak the token either.
+    let cmd = v["claims"][0]["evidence"]["command"].as_str().unwrap_or("");
+    assert!(!cmd.contains("{{selector}}"), "{cmd}");
+    assert!(cmd.contains("<your-test-name>"), "{cmd}");
 }

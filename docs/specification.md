@@ -1,7 +1,7 @@
-# UNI Specification v0.1 (dev)
+# UNI Specification (dev, v0.5)
 
-Status: Developer Preview. The wire format is JSON + JSON Schema; Protobuf is
-deferred until the data model stabilizes (v0.5+). Governance stays
+Status: Developer Preview (v0.5). The wire format is JSON + JSON Schema;
+Protobuf is deferred until the data model stabilizes. Governance stays
 maintainer-driven until UEPs make sense.
 
 ## Grammar (closed vocabulary)
@@ -19,8 +19,10 @@ VERIFY     <claim-id> USING <registry-key> | shell "<cmd>"
 REQUIRE    <expr>            (attached to the preceding VERIFY; optional)
 ACCEPT WHEN  required_claims == VERIFIED [AND critical_failures == 0]
 
-Reserved for v0.2 (hard parse errors until then): REQUIRE, REJECT WHEN,
-ESCALATE WHEN. A spec must never promise inert semantics (constitution rule 5).
+REQUIRE is shipped (v0.2 for the plain form, v0.5 with `--selector` templates):
+it authorizes the resolution of the claim's verification. Still reserved and
+rejected as hard parse errors: REJECT WHEN, ESCALATE WHEN. A spec must never
+promise inert semantics (constitution rule 5).
 ```
 
 Multi-line form: `VERIFY <id>` followed by an indented `USING ...`. `#` comments.

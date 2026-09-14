@@ -9,7 +9,7 @@ inputs:
   version:
     description: "UNI release tag to download"
     required: false
-    default: "v0.5.1"
+    default: "v0.5.2"
   repository:
     description: "owner/repo hosting UNI releases (replace when publishing your own fork)"
     required: false

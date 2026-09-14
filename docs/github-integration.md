@@ -51,14 +51,14 @@ A composite action that DOWNLOADS the release binary for the runner platform
 action repo root:
 
 ```yaml
-- uses: your-org/uni/adapters/github@v0.5.1
+- uses: your-org/uni/adapters/github@v0.5.2
   with:
     contract: uni/intents/feature.uni
-    version: v0.5.1
+    version: v0.5.2
     repository: your-org/uni
 ```
 
-Inputs: `contract` (required), `version` (default `v0.5.1`), `repository`
+Inputs: `contract` (required), `version` (default `v0.5.2`), `repository`
 (default `guillaume-flambard/uni-protocol`, replace with your fork), `report-to-summary`
 (default true). Unknown runner OS fails loudly instead of silently skipping.
 
@@ -69,7 +69,7 @@ All of the above ran for real on the published repository:
 - `uni` workflow: matrix ubuntu / macos / windows (build, portable unit tests,
   POSIX integration tests outside Windows) plus a POSIX-examples job, all green.
 - `release` workflow: five targets built and attached on tag push
-  (`uni-<target>.tar.gz`), for `v0.5.0` and `v0.5.1`.
+  (`uni-<target>.tar.gz`), for `v0.5.0` and `v0.5.2`.
 - the composite action itself: an `action-smoke` job downloads the released
   binary and verifies a runtime-free contract (`examples/artifact`).
 

@@ -477,3 +477,50 @@ fn build_artifacts_do_not_stale_own_evidence() {
     let second = out(&["verify", "c.uni"], &dir);
     assert!(second.contains("Accepted"), "{second}");
 }
+
+/// Evidence Completeness: a verifier that declares watched files it cannot
+/// observe has not covered its subject. It must be Invalid, never a cache
+/// entry that later counts as a hit when the files appear.
+#[test]
+fn declared_watch_matching_nothing_is_invalid() {
+    let dir = mk_repo("empty-watch");
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers.\"watch\"]\nrun = \"true\"\nfiles = [\"dist/**\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("c.uni"),
+        "VERSION 0.1\nDOMAIN software\nINTENT watch\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING watch\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n",
+    )
+    .unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+
+    let first = out(&["verify", "c.uni"], &dir);
+    assert!(first.contains("EvidenceRequired"), "unobservable subject must not verify: {first}");
+
+    // Now the watched files exist: the previous run left no reusable proof.
+    std::fs::create_dir_all(dir.join("dist")).unwrap();
+    std::fs::write(dir.join("dist/out.bin"), b"artifact").unwrap();
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "artifact"]);
+    let second = out(&["verify", "c.uni"], &dir);
+    assert!(second.contains("Accepted"), "with the subject observable it verifies: {second}");
+
+    // A change to the watched subject must not reuse the previous proof: the
+    // verifier command is `true` (so the decision is unchanged), but the
+    // journal must record that the old evidence went stale.
+    let before = std::fs::read_to_string(dir.join(".uni/events.jsonl")).unwrap();
+    let stale_before = before.matches("EvidenceStale").count();
+    std::fs::write(dir.join("dist/out.bin"), b"tampered").unwrap();
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "tamper"]);
+    let _ = out(&["verify", "c.uni"], &dir);
+    let after = std::fs::read_to_string(dir.join(".uni/events.jsonl")).unwrap();
+    assert!(
+        after.matches("EvidenceStale").count() > stale_before,
+        "subject drift must stale the previous proof, journal:\n{after}"
+    );
+}
