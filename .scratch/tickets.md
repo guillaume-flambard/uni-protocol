@@ -1,8 +1,8 @@
 # UNI — tickets
 
-Current: **v0.9.0** · 128 tests, 0 warnings · public repo
+Current: **v0.9.1** · 130 tests, 0 warnings · public repo
 `github.com/guillaume-flambard/uni-protocol` · CI green on ubuntu/macOS/Windows +
-POSIX examples + a smoke job that runs the published action · release `v0.9.0`
+POSIX examples + a smoke job that runs the published action · release `v0.9.1`
 with five binaries.
 
 ## Done — CI hosting decision (2026-09-14)
@@ -41,7 +41,7 @@ is measured.
 - **Flagship page.** `docs/flagship-check.md`, with screenshots of the red check
   and the step order (prove, drift, annotate, fail).
 
-## Done — identity adapters: A3 is reachable (v0.9.0)
+## Done — identity adapters: A3 is reachable (v0.9.0, corrected in v0.9.1)
 
 A proof's actor identity is verified, not merely named.
 
@@ -138,8 +138,8 @@ Condensed by milestone; the detailed history is in git.
   plain exit-code CI misses 71% of the lost proofs, a cache misses all 70).
 - **Review + deploy.** Two-axis review applied (spec honesty, remediation
   branching, finding ids as data, JSON token leak, unobservable subject).
-  All tags pushed; releases `v0.3.0` through `v0.9.0` with five assets each,
-  `v0.9.0` marked latest. `v0.3.0`/`v0.4.0` tag CI stays red on purpose: those
+  All tags pushed; releases `v0.3.0` through `v0.9.1` with five assets each,
+  `v0.9.1` marked latest. `v0.3.0`/`v0.4.0` tag CI stays red on purpose: those
   versions predate the fixes, which is the honest record.
 
 ## Test debt
