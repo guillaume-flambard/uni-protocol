@@ -14,7 +14,8 @@
 | [brief.md](brief.md) | the work order handed to an implementing agent |
 | [run.md](run.md) | the execute half: run your command, then verify |
 | [specification.md](specification.md) | grammar, canonical IR, behavior contract |
-| [DEEP-ANALYSIS-2026-09-14.md](DEEP-ANALYSIS-2026-09-14.md) | audit, findings, maturity, roadmap |
+| [REPORT-2026-09-14.md](REPORT-2026-09-14.md) | **complete report**: thesis, architecture, capabilities, study, what is proven |
+| [DEEP-ANALYSIS-2026-09-14.md](DEEP-ANALYSIS-2026-09-14.md) | earlier audit at v0.18 (findings, maturity, roadmap) |
 | [DEEP-ANALYSIS-2026-09-14.md](DEEP-ANALYSIS-2026-09-14.md) | full audit: architecture, F1/F2 fixes, maturity scores, roadmap |
 
 Everything here describes the shipped binary (`cargo build --release`,

@@ -77,6 +77,9 @@ evidence invalidation by SHA-256 over watched files.
 
 ## Documentation
 
+The complete report, including what is proven and what is not:
+[docs/REPORT-2026-09-14.md](docs/REPORT-2026-09-14.md).
+
 Start at [docs/index.md](docs/index.md): why UNI, quickstart, language,
 claims, evidence, verification, decisions, GitHub, writing verifiers,
 specification.
