@@ -85,6 +85,21 @@ uni bind --claim clamp-upper --verifier suite \
   --selector clamp_upper_works
 ```
 
+Authorize one claim, or a whole reviewed file in one act:
+
+```bash
+uni bind --claim clamp-upper --verifier suite --selector clamp_upper_works
+uni bind --from reviewed.toml     # every entry, one command, one review
+uni bindings                      # what is currently authorized
+```
+
+`reviewed.toml` lists `[bindings.<claim>]` entries with `verifier`, optional
+`requirement`, and optional `selector`; the act stamps each one with who and
+when, so fifty claims are one reviewable diff and one command instead of fifty
+files. Bindings live in `.uni/bindings.toml`; legacy per-claim
+`.uni/bindings/<claim>.json` files still load, and a claim mentioned in the file
+wins.
+
 Rules: a template without an authorized selector is a hard error naming the
 `uni bind` command, and `uni lint` warns before anything runs. The selector is
 part of the authorization: re-binding to a different selector invalidates the

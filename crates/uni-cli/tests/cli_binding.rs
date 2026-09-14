@@ -139,3 +139,62 @@ fn plain_verifier_needs_no_binding() {
     let o = run(&["verify", "c.uni"], &dir);
     assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
 }
+
+/// v0.7: authorize a reviewed file in one act. Fifty claims no longer mean
+/// fifty commands, and re-authorizing is a diff of one file.
+#[test]
+fn bulk_authorization_from_a_reviewed_file() {
+    let dir = mk_repo("bulk");
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers]\n\"suite\" = {\"run\" = \"cargo test {{selector}} -- --exact\", \"expect\" = \"test result: ok. 1 passed\"}\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"tpl2\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/lib.rs"), "pub fn alpha() -> u32 { 1 }\npub fn beta() -> u32 { 2 }\n").unwrap();
+    std::fs::create_dir_all(dir.join("tests")).unwrap();
+    std::fs::write(
+        dir.join("tests/it.rs"),
+        "use tpl2::{alpha, beta};\n\n#[test]\nfn alpha_ok() {\n    assert_eq!(alpha(), 1);\n}\n\n#[test]\nfn beta_ok() {\n    assert_eq!(beta(), 2);\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("c.uni"),
+        "VERSION 0.1\nDOMAIN software\nINTENT bulk\nGOAL\n g\nCLAIM alpha REQUIRED\n  ENSURE alpha\nCLAIM beta REQUIRED\n  ENSURE beta\nVERIFY alpha\n  USING suite\nVERIFY beta\n  USING suite\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n",
+    )
+    .unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base"]);
+
+    // The human reviewer writes the whole mapping and authorizes it once.
+    std::fs::write(
+        dir.join("reviewed.toml"),
+        "[bindings.alpha]\nverifier = \"suite\"\nselector = \"alpha_ok\"\n\n[bindings.beta]\nverifier = \"suite\"\nselector = \"beta_ok\"\n",
+    )
+    .unwrap();
+    let b = run(&["bind", "--from", "reviewed.toml"], &dir);
+    assert_eq!(b.status.code(), Some(0), "{}", String::from_utf8_lossy(&b.stderr));
+    let listed = run(&["bindings"], &dir);
+    let out = String::from_utf8_lossy(&listed.stdout).to_string();
+    assert!(out.contains("alpha_ok") && out.contains("beta_ok"), "{out}");
+
+    let o = run(&["verify", "c.uni"], &dir);
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+
+    // Re-authorizing with one selector changed invalidates that claim's proof.
+    std::fs::write(
+        dir.join("reviewed.toml"),
+        "[bindings.alpha]\nverifier = \"suite\"\nselector = \"alpha_ok\"\n\n[bindings.beta]\nverifier = \"suite\"\nselector = \"does_not_exist\"\n",
+    )
+    .unwrap();
+    assert_eq!(run(&["bind", "--from", "reviewed.toml"], &dir).status.code(), Some(0));
+    let o2 = run(&["verify", "c.uni"], &dir);
+    assert_ne!(o2.status.code(), Some(0), "the changed selector must not reuse the old proof");
+
+    // And the file itself is the record: it carries the act and the hash.
+    let stored = std::fs::read_to_string(dir.join(".uni/bindings.toml")).unwrap();
+    assert!(stored.contains("authorized_by"), "{stored}");
+    assert!(stored.contains("binding_hash"), "{stored}");
+}

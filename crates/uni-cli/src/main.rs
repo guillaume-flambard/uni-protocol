@@ -44,16 +44,20 @@ enum Cmd {
     /// Authorize a claim's resolution requirement to a concrete verifier
     /// (human act; AI may propose, only `uni bind` authorizes).
     Bind {
+        /// Claim to authorize (with --verifier and, for templates, --selector).
         #[arg(long)]
-        claim: String,
+        claim: Option<String>,
         #[arg(long)]
-        verifier: String,
+        verifier: Option<String>,
         /// Human-readable resolution requirement (optional for plain bindings).
         #[arg(long, default_value = "")]
         requirement: String,
         /// Concrete test selector for `{{selector}}` template verifiers.
         #[arg(long)]
         selector: Option<String>,
+        /// Authorize every entry of a reviewed bindings file in one act.
+        #[arg(long)]
+        from: Option<PathBuf>,
     },
     /// List authorized verifier bindings.
     Bindings,
@@ -106,8 +110,15 @@ fn main() -> Result<()> {
         Cmd::Lint { file } => cmd_lint(&file, cli.json),
         Cmd::Doctor => cmd_doctor(cli.json),
         Cmd::Pack(sub) => cmd_pack(sub, cli.json),
-        Cmd::Bind { claim, verifier, requirement, selector } => {
-            cmd_bind(&claim, &verifier, &requirement, selector.as_deref(), cli.json)
+        Cmd::Bind { claim, verifier, requirement, selector, from } => {
+            cmd_bind(
+                claim.as_deref(),
+                verifier.as_deref(),
+                &requirement,
+                selector.as_deref(),
+                from.as_deref(),
+                cli.json,
+            )
         }
         Cmd::Bindings => cmd_bindings(cli.json),
         Cmd::Bundle(sub) => cmd_bundle(sub, cli.json),
@@ -286,56 +297,90 @@ fn cmd_bundle(sub: BundleCmd, as_json: bool) -> Result<()> {
 
 /// Human authorization act for VerifierBindings, journaled as such.
 fn cmd_bind(
-    claim: &str,
-    verifier: &str,
+    claim: Option<&str>,
+    verifier: Option<&str>,
     requirement: &str,
     selector: Option<&str>,
+    from: Option<&Path>,
     as_json: bool,
 ) -> Result<()> {
     let du = dot_uni();
     let by = uni_evidence::Actor::local().id;
-    let b = uni_evidence::binding::authorize(&du, claim, verifier, requirement, selector, &by)?;
-    events::append(&[events::Event {
-        name: "BindingAuthorized",
-        attrs: vec![
-            ("uni.claim.id".into(), claim.to_string()),
-            ("uni.verifier.id".into(), verifier.to_string()),
-            ("uni.binding.hash".into(), b.binding_hash.clone()),
-            ("uni.binding.selector".into(), b.selector.clone().unwrap_or_default()),
-            ("uni.binding.by".into(), by),
-        ],
-    }])?;
+
+    let authorized: Vec<uni_evidence::binding::VerifierBinding> = match (from, claim, verifier) {
+        (Some(path), None, _) => {
+            let batch = uni_evidence::binding::authorize_from_file(&du, path, &by)?;
+            if !as_json {
+                println!("authorized {} binding(s) from {}", batch.len(), path.display());
+            }
+            batch
+        }
+        (Some(_), Some(_), _) => {
+            return Err(anyhow!(
+                "use either --from <file> or --claim <claim>, not both"
+            ))
+        }
+        (None, Some(claim), Some(verifier)) => vec![uni_evidence::binding::authorize(
+            &du,
+            claim,
+            verifier,
+            requirement,
+            selector,
+            &by,
+        )?],
+        (None, Some(claim), None) => {
+            return Err(anyhow!(
+                "claim '{claim}' needs --verifier (and --selector for a template)"
+            ))
+        }
+        (None, None, _) => {
+            return Err(anyhow!(
+                "nothing to authorize: pass --claim <claim> --verifier <key> [--selector <test>], or --from <file>"
+            ))
+        }
+    };
+
+    let journal: Vec<events::Event> = authorized
+        .iter()
+        .map(|b| events::Event {
+            name: "BindingAuthorized",
+            attrs: vec![
+                ("uni.claim.id".into(), b.claim_id.clone()),
+                ("uni.verifier.id".into(), b.verifier_ref.clone()),
+                ("uni.binding.hash".into(), b.binding_hash.clone()),
+                ("uni.binding.selector".into(), b.selector.clone().unwrap_or_default()),
+                ("uni.binding.by".into(), by.clone()),
+            ],
+        })
+        .collect();
+    events::append(&journal)?;
+
     if as_json {
-        println!("{}", serde_json::to_string_pretty(&b)?);
-    } else {
-        println!("authorized: claim '{claim}' -> verifier '{verifier}'");
-        if !requirement.is_empty() {
-            println!("requirement: {requirement}");
+        if authorized.len() == 1 {
+            println!("{}", serde_json::to_string_pretty(&authorized[0])?);
+        } else {
+            println!("{}", serde_json::to_string_pretty(&authorized)?);
+        }
+        return Ok(());
+    }
+    for b in &authorized {
+        println!("authorized: claim '{}' -> verifier '{}'", b.claim_id, b.verifier_ref);
+        if !b.requirement.is_empty() {
+            println!("  requirement: {}", b.requirement);
         }
         if let Some(sel) = &b.selector {
-            println!("selector:    {sel}");
+            println!("  selector:    {sel}");
         }
-        println!("binding:     {}", b.binding_hash);
+        println!("  binding:     {}", b.binding_hash);
     }
     Ok(())
 }
 
 fn cmd_bindings(as_json: bool) -> Result<()> {
     let du = dot_uni();
-    let dir = uni_evidence::binding::bindings_dir(&du);
-    let mut out = vec![];
-    if let Ok(rd) = std::fs::read_dir(&dir) {
-        for e in rd.flatten() {
-            if e.path().extension().map(|x| x == "json").unwrap_or(false) {
-                if let Some(b) =
-                    uni_evidence::binding::load_binding(&du, e.path().file_stem().and_then(|s| s.to_str()).unwrap_or(""))
-                {
-                    out.push(b);
-                }
-            }
-        }
-    }
-    out.sort_by(|a, b| a.claim_id.cmp(&b.claim_id));
+    // One reviewed file plus any legacy per-claim files, merged.
+    let out: Vec<uni_evidence::binding::VerifierBinding> =
+        uni_evidence::binding::load_all(&du).into_values().collect();
     if as_json {
         println!("{}", serde_json::to_string_pretty(&out)?);
     } else if out.is_empty() {

@@ -40,12 +40,10 @@ Ordered by value. Nothing here is started unless marked.
    no-ops (they print the session header and exit). The harness is ready:
    `UNI_AGENT_MODEL=<model> python3 run.py --agent opencode --only <task>`.
    Needs: one working implementer, then the same 15-task protocol.
-2. **Contract-level test binding without a registry hop** — PARTIAL. Selector
-   templates (`{{selector}}`) plus `uni bind --selector` close the false
-   rejection the study measured, but the binding still lives per claim and is
-   authorized by hand. Open question: is a per-claim binding the right
-   granularity for a repo with hundreds of claims, or does it need a
-   suite-level binding?
+2. ~~Contract-level test binding without a registry hop~~ — DONE (v0.7.0):
+   `.uni/bindings.toml` holds every binding in one reviewed file, `uni bind
+   --from <file>` authorizes the whole review in one act (stamped per entry),
+   legacy per-claim files still load.
 3. **A3 real** — the assurance scale reaches A3-D (independent actor,
    self-declared identity). A3 needs identity adapters (spiffe/entra/oidc);
    they are stubs today, so A3 is unreachable outside unit tests. A4 stays
