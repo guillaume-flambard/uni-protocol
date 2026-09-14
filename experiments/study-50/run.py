@@ -116,6 +116,8 @@ REGISTRY = """[verifiers]
 "mini.t.port.valid" = {"run" = "cargo test parse_valid -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.port.invalid" = {"run" = "cargo test parse_invalid -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.no.unwrap" = {"run" = '! grep -Rn "\\.unwrap()" src', "expect_not" = ".unwrap()", "files" = ["src/config.rs", "src/lib.rs"]}
+"mini.t.format.symbol" = {"run" = "cargo test format_symbol -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.api.freeze" = {"run" = "grep -n 'pub fn format_price(cents: u64) -> String' src/api.rs", "expect" = "pub fn format_price(cents: u64) -> String", "files" = ["src/api.rs"]}
 "mini.t.clamp.lower" = {"run" = "cargo test clamp_lower_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.clamp.upper" = {"run" = "cargo test clamp_upper_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.sum.basic" = {"run" = "cargo test sum_three -- --exact", "expect" = "test result: ok. 1 passed"}

@@ -1,0 +1,20 @@
+VERSION 0.1
+DOMAIN software
+INTENT study-t09
+GOAL
+  Symbol-aware price formatting without breaking the published API.
+CLAIM symbol-format REQUIRED
+  ENSURE a price renders with a currency symbol and decimals
+INVARIANT api-freeze CRITICAL
+  ENSURE format_price(cents: u64) -> String keeps its published signature
+INVARIANT tests-green CRITICAL
+  ENSURE all tests pass
+VERIFY symbol-format
+  USING mini.t.format.symbol
+VERIFY api-freeze
+  USING mini.api.freeze
+VERIFY tests-green
+  USING mini.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0
