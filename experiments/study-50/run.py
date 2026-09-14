@@ -82,7 +82,41 @@ def agent_opencode(task, work):
     sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "agent-fix"], work)
     return code == 0, "DONE"
 
-AGENTS = {"fixture": agent_fixture, "codex": agent_codex, "claude": agent_claude,
+
+def agent_careless(task, work):
+    """Scripted failure mode, not a model: the agent fixes the task, runs the
+    tests (green), verifies with UNI (ACCEPTED), then edits the code again
+    without re-running anything, and reports DONE. This is the classic
+    "verified at an earlier revision" case, and it is exactly what UNI's
+    evidence lifecycle exists to catch."""
+    code, out, err = sh(["git", "apply", "--whitespace=nowarn", os.path.abspath(os.path.join(task, "fix.patch"))], work)
+    if code != 0:
+        print(f"  [careless] fix.patch failed: {out}{err}", file=sys.stderr)
+        return False, "FAILED"
+    sh(["git", "add", "-A"], work)
+    sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "agent-fix"], work)
+    # The agent's own green run, which it will keep citing.
+    tcode, tout, _ = sh(["cargo", "test"], work)
+    print(f"    careless: cargo test exit={tcode} (tests were green at this revision)")
+    # And an explicit UNI verification at this revision, recorded on disk.
+    vcode, vout, _ = sh([UNI, "verify", "contract.uni"], work)
+    try:
+        decision = json.loads(vout).get("decision", "?")
+    except Exception:
+        decision = "ACCEPTED" if vcode == 0 else f"code:{vcode}"
+    print(f"    careless: uni verify at this revision -> {decision}")
+    # Then a late edit, no re-run, no re-verify.
+    reg = os.path.abspath(os.path.join(task, "regression.patch"))
+    if os.path.exists(reg):
+        rcode, rout, rerr = sh(["git", "apply", "--whitespace=nowarn", reg], work)
+        print(f"    careless: regression applied={rcode == 0}")
+        if rcode != 0:
+            print(f"  [careless] regression failed: {rout}{rerr}", file=sys.stderr)
+    sh(["git", "add", "-A"], work)
+    sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "late-edit"], work)
+    return True, "DONE"
+
+AGENTS = {"careless": agent_careless, "fixture": agent_fixture, "codex": agent_codex, "claude": agent_claude,
           "opencode": agent_opencode}
 
 def fixture_reset(repo, tasks_rel):
