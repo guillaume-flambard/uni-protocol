@@ -1,0 +1,24 @@
+VERSION 0.1
+DOMAIN software
+INTENT study-t07
+GOAL
+  Cancelling a booking works and stays inside the architecture.
+CLAIM cancel-ok REQUIRED
+  ENSURE cancelling an existing booking returns Ok and marks it cancelled
+CLAIM cancel-missing REQUIRED
+  ENSURE cancelling an unknown booking returns Err
+INVARIANT layering CRITICAL
+  ENSURE the service layer never touches the storage module directly
+INVARIANT tests-green CRITICAL
+  ENSURE all tests pass
+VERIFY cancel-ok
+  USING mini.t.cancel.ok
+VERIFY cancel-missing
+  USING mini.t.cancel.missing
+VERIFY layering
+  USING mini.layering
+VERIFY tests-green
+  USING mini.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

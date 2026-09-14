@@ -143,6 +143,9 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False):
 "mini.tests" = "cargo test"
 "mini.t.add" = {"run" = "cargo test add_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.greeting" = {"run" = "cargo test greeting_works -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.cancel.ok" = {"run" = "cargo test cancel_ok -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.cancel.missing" = {"run" = "cargo test cancel_missing -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.layering" = {"run" = "! grep -n 'crate::store' src/service.rs", "expect_not" = "crate::store", "files" = ["src/service.rs"]}
 "mini.t.clamp.lower" = {"run" = "cargo test clamp_lower_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.clamp.upper" = {"run" = "cargo test clamp_upper_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.sum.basic" = {"run" = "cargo test sum_three -- --exact", "expect" = "test result: ok. 1 passed"}
