@@ -12,6 +12,7 @@
 | [github-integration.md](github-integration.md) | PR check, step summary, stable report |
 | [writing-verifiers.md](writing-verifiers.md) | registering commands vs writing adapters |
 | [specification.md](specification.md) | grammar, canonical IR, behavior contract |
+| [DEEP-ANALYSIS-2026-09-14.md](DEEP-ANALYSIS-2026-09-14.md) | full audit: architecture, F1/F2 fixes, maturity scores, roadmap |
 
 Everything here describes the shipped binary (`cargo build --release`,
 `./target/release/uni`). When in doubt, run it: what executes beats what a doc
