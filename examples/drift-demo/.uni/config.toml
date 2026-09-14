@@ -1,0 +1,8 @@
+[verifiers."ledger.integrity"]
+run = "grep -q 'LIMIT: u32 = 100' src/ledger.rs"
+files = ["src/ledger.rs"]
+
+[verifiers."ledger.audit"]
+type = "file-hash"
+files = ["src/ledger.rs"]
+expect_sha256 = "REPLACED_AT_RUNTIME"

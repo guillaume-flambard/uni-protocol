@@ -1,9 +1,9 @@
 name: stale evidence demo
 
 # A live demonstration of the central behaviour: a proof established at one
-# revision is not carried to another, and the pull request shows which file
-# moved. Manual on purpose: it deliberately fails, so it never runs on push.
-# Run it with `gh workflow run stale-demo.yml`.
+# revision is not carried to another, and the run names the file that moved.
+# Manual on purpose: it deliberately breaks its own artifact, so it never runs
+# on push. Run it with `gh workflow run stale-demo.yml`.
 on:
   workflow_dispatch:
 
@@ -25,39 +25,14 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/demo"
-          mkdir -p "$d/.uni/evidence" "$d/src"
+          rm -rf "$d"
+          cp -r examples/drift-demo "$d"
+          rm -f "$d/README.md"
           cd "$d"
-          printf 'pub const LIMIT: u32 = 100;\n' > src/ledger.rs
           sha=$(sha256sum src/ledger.rs | cut -d' ' -f1)
-          cat > .uni/config.toml <<TOML
-[verifiers."ledger.integrity"]
-run = "grep -q 'LIMIT: u32 = 100' src/ledger.rs"
-files = ["src/ledger.rs"]
-
-[verifiers."ledger.audit"]
-type = "file-hash"
-files = ["src/ledger.rs"]
-expect_sha256 = "$sha"
-TOML
-          cat > c.uni <<'UNI'
-VERSION 0.1
-DOMAIN software
-INTENT ledger
-GOAL
-  keep the ledger reproducible
-CLAIM ledger.integrity REQUIRED
-  ENSURE the ledger limit is the reviewed value
-INVARIANT ledger.frozen CRITICAL
-  ENSURE the reviewed ledger file is untouched
-VERIFY ledger.integrity
-  USING ledger.integrity
-VERIFY ledger.frozen
-  USING ledger.audit
-ACCEPT WHEN
-  required_claims == VERIFIED
-  AND critical_failures == 0
-UNI
-          git init -q && git add -A
+          sed -i "s/REPLACED_AT_RUNTIME/$sha/" .uni/config.toml
+          git init -q
+          git add -A
           git -c user.email=ci@ci -c user.name=ci commit -q -m green
           echo "=== the proof is established on this revision ==="
           "$UNI" verify c.uni

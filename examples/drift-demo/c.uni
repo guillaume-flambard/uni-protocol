@@ -1,0 +1,16 @@
+VERSION 0.1
+DOMAIN software
+INTENT ledger
+GOAL
+  keep the ledger reproducible
+CLAIM ledger.integrity REQUIRED
+  ENSURE the ledger limit is the reviewed value
+INVARIANT ledger.frozen CRITICAL
+  ENSURE the reviewed ledger file is untouched
+VERIFY ledger.integrity
+  USING ledger.integrity
+VERIFY ledger.frozen
+  USING ledger.audit
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0
