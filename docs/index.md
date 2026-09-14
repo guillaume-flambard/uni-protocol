@@ -1,4 +1,4 @@
-# UNI docs (Developer Preview v0.1)
+# UNI docs (Developer Preview v0.9)
 
 | Doc | Contents |
 |---|---|
@@ -8,15 +8,14 @@
 | [claims.md](claims.md) | CLAIM / INVARIANT / FORBID / REQUIRE semantics |
 | [evidence.md](evidence.md) | evidence shape, states, git + content invalidation |
 | [verification.md](verification.md) | trusted registry, expect matchers, the trust boundary |
-| [decisions.md](decisions.md) | truth table, policy layer, exit-code semantics |
+| [decisions.md](decisions.md) | truth table, policy layer, exit-code semantics, the assurance scale and how A3 is earned |
 | [github-integration.md](github-integration.md) | PR check, step summary, stable report |
 | [writing-verifiers.md](writing-verifiers.md) | registering commands vs writing adapters |
 | [brief.md](brief.md) | the work order handed to an implementing agent |
 | [run.md](run.md) | the execute half: run your command, then verify |
 | [specification.md](specification.md) | grammar, canonical IR, behavior contract |
 | [REPORT-2026-09-14.md](REPORT-2026-09-14.md) | **complete report**: thesis, architecture, capabilities, study, what is proven |
-| [DEEP-ANALYSIS-2026-09-14.md](DEEP-ANALYSIS-2026-09-14.md) | earlier audit at v0.18 (findings, maturity, roadmap) |
-| [DEEP-ANALYSIS-2026-09-14.md](DEEP-ANALYSIS-2026-09-14.md) | full audit: architecture, F1/F2 fixes, maturity scores, roadmap |
+| [DEEP-ANALYSIS-2026-09-14.md](DEEP-ANALYSIS-2026-09-14.md) | earlier audit at v0.18, superseded; kept as the record of how two real bugs were found |
 
 Everything here describes the shipped binary (`cargo build --release`,
 `./target/release/uni`). When in doubt, run it: what executes beats what a doc
@@ -28,3 +27,9 @@ describes. Constitution: `../constitution.md`. Spec source:
 - [The check, in the pull request](flagship-check.md)
 - [Why a proof stopped applying](decisions.md#why-a-proof-stopped-applying)
 - [Stale Evidence Benchmark, 2026-09-14](../experiments/stale-bench/RESULTS-2026-09-14.md)
+
+## Verified identity (A3)
+
+- [The assurance scale, and how a token earns A3](decisions.md)
+- [End-to-end proof, run against the built binary](../crates/uni-cli/tests/cli_identity.rs)
+- [Registry keys for `[identities]`](verification.md)

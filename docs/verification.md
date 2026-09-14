@@ -8,6 +8,9 @@ invalid, or stale evidence re-runs.
 
 - The contract (`.uni`) is **untrusted input**: it may only reference verifier names.
 - `.uni/config.toml [verifiers]` is the **trusted registry**: it holds the actual commands.
+- `.uni/config.toml [identities]` is the **trusted issuer list**: it says whose
+  token may prove an actor's identity. Key material is pinned by path, never
+  fetched, so the registry stays the only root of trust.
 - An inline `shell "cmd"` in a contract is accepted only while the registry is
   empty (bootstrap) or when an identical command already exists in the registry.
   Arbitrary commands from contracts are refused, always.
@@ -36,6 +39,56 @@ max_age_hours = 24                     # time-bound: the proof decays
 Gotchas verified against real runners: match the reporter the runtime actually
 prints (Node's spec reporter emits `ℹ fail 0`, not `# fail 0`), and prefer file
 globs over directory args for test runners.
+
+## Trusted issuers (v0.9): how an actor stops being self-declared
+
+An identity is the one thing a flag cannot grant. `--actor ci:build-12` names an
+actor, it never proves one, so the ceiling stays A3-D. A3 requires a signature.
+
+Present a JWT in the environment and `uni verify` checks it before anything runs:
+
+```bash
+UNI_IDENTITY_TOKEN="$(cat token.jwt)" uni verify delivery.uni
+```
+
+Declare which issuers may be believed, and where their keys live:
+
+```toml
+[identities."https://accounts.example"]
+source = "oidc"                              # oidc | entra | spiffe
+jwks_file = ".uni/identity/accounts.jwks.json"
+audiences = ["uni-cli"]                      # optional; when set, aud must intersect
+algorithms = ["RS256"]                       # optional; default RS256, ES256
+```
+
+What is enforced, and what that means in practice:
+
+- The signature is checked against the pinned `jwks_file`, selected by the
+  token's `kid`. With no `kid`, only a single-key set is usable: guessing among
+  several keys would put key resolution back in the trust path.
+- `iss`, `exp` and a non-empty `sub` are always required. `aud` is required only
+  when the entry declares `audiences`, and then the token must carry one of
+  them; an entry with no `audiences` does not check audience, and says so.
+  `exp` is one of the two clock reads in UNI (the other is evidence expiry), and
+  like it, it gates availability, never the decision. A leeway of 60s tolerates
+  skew.
+- An issuer absent from `[identities]` is refused. Nothing is fetched from a
+  `jwks_uri` or an OIDC discovery document: a URL is not a root of trust.
+- The verified id comes from the token: `oidc:<iss>#<sub>`, `entra:<iss>#<sub>`,
+  or the SPIFFE id itself for `source = "spiffe"`, where `sub` must be a
+  `spiffe://` URI.
+- A token that fails is a hard error, never a quiet fall back to A3-D, and
+  `--actor` together with a token is refused rather than silently ignored.
+- `entra` and `spiffe` change nothing about verification, only about what you
+  declare and what the subject must look like. For Entra, the key is the issuer
+  exactly as its tokens carry it (`https://login.microsoftonline.com/<tenant>/v2.0`
+  for v2). For SPIFFE, the key is the bare trust domain, because that is what a
+  JWT-SVID puts in `iss`, and the subject must be a `spiffe://` URI.
+
+Because the actor id enters the evidence fingerprint, a proof made as a verified
+actor is never reused by a run that only declares one. Edit `[identities]` and
+the trust-boundary diff says so: those entries are named with an `identity:`
+prefix.
 
 ## Built-in verifiers v0.1
 
@@ -119,7 +172,7 @@ VERIFY clamp-upper
 
 Such a verification executes ONLY under a matching authorized binding
 (`.uni/bindings/<claim>.json` with identical claim, verifier, and requirement
-text). Authorize explicitly — this is the human act AI proposals cannot replace:
+text). Authorize explicitly: this is the human act AI proposals cannot replace.
 
 ```bash
 uni bind --claim clamp-upper --verifier test-suite --requirement 'behavior("clamps values above upper bound")'

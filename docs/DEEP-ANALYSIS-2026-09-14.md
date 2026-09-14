@@ -1,5 +1,21 @@
 # UNI - Analyse approfondie de l'application
 
+> **Document supersédé, conservé tel quel.** Écrit sur la version développeur
+> v0.18 (33 tests, avant les tags publics). §5.4 (portabilité `sh -c`, timeout
+> externe), §5.5 (action non publiée), §5.6 (rotation, verrous, écriture
+> atomique, `.gitignore` des contrats candidats) et §5.8 (mapping
+> décision-assurance dupliqué) sont fermés depuis. §5.7 (zéro test unitaire dans
+> `uni-ir`, `uni-evidence`, `uni-verify`) est fermé: ils en ont 2, 14 et 28.
+> §5.1 est fermé pour A3 (adapters d'identité publiés en v0.9.0) et reste ouvert
+> pour A4, qui est un refus assumé tant qu'aucun signataire n'existe.
+>
+> Ce qui reste vivant ici: §5.2, un contrat qui épingle le nom du test, cause
+> exacte des faux rejets mesurés dans l'étude; et §5.3, la relecture du registre
+> comme vraie porte d'entrée, dont il manque toujours le hook de revue automatique.
+>
+> Ne pas citer ses chiffres comme l'état du dépôt: l'état du dépôt est dans
+> `REPORT-2026-09-14.md`.
+
 Date: 2026-09-14. Périmètre: dépôt `~/projects/active/apps/uni`, commits `33e501b..5feddb5` (29 commits), version développeur v0.18. Méthode: lecture de tout le code, `cargo clippy`, exécution de la suite complète, reproduction active de chaque faille soupçonnée (deux ont été confirmées et corrigées pendant cette analyse), comparaison avec SPEC-001, le PRD v0.1 et le blueprint, données réelles de l'étude à 7 runs d'agent.
 
 ---
