@@ -249,3 +249,51 @@ fn concurrent_verify_never_corrupts_state() {
         assert!(e["event"].is_string());
     }
 }
+
+/// B1: a policy change governs the recomputed decision without touching code.
+/// Setup accepts under the default policy; then escalate_on_stale is committed
+/// and the watched content changes (commit moves AND output expectation breaks).
+/// The stale proof cannot be renewed -> Escalated, not merely EvidenceRequired.
+#[test]
+fn policy_change_governs_recomputed_decision() {
+    let dir = mk_repo("policy-recompute");
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers.\"p\"]\nrun = \"cat marker.txt\"\nexpect = \"ready\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join(".uni/policies")).unwrap();
+    std::fs::write(dir.join("marker.txt"), "ready\n").unwrap();
+    std::fs::write(
+        dir.join("c.uni"),
+        "VERSION 0.1\nDOMAIN software\nINTENT pol\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING p\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n",
+    )
+    .unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+
+    let r1 = out(&["verify", "c.uni"], &dir);
+    assert!(r1.contains("Accepted"), "{r1}");
+
+    // New policy only (committed): stale-but-unreprovable escalates.
+    std::fs::write(
+        dir.join(".uni/policies/strict.toml"),
+        "[policy]\nescalate_on_stale = true\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "strict"]);
+    // Break the watched content and commit: previous proof goes stale AND the
+    // re-run cannot renew it (expectation miss).
+    std::fs::write(dir.join("marker.txt"), "trash\n").unwrap();
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "break-it"]);
+
+    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    let stdout = String::from_utf8_lossy(&o.stdout).to_string();
+    assert!(
+        stdout.contains("Escalated") && stdout.contains("escalate_on_stale"),
+        "new policy must govern the recompute, got: {stdout}"
+    );
+}

@@ -31,6 +31,34 @@ pub struct Evidence {
     /// Without it, two contracts sharing a claim id could reuse each other's evidence.
     #[serde(default)]
     pub fingerprint: String,
+    /// Verification Context (v0.2): validity dimensions recorded at run time.
+    /// Any drift on registry/contract/platform/artifact/commit forces re-run;
+    /// policy drift forces decision recompute (verify always re-decides).
+    #[serde(default)]
+    pub registry_hash: String,
+    #[serde(default)]
+    pub policy_hash: String,
+    #[serde(default)]
+    pub contract_hash: String,
+    /// "<os>-<arch>" at run time; cross-platform reuse is never trusted.
+    #[serde(default)]
+    pub platform: String,
+}
+
+/// Current verification context, computed fresh on every verify run.
+#[derive(Debug, Clone)]
+pub struct EvidenceContext {
+    pub fingerprint: String,
+    pub commit_sha: String,
+    pub workspace_dirty: bool,
+    pub artifact_hash: Option<String>,
+    pub registry_hash: String,
+    pub contract_hash: String,
+    pub platform: String,
+}
+
+pub fn platform() -> String {
+    format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -164,34 +192,47 @@ pub fn load_json<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Opti
     std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str(&t).ok())
 }
 
-/// Load persisted evidence for a claim; re-validate against current git state.
-/// Stale/absent evidence is NOT trusted: caller must re-run the verifier.
+/// Cache outcome with the reason for a miss, so callers can tell "never
+/// proven" (Miss) from "proven once, context drifted" (Stale). The latter
+/// carries escalation weight under policy (escalate_on_stale).
+#[derive(Debug, Clone)]
+pub enum CacheOutcome {
+    Hit(Evidence),
+    Stale,
+    Miss,
+}
+
+/// Load persisted evidence for a claim; re-validate against the full
+/// Verification Context. Stale/absent evidence is NOT trusted: caller must
+/// re-run the verifier. Policy drift does NOT force a re-run: the decision
+/// is recomputed from stored evidence with the current policy on every run.
 pub fn load_valid_for_claim(
     dot_uni: &std::path::Path,
     claim_id: &str,
-    fingerprint: &str,
-    cur_sha: &str,
-    cur_dirty: bool,
-    current_artifact_hash: Option<&str>,
-) -> Option<Evidence> {
-    let path = evidence_path(dot_uni, claim_id, fingerprint);
-    let mut ev: Evidence = load_json(&path)?;
-    if ev.fingerprint != fingerprint {
-        return None; // foreign or pre-fingerprint artifact
+    ctx: &EvidenceContext,
+) -> CacheOutcome {
+    let path = evidence_path(dot_uni, claim_id, &ctx.fingerprint);
+    let Some(mut ev): Option<Evidence> = load_json(&path) else {
+        return CacheOutcome::Miss;
+    };
+    if ev.fingerprint != ctx.fingerprint {
+        return CacheOutcome::Miss; // foreign or pre-fingerprint artifact
     }
-    if is_stale(&ev, cur_sha, cur_dirty) {
+    // Any context drift marks the previous proof stale (never silently reused).
+    let drifted = is_stale(&ev, &ctx.commit_sha, ctx.workspace_dirty)
+        || (!ev.artifact_hash.is_empty()
+            && ctx.artifact_hash.as_deref() != Some(ev.artifact_hash.as_str()))
+        || (!ev.contract_hash.is_empty() && ev.contract_hash != ctx.contract_hash)
+        || (!ev.registry_hash.is_empty() && ev.registry_hash != ctx.registry_hash)
+        || (!ev.platform.is_empty() && ev.platform != ctx.platform);
+    if drifted {
         ev.state = EvidenceState::Stale;
-        return None;
-    }
-    // content-bound evidence must match the watched files' current content (FR-010/FR-013)
-    if !ev.artifact_hash.is_empty() && current_artifact_hash != Some(ev.artifact_hash.as_str()) {
-        ev.state = EvidenceState::Stale;
-        return None;
+        return CacheOutcome::Stale;
     }
     if ev.state == EvidenceState::Invalid {
-        return None;
+        return CacheOutcome::Miss;
     }
-    Some(ev)
+    CacheOutcome::Hit(ev)
 }
 
 #[cfg(test)]
@@ -227,6 +268,22 @@ mod tests {
             duration_ms: 1,
             artifact_hash: String::new(),
             fingerprint: "fp1".into(),
+            registry_hash: "reg1".into(),
+            policy_hash: "pol1".into(),
+            contract_hash: "con1".into(),
+            platform: "linux-x86_64".into(),
+        }
+    }
+
+    fn ctx() -> EvidenceContext {
+        EvidenceContext {
+            fingerprint: "fp1".into(),
+            commit_sha: "sha1".into(),
+            workspace_dirty: false,
+            artifact_hash: None,
+            registry_hash: "reg1".into(),
+            contract_hash: "con1".into(),
+            platform: "linux-x86_64".into(),
         }
     }
 
@@ -257,28 +314,71 @@ mod tests {
 
     #[test]
     fn load_valid_for_claim_checks_everything() {
+        use CacheOutcome::*;
         let d = tmp("load");
         let du = d.join(".uni");
         let mut e = ev();
         save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
-        assert!(load_valid_for_claim(&du, "c", "fp1", "sha1", false, None).is_some());
-        assert!(load_valid_for_claim(&du, "c", "WRONG", "sha1", false, None).is_none());
-        assert!(load_valid_for_claim(&du, "c", "fp1", "other", false, None).is_none());
+        assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Hit(_)));
+        let mut wrong_fp = ctx();
+        wrong_fp.fingerprint = "WRONG".into();
+        assert!(matches!(load_valid_for_claim(&du, "c", &wrong_fp), Miss));
+        let mut other_sha = ctx();
+        other_sha.commit_sha = "other".into();
+        assert!(matches!(load_valid_for_claim(&du, "c", &other_sha), Stale));
         e.state = EvidenceState::Invalid;
         save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
-        assert!(load_valid_for_claim(&du, "c", "fp1", "sha1", false, None).is_none());
+        assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Miss));
     }
 
     #[test]
     fn load_valid_for_claim_enforces_artifact_hash() {
+        use CacheOutcome::*;
         let d = tmp("ah");
         let du = d.join(".uni");
         let mut e = ev();
         e.artifact_hash = "aaa".into();
         save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
-        assert!(load_valid_for_claim(&du, "c", "fp1", "sha1", false, Some("aaa")).is_some());
-        assert!(load_valid_for_claim(&du, "c", "fp1", "sha1", false, Some("bbb")).is_none());
-        assert!(load_valid_for_claim(&du, "c", "fp1", "sha1", false, None).is_none());
+        let mut ok = ctx();
+        ok.artifact_hash = Some("aaa".into());
+        assert!(matches!(load_valid_for_claim(&du, "c", &ok), Hit(_)));
+        let mut bad = ctx();
+        bad.artifact_hash = Some("bbb".into());
+        assert!(matches!(load_valid_for_claim(&du, "c", &bad), Stale));
+        assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Stale));
+    }
+
+    #[test]
+    fn verification_context_drift_invalidates() {
+        use CacheOutcome::*;
+        // B1: contract, registry, or platform drift forces re-run.
+        let d = tmp("ctx");
+        let du = d.join(".uni");
+        save_json(&evidence_path(&du, "c", "fp1"), &ev()).unwrap();
+        let mut drift = ctx();
+        drift.contract_hash = "con2".into();
+        assert!(matches!(load_valid_for_claim(&du, "c", &drift), Stale));
+        let mut drift = ctx();
+        drift.registry_hash = "reg2".into();
+        assert!(matches!(load_valid_for_claim(&du, "c", &drift), Stale));
+        let mut drift = ctx();
+        drift.platform = "darwin-arm64".into();
+        assert!(matches!(load_valid_for_claim(&du, "c", &drift), Stale));
+    }
+
+    #[test]
+    fn legacy_evidence_without_context_still_loads() {
+        use CacheOutcome::*;
+        // v0.1.0 files carry empty context hashes: accepted (backward compat),
+        // but any drift on the new dimensions of a v0.2 file invalidates.
+        let d = tmp("legacy");
+        let du = d.join(".uni");
+        let mut e = ev();
+        e.registry_hash.clear();
+        e.contract_hash.clear();
+        e.platform.clear();
+        save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
+        assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Hit(_)));
     }
 
     #[test]

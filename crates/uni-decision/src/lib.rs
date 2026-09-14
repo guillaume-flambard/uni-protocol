@@ -348,6 +348,10 @@ mod tests {
             duration_ms: 1,
             artifact_hash: String::new(),
             fingerprint: String::new(),
+            registry_hash: String::new(),
+            policy_hash: String::new(),
+            contract_hash: String::new(),
+            platform: String::new(),
         }
     }
     #[test]
@@ -429,6 +433,10 @@ mod property_tests {
             duration_ms: 1,
             artifact_hash: String::new(),
             fingerprint: String::new(),
+            registry_hash: String::new(),
+            policy_hash: String::new(),
+            contract_hash: String::new(),
+            platform: String::new(),
         }
     }
 
@@ -491,6 +499,10 @@ mod decision_matrix {
             exit_code: code, output_hash: "h".into(), output_excerpt: "".into(),
             commit_sha: "s".into(), workspace_dirty: false, state: st,
             created_at: chrono::Utc::now(), duration_ms: 1, artifact_hash: String::new(), fingerprint: String::new(),
+            registry_hash: String::new(),
+            policy_hash: String::new(),
+            contract_hash: String::new(),
+            platform: String::new(),
         };
         // valid + exit 0 → Accepted
         assert_eq!(evaluate(&ir, &[mk(EvidenceState::Valid, 0)]).decision, Decision::Accepted);
@@ -556,6 +568,10 @@ mod policy_tests {
             duration_ms: 1,
             artifact_hash: String::new(),
             fingerprint: String::new(),
+            registry_hash: String::new(),
+            policy_hash: String::new(),
+            contract_hash: String::new(),
+            platform: String::new(),
         }
     }
 
@@ -641,6 +657,10 @@ mod policy_property {
             duration_ms: 1,
             artifact_hash: String::new(),
             fingerprint: String::new(),
+            registry_hash: String::new(),
+            policy_hash: String::new(),
+            contract_hash: String::new(),
+            platform: String::new(),
         }
     }
 

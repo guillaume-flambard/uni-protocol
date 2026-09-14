@@ -233,6 +233,12 @@ fn run_shell(
         duration_ms: start.elapsed().as_millis(),
         artifact_hash: String::new(),
         fingerprint: String::new(),
+        // Verification Context dimensions are filled by the caller (cmd_verify),
+        // which owns the registry/contract/policy view of the run.
+        registry_hash: String::new(),
+        policy_hash: String::new(),
+        contract_hash: String::new(),
+        platform: String::new(),
     };
     Ok((ev, full_output))
 }

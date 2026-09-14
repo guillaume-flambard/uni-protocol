@@ -397,9 +397,18 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
     let du = dot_uni();
     let (cur_sha, cur_dirty) = uni_evidence::git_info(&ws);
     let registry = uni_verify::load_registry(&du);
+    // Verification Context, computed once per run: any drift on these
+    // dimensions invalidates stored evidence (B1); policy drift instead
+    // forces a decision recompute, which every verify does anyway.
+    let contract_text = std::fs::read_to_string(file).unwrap_or_default();
+    let contract_hash = uni_evidence::sha256_hex(contract_text.as_bytes());
+    let registry_text = std::fs::read_to_string(du.join("config.toml")).unwrap_or_default();
+    let registry_hash = uni_evidence::sha256_hex(registry_text.as_bytes());
+    let platform = uni_evidence::platform();
     // 1) Try persisted evidence first (cheap, content-addressed).
     let mut stored = vec![];
     let mut need_run = vec![];
+    let mut stale_ids: Vec<String> = vec![];
     let mut journal: Vec<events::Event> = vec![events::Event {
         name: "IntentVerified",
         attrs: vec![
@@ -416,10 +425,17 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
             Some(spec) => uni_verify::spec_fingerprint(&v.verifier_ref, spec),
             None => format!("inline:{}", &v.verifier_ref),
         };
-        match uni_evidence::load_valid_for_claim(
-            &du, &v.claim_id, &fingerprint, &cur_sha, cur_dirty, current_ah.as_deref(),
-        ) {
-            Some(ev) => {
+        let ctx = uni_evidence::EvidenceContext {
+            fingerprint,
+            commit_sha: cur_sha.clone(),
+            workspace_dirty: cur_dirty,
+            artifact_hash: current_ah,
+            registry_hash: registry_hash.clone(),
+            contract_hash: contract_hash.clone(),
+            platform: platform.clone(),
+        };
+        match uni_evidence::load_valid_for_claim(&du, &v.claim_id, &ctx) {
+            uni_evidence::CacheOutcome::Hit(ev) => {
                 journal.push(events::Event {
                     name: "EvidenceReused",
                     attrs: vec![
@@ -429,9 +445,41 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
                 });
                 stored.push(ev)
             }
-            None => need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone())),
+            uni_evidence::CacheOutcome::Stale => {
+                journal.push(events::Event {
+                    name: "EvidenceStale",
+                    attrs: vec![
+                        ("uni.claim.id".into(), v.claim_id.clone()),
+                        ("uni.intent.id".into(), ir.intent.id.clone()),
+                    ],
+                });
+                stale_ids.push(v.claim_id.clone());
+                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone()));
+            }
+            uni_evidence::CacheOutcome::Miss => {
+                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone()))
+            }
         }
     }
+    // Policy source selection: OPA bundle when both rego + opa binary exist, else TOML stack.
+    // Resolved BEFORE running verifiers so fresh evidence records the policy
+    // it was gathered under (audit dimension; drift forces recompute, not re-run).
+    let opa_bundle = du.join("policies/opa.rego");
+    let policies_dir = du.join("policies");
+    let opa_available = opa_bundle.exists()
+        && std::process::Command::new("opa")
+            .arg("version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+    let provider: Box<dyn uni_decision::PolicyProvider> = if opa_available {
+        Box::new(uni_decision::OpaPolicy { bundle: opa_bundle })
+    } else {
+        Box::new(uni_decision::TomlPolicy { dir: &policies_dir })
+    };
+    let policy = provider.resolve();
+    let policy_hash =
+        uni_evidence::sha256_hex(serde_json::to_string(&policy).unwrap_or_default().as_bytes());
     // 2) Re-run only for missing/stale/invalid claims (unlocked: reruns are
     // idempotent and deterministic, so concurrent runs only duplicate work).
     let mut fresh: Vec<(uni_evidence::Evidence, String)> = vec![];
@@ -447,6 +495,10 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
         });
         let fingerprint = uni_verify::spec_fingerprint(&ref_r, &spec);
         let mut ev = uni_verify::run_spec(&claim_id, &ref_r, &spec, &ws, spec.timeout)?;
+        ev.registry_hash = registry_hash.clone();
+        ev.contract_hash = contract_hash.clone();
+        ev.platform = platform.clone();
+        ev.policy_hash = policy_hash.clone();
         if uni_evidence::is_stale(&ev, &cur_sha, cur_dirty) {
             ev.state = uni_evidence::EvidenceState::Stale;
         }
@@ -455,23 +507,23 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
     for (ev, _) in &fresh {
         stored.push(ev.clone());
     }
-    // Policy source selection: OPA bundle when both rego + opa binary exist, else TOML stack.
-    let opa_bundle = du.join("policies/opa.rego");
-    let policies_dir = du.join("policies");
-    let opa_available = opa_bundle.exists()
-        && std::process::Command::new("opa")
-            .arg("version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
-    let provider: Box<dyn uni_decision::PolicyProvider> = if opa_available {
-        Box::new(uni_decision::OpaPolicy { bundle: opa_bundle })
-    } else {
-        Box::new(uni_decision::TomlPolicy { dir: &policies_dir })
-    };
-    let policy = provider.resolve();
-    
-    let decision = uni_decision::apply_policy(uni_decision::evaluate_intent(&ir, &stored), &policy);
+    // Policy already resolved above (recorded on fresh evidence for audit).
+    let mut decision = uni_decision::apply_policy(uni_decision::evaluate_intent(&ir, &stored), &policy);
+    // Stale-but-unreprovable escalation: a claim whose previous proof drifted
+    // out of context and could NOT be re-proven needs a human, not a retry.
+    // (When the re-run succeeds the claim is Valid and this never fires.)
+    if policy.escalate_on_stale && decision.decision != uni_decision::Decision::Accepted {
+        let valid: std::collections::HashSet<&str> = decision
+            .claims
+            .iter()
+            .filter(|c| c.state == uni_evidence::EvidenceState::Valid)
+            .map(|c| c.claim_id.as_str())
+            .collect();
+        if stale_ids.iter().any(|id| !valid.contains(id.as_str())) {
+            decision.decision = uni_decision::Decision::Escalated;
+            decision.reason = format!("policy escalate_on_stale: stale proof could not be renewed: {}", decision.reason);
+        }
+    }
     let last = serde_json::json!({
         "intent": {"id": ir.intent.id, "domain": ir.intent.domain, "goal": ir.intent.goal},
         "decision": decision.decision,

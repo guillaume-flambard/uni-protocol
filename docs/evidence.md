@@ -27,7 +27,18 @@ It lives in `.uni/evidence/<claim-id>.json` (canonical JSON, see `Evidence` in
 
 ## Invalidation (the reason this exists)
 
-Evidence is only trusted while its bindings hold:
+Evidence is only trusted while its bindings hold. Validity is a product of
+seven dimensions (Verification Context, v0.2):
+
+| Dimension | Recorded as | Drift means |
+|---|---|---|
+| Contract | `contract_hash` (sha256 of the `.uni` source) | re-run |
+| Subject | `artifact_hash` (sha256 over watched `files`) | re-run |
+| Verifier | `fingerprint` (ref + run + expects + files) | re-run (different verification) |
+| Verifier configuration | `registry_hash` (sha256 of `config.toml`) | re-run |
+| Environment | `commit_sha` + dirty flag, `platform` (os-arch) | re-run |
+| Policy | `policy_hash` (recorded for audit) | decision recompute, no re-run |
+| Time | `created_at` (recorded; expiry policies are v0.3+) | nothing yet |
 
 1. **Git binding** (`is_stale`): if HEAD moved or dirty-state changed since the
    run, the stored evidence is Stale and `uni verify` re-runs the verifier.
@@ -35,7 +46,14 @@ Evidence is only trusted while its bindings hold:
    the evidence stores a sha256 over those files' contents. Any change inside the
    same commit invalidates it. This is what stops a previously accepted outcome
    from masking a new bad edit.
-3. **Verifier compromise / policy change**: re-verify; stale never counts as proof.
+3. **Context binding** (`contract_hash`, `registry_hash`, `platform`): editing
+   the contract, touching any registry entry, or moving across platforms
+   invalidates. Legacy v0.1.0 files (empty hashes) still load.
+4. **Policy binding** (`policy_hash`): recorded for audit; a policy change
+   recomputes the decision from stored evidence without re-running verifiers.
+5. **Stale-but-unreprovable**: a claim whose previous proof drifted AND whose
+   re-run cannot renew it escalates under `escalate_on_stale` (human look),
+   instead of merely reporting missing evidence.
 
 A decision is never silently reused across a binding break: old evidence cannot
 mask a new commit (e2e test: `stale_evidence_does_not_mask_new_commit`).
