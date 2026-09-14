@@ -1,0 +1,16 @@
+VERSION 0.1
+DOMAIN software
+INTENT study-t06
+GOAL
+  greeting returns hello.
+CLAIM greeting REQUIRED
+  ENSURE greeting() == "hello"
+INVARIANT tests-green CRITICAL
+  ENSURE all tests pass
+VERIFY greeting
+  USING mini.t.greeting
+VERIFY tests-green
+  USING mini.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

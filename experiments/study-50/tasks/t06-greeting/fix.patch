@@ -1,0 +1,22 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index e2df877..f238b08 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,3 @@
+ pub fn greeting() -> &'static str {
+-    "hi"
++    "hello"
+ }
+diff --git a/tests/it.rs b/tests/it.rs
+index 1489942..01957fd 100644
+--- a/tests/it.rs
++++ b/tests/it.rs
+@@ -4,3 +4,8 @@ use mini_app::greeting;
+ fn placeholder() {
+     assert!(!greeting().is_empty());
+ }
++
++#[test]
++fn greeting_works() {
++    assert_eq!(greeting(), "hello");
++}
