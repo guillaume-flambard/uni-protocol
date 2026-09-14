@@ -793,6 +793,9 @@ mod tests {
 /// Trust-boundary diff (B2): compare two registry texts key by key.
 /// Used to name which verifiers changed between the acknowledged registry
 /// snapshot and the current one. Pure function, fully unit-tested.
+/// `[identities]` is part of the same trust root, so its moves are named too
+/// (prefixed `identity:`): an issuer-only change would otherwise report
+/// REGISTRY_CHANGED with an empty diff.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RegistryDiff {
     pub added: Vec<String>,
@@ -800,30 +803,49 @@ pub struct RegistryDiff {
     pub changed: Vec<String>,
 }
 
-fn verifiers_table(text: &str) -> toml::map::Map<String, toml::Value> {
+fn named_table(text: &str, name: &str) -> toml::map::Map<String, toml::Value> {
     text.parse::<toml::Value>()
         .ok()
-        .and_then(|v| v.get("verifiers").cloned())
+        .and_then(|v| v.get(name).cloned())
         .and_then(|v| v.as_table().cloned())
         .unwrap_or_default()
 }
 
-pub fn registry_diff(old_text: &str, new_text: &str) -> RegistryDiff {
-    let old = verifiers_table(old_text);
-    let new = verifiers_table(new_text);
+fn diff_table(
+    old: &toml::map::Map<String, toml::Value>,
+    new: &toml::map::Map<String, toml::Value>,
+    prefix: &str,
+) -> RegistryDiff {
     let mut diff = RegistryDiff::default();
     for k in new.keys() {
         if !old.contains_key(k) {
-            diff.added.push(k.clone());
+            diff.added.push(format!("{prefix}{k}"));
         } else if old.get(k) != new.get(k) {
-            diff.changed.push(k.clone());
+            diff.changed.push(format!("{prefix}{k}"));
         }
     }
     for k in old.keys() {
         if !new.contains_key(k) {
-            diff.removed.push(k.clone());
+            diff.removed.push(format!("{prefix}{k}"));
         }
     }
+    diff
+}
+
+pub fn registry_diff(old_text: &str, new_text: &str) -> RegistryDiff {
+    let mut diff = diff_table(
+        &named_table(old_text, "verifiers"),
+        &named_table(new_text, "verifiers"),
+        "",
+    );
+    let identities = diff_table(
+        &named_table(old_text, "identities"),
+        &named_table(new_text, "identities"),
+        "identity:",
+    );
+    diff.added.extend(identities.added);
+    diff.removed.extend(identities.removed);
+    diff.changed.extend(identities.changed);
     diff.added.sort();
     diff.removed.sort();
     diff.changed.sort();
@@ -857,6 +879,24 @@ mod registry_diff_tests {
         let other = "[verifiers.\"x\"]\nrun = \"a\"\nexpect = \"2\"\n";
         assert!(registry_diff(old, same).changed.is_empty());
         assert_eq!(registry_diff(old, other).changed, vec!["x".to_string()]);
+    }
+
+    #[test]
+    fn diff_names_identity_changes() {
+        // A registry edit that only touches who may be believed must still be
+        // named: an issuer added, a key material change, an issuer dropped.
+        let old = "[verifiers]\n\"a\" = \"true\"\n\n[identities.\"https://one\"]\njwks_file = \"one.jwks.json\"\n";
+        let new = "[verifiers]\n\"a\" = \"true\"\n\n[identities.\"https://one\"]\njwks_file = \"rotated.jwks.json\"\n\n[identities.\"https://two\"]\njwks_file = \"two.jwks.json\"\n";
+        let d = registry_diff(old, new);
+        assert_eq!(d.added, vec!["identity:https://two".to_string()]);
+        assert_eq!(d.changed, vec!["identity:https://one".to_string()]);
+        assert!(d.removed.is_empty());
+
+        let removed = registry_diff(new, old);
+        assert_eq!(removed.removed, vec!["identity:https://two".to_string()]);
+
+        // Identical registries, identities included: nothing to report.
+        assert_eq!(registry_diff(new, new), RegistryDiff::default());
     }
 }
 

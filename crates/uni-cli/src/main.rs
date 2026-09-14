@@ -20,8 +20,9 @@ enum Cmd {
     Compile { file: PathBuf },
     Verify {
         file: PathBuf,
-        /// Verifier actor identity (e.g. ci:build-12). Self-declared unless an
-        /// identity adapter verifies it; enables at most A3-D, never A3.
+        /// Verifier actor identity (e.g. ci:build-12). Always self-declared:
+        /// a flag names an actor, it never proves one. Only a JWT in
+        /// UNI_IDENTITY_TOKEN, verified against a pinned issuer, reaches A3.
         #[arg(long)]
         actor: Option<String>,
         /// Reserved: signed provenance (A4) has no producer yet.

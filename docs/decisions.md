@@ -80,8 +80,8 @@ algorithms = ["RS256"]          # optional; default RS256, ES256
 
 The registry is the only root of trust, so the key material lives beside it, not
 behind a network call: a token whose `iss` the registry does not declare is
-refused. The id comes from the token, never the flag: `oidc://<issuer>#<sub>`,
-`entra://<issuer>#<sub>`, or the SPIFFE id for `spiffe`. A token that fails
+refused. The id comes from the token, never the flag: `oidc:<issuer>#<sub>`,
+`entra:<issuer>#<sub>`, or the SPIFFE id for `spiffe`. A token that fails
 verification (bad signature, wrong issuer, wrong audience, expired) is a hard
 error, not a silent downgrade to A3-D, and `--actor` and `UNI_IDENTITY_TOKEN`
 are mutually exclusive. A `spiffe://`/`entra://`/`oidc://` prefix on `--actor`

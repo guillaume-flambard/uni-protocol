@@ -48,8 +48,7 @@ A proof's actor identity is verified, not merely named.
 - **The adapter.** `UNI_IDENTITY_TOKEN=<jwt> uni verify` verifies a JWT offline
   against an issuer pinned in `.uni/config.toml` `[identities]` (`source` is
   oidc/entra/spiffe, `jwks_file`, optional `audiences`/`algorithms`). Signature
-  via the pinned JWKS, `iss`/`aud`/`exp` checked, `kid` selects the key; `exp`
-  is the one clock read (a validity check on the identity, documented as such).
+  via the pinned JWKS, `iss`/`aud`/`exp` checked, `kid` selects the key.
   Success mints an actor with assurance `verified`, which the decision engine
   already turns into A3 when the actor is independent. `--actor` stays
   self-declared (A3-D), a bad token is a hard error (never a silent downgrade),
@@ -57,9 +56,18 @@ A proof's actor identity is verified, not merely named.
 - **Trust root unchanged.** The JWKS lives beside the registry, not behind a
   network call: the registry stays the only root of trust, and a token whose
   `iss` is not declared there is refused.
+- **The trust boundary names an issuer edit too.** `registry_diff` now diffs
+  `[identities]` as well as `[verifiers]`, entries prefixed `identity:`, so an
+  issuer-only registry change reports what moved instead of an empty diff.
 - **Proven end to end.** `crates/uni-cli/tests/cli_identity.rs` (A3, A3-D, A2,
-  mutual exclusion, expired/untrusted refused) plus the adapter unit tests
-  (wrong issuer, tampering, audience, spiffe subject, half-wired config).
+  mutual exclusion, expired/untrusted refused, issuer change named) plus the
+  adapter unit tests (wrong issuer, tampering, audience, spiffe subject,
+  half-wired config).
+- **Constitution v0.7.** Rules 4, 10 and 11 amended with a migration note:
+  `[identities]` joins the trusted registry, a token's `exp` sits in the same
+  availability class as evidence expiry (neither enters the decision), and A3
+  states how it is reached. No DSL keyword, evidence field, or decision path
+  changed.
 
 ## Open
 
@@ -112,8 +120,8 @@ Condensed by milestone; the detailed history is in git.
   separator fix; a declared watch that observes nothing is Invalid.
 - **v0.6 — evidence lifecycle completed.** Time is real: a verifier may declare
   `max_age_hours`, the expiry is stamped on the proof so a registry change
-  cannot extend it, and an expired proof is stale (the one clock-reading
-  predicate, constitution rule 10). The journal rotates past 1 MiB keeping the
+  cannot extend it, and an expired proof is stale (the only clock read inside
+  the evidence context, constitution rule 10). The journal rotates past 1 MiB keeping the
   three newest archives, `uni events --all` reads the history, `uni doctor`
   reports size and cap.
 - **v0.7 — execution, export, one bindings file.** `uni run <contract> --

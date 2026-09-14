@@ -234,8 +234,8 @@ pub struct Actor {
     pub id: String,
     /// "local" | "cli" | "spiffe" | "entra" | "oidc" | ...
     pub source: String,
-    /// "self-declared" | "verified". Nothing in v0.2 sets "verified":
-    /// identity adapters are documented stubs until then.
+    /// "self-declared" | "verified". Only the identity adapter
+    /// (`uni_verify::identity::verify_token`) may set "verified".
     pub assurance: String,
 }
 
@@ -262,8 +262,9 @@ impl Actor {
     }
 
     /// Parse a `--actor` flag value. Scheme-prefixed ids keep their scheme as
-    /// source but stay self-declared: v0.2 has no identity adapters, and a
-    /// prefix is not a proof.
+    /// source but stay self-declared: a prefix is a claim about who you are,
+    /// not a proof of it. Verification happens in the identity adapter, which
+    /// builds a `verified` actor from a token instead.
     pub fn declared(id: &str) -> Self {
         let source = if let Some((scheme, _)) = id.split_once("://") {
             match scheme {

@@ -67,7 +67,8 @@ pub fn independence(evidences: &[Evidence]) -> Independence {
 
 /// Identity assurance across the evidence set: VERIFIED only if every actor
 /// carries an externally verified identity. Anything else is SELF-DECLARED.
-/// (v0.2 sets "verified" nowhere: identity adapters are documented stubs.)
+/// Only the identity adapter (uni-verify::identity) sets "verified"; a flag
+/// never does.
 pub fn identity_assurance(evidences: &[Evidence]) -> &'static str {
     if evidences.is_empty() {
         return "SELF-DECLARED";

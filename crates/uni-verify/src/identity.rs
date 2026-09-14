@@ -211,8 +211,10 @@ pub fn verify_token(token: &str, reg: &IdentityRegistry) -> Result<Actor> {
                     }
                     ("spiffe".to_string(), subject)
                 } else {
+                    // A single colon: the issuer already carries `https://`, so
+                    // `oidc://https://...` would nest two schemes in one id.
                     let source = p.source.clone();
-                    (source.clone(), format!("{source}://{}#{subject}", p.issuer))
+                    (source.clone(), format!("{source}:{}#{subject}", p.issuer))
                 };
                 return Ok(Actor::verified(&id, &source));
             }
@@ -303,7 +305,7 @@ mod tests {
         let actor = verify_token(&token, &reg).unwrap();
         assert_eq!(actor.assurance, "verified");
         assert_eq!(actor.source, "oidc");
-        assert_eq!(actor.id, "oidc://https://issuer.example#alice");
+        assert_eq!(actor.id, "oidc:https://issuer.example#alice");
         assert!(actor.is_verified());
     }
 

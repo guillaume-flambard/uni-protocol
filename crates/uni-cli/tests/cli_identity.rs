@@ -153,3 +153,24 @@ fn an_untrusted_issuer_is_refused() {
     assert_ne!(code, 0, "{out}");
     assert!(out.contains("rejected by every trusted issuer"), "{out}");
 }
+
+#[test]
+fn adding_a_trusted_issuer_is_a_named_trust_boundary_change() {
+    let dir = mk_repo("boundary");
+    let t = token("alice", "https://issuer.example", 300);
+    let (code, out) = run(&dir, &["verify", "c.uni"], Some(&t));
+    assert_eq!(code, 0, "{out}");
+    // The only edit touches who may be believed, not what may run: it still has
+    // to be named, or REGISTRY_CHANGED would report an empty diff.
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers]\n\"pass\" = \"true\"\n\n\
+         [identities.\"https://issuer.example\"]\nsource = \"oidc\"\njwks_file = \"issuer.jwks.json\"\n\n\
+         [identities.\"https://other.example\"]\nsource = \"oidc\"\njwks_file = \"other.jwks.json\"\n",
+    )
+    .unwrap();
+    let (code, out) = run(&dir, &["verify", "c.uni"], Some(&t));
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("REGISTRY_CHANGED"), "{out}");
+    assert!(out.contains("identity:"), "{out}");
+}
