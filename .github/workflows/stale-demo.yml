@@ -1,0 +1,86 @@
+name: stale evidence demo
+
+# A live demonstration of the central behaviour: a proof established at one
+# revision is not carried to another, and the pull request shows which file
+# moved. Manual on purpose: it deliberately fails, so it never runs on push.
+# Run it with `gh workflow run stale-demo.yml`.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    env:
+      UNI: ${{ github.workspace }}/target/release/uni
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build uni
+        run: cargo build --release
+
+      - name: Establish a proof on a green revision
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/demo"
+          mkdir -p "$d/.uni/evidence" "$d/src"
+          cd "$d"
+          printf 'pub const LIMIT: u32 = 100;\n' > src/ledger.rs
+          sha=$(sha256sum src/ledger.rs | cut -d' ' -f1)
+          cat > .uni/config.toml <<TOML
+[verifiers."ledger.integrity"]
+run = "grep -q 'LIMIT: u32 = 100' src/ledger.rs"
+files = ["src/ledger.rs"]
+
+[verifiers."ledger.audit"]
+type = "file-hash"
+files = ["src/ledger.rs"]
+expect_sha256 = "$sha"
+TOML
+          cat > c.uni <<'UNI'
+VERSION 0.1
+DOMAIN software
+INTENT ledger
+GOAL
+  keep the ledger reproducible
+CLAIM ledger.integrity REQUIRED
+  ENSURE the ledger limit is the reviewed value
+INVARIANT ledger.frozen CRITICAL
+  ENSURE the reviewed ledger file is untouched
+VERIFY ledger.integrity
+  USING ledger.integrity
+VERIFY ledger.frozen
+  USING ledger.audit
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0
+UNI
+          git init -q && git add -A
+          git -c user.email=ci@ci -c user.name=ci commit -q -m green
+          echo "=== the proof is established on this revision ==="
+          "$UNI" verify c.uni
+
+      - name: Deliver a change that moves a watched subject
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/demo"
+          # a teammate edits the watched file: the outcome may still hold, but
+          # the proof was made on other bytes
+          sed -i 's/LIMIT: u32 = 100/LIMIT: u32 = 250/' src/ledger.rs
+          echo "=== the same commands run again ==="
+          "$UNI" verify c.uni || true
+
+      - name: Annotate the files that moved
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/demo"
+          "$UNI" explain --annotations || true
+          {
+            echo "### Outcome Assurance"
+            echo ""
+            echo '```'
+            "$UNI" explain || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
