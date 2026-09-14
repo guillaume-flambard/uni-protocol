@@ -1,0 +1,12 @@
+VERSION 0.1
+DOMAIN software
+INTENT artifact-digest
+GOAL
+  The published artifact matches its signed digest.
+CLAIM digest REQUIRED
+  ENSURE digest.txt sha256 equals the expected value
+VERIFY digest
+  USING artifact.digest
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

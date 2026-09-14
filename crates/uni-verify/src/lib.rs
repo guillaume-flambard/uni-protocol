@@ -16,12 +16,30 @@ use wait_timeout::ChildExt;
 /// ```
 #[derive(Debug, Clone)]
 pub struct VerifierSpec {
+    /// Verifier kind: "shell" (default) or "file-hash" (v0.3 built-in adapter).
+    pub kind: String,
     pub run: String,
     pub expect: String,
     pub expect_not: String,
     /// globs of files whose content this evidence is bound to (content-addressed evidence)
     pub files: Vec<String>,
+    /// file-hash only: expected sha256 per workspace-relative path.
+    pub expect_sha256: std::collections::BTreeMap<String, String>,
     pub timeout: u64,
+}
+
+impl VerifierSpec {
+    fn shell(run: impl Into<String>) -> Self {
+        VerifierSpec {
+            kind: "shell".into(),
+            run: run.into(),
+            expect: String::new(),
+            expect_not: String::new(),
+            files: vec![],
+            expect_sha256: Default::default(),
+            timeout: DEFAULT_TIMEOUT_SECS,
+        }
+    }
 }
 
 const DEFAULT_TIMEOUT_SECS: u64 = 300;
@@ -38,12 +56,17 @@ pub fn load_registry(dot_uni: &std::path::Path) -> std::collections::HashMap<Str
     if let Some(t) = val.get("verifiers").and_then(|v| v.as_table()) {
         for (k, v) in t {
             if let Some(s) = v.as_str() {
-                out.insert(k.clone(), VerifierSpec { run: s.to_string(), expect: String::new(), expect_not: String::new(), files: vec![], timeout: DEFAULT_TIMEOUT_SECS });
+                out.insert(k.clone(), VerifierSpec::shell(s));
             } else if let Some(tbl) = v.as_table() {
                 let run = tbl.get("run").and_then(|r| r.as_str()).unwrap_or("").to_string();
                 let expect = tbl.get("expect").and_then(|e| e.as_str()).unwrap_or("").to_string();
                 let expect_not = tbl.get("expect_not").and_then(|e| e.as_str()).unwrap_or("").to_string();
-                let files = tbl
+                let kind = tbl
+                    .get("type")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("shell")
+                    .to_string();
+                let files: Vec<String> = tbl
                     .get("files")
                     .and_then(|f| f.as_array())
                     .map(|a| {
@@ -52,9 +75,31 @@ pub fn load_registry(dot_uni: &std::path::Path) -> std::collections::HashMap<Str
                             .collect()
                     })
                     .unwrap_or_default();
+                let mut expect_sha256 = std::collections::BTreeMap::new();
+                match tbl.get("expect_sha256") {
+                    Some(toml::Value::String(h)) => {
+                        // single-file form: applied to the only watched file
+                        if let Some(f) = files.first() {
+                            expect_sha256.insert(f.clone(), h.clone());
+                        }
+                    }
+                    Some(toml::Value::Table(m)) => {
+                        for (path, h) in m {
+                            if let Some(h) = h.as_str() {
+                                expect_sha256.insert(path.clone(), h.to_string());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
                 let timeout = tbl.get("timeout").and_then(|t| t.as_integer()).unwrap_or(DEFAULT_TIMEOUT_SECS as i64) as u64;
-                if !run.is_empty() {
-                    out.insert(k.clone(), VerifierSpec { run, expect, expect_not, files, timeout });
+                let usable = (kind == "shell" && !run.is_empty())
+                    || (kind == "file-hash" && !expect_sha256.is_empty());
+                if usable {
+                    out.insert(
+                        k.clone(),
+                        VerifierSpec { kind, run, expect, expect_not, files, expect_sha256, timeout },
+                    );
                 }
             }
         }
@@ -73,10 +118,10 @@ pub fn resolve_command(
     if verifier_ref == "shell" {
         let cmd = inline_shell.ok_or_else(|| anyhow!("shell verifier needs a command"))?;
         if registry.is_empty() {
-            return Ok(VerifierSpec { run: cmd.to_string(), expect: String::new(), expect_not: String::new(), files: vec![], timeout: DEFAULT_TIMEOUT_SECS }); // bootstrap
+            return Ok(VerifierSpec::shell(cmd)); // bootstrap
         }
-        if registry.values().any(|v| v.run == cmd) {
-            return Ok(VerifierSpec { run: cmd.to_string(), expect: String::new(), expect_not: String::new(), files: vec![], timeout: DEFAULT_TIMEOUT_SECS });
+        if registry.values().any(|v| v.kind == "shell" && v.run == cmd) {
+            return Ok(VerifierSpec::shell(cmd));
         }
         return Err(anyhow!(
             "inline shell command not in trusted registry (.uni/config.toml [verifiers]): {cmd}"
@@ -87,6 +132,12 @@ pub fn resolve_command(
         .get(verifier_ref)
         .ok_or_else(|| anyhow!("unknown verifier '{verifier_ref}' (not in .uni/config.toml [verifiers])"))?;
     if let Some(inline) = inline_shell {
+        if trusted.kind != "shell" {
+            return Err(anyhow!(
+                "verifier '{verifier_ref}' is type '{}', not shell: inline overrides are refused",
+                trusted.kind
+            ));
+        }
         if inline != trusted.run {
             return Err(anyhow!(
                 "inline override for '{verifier_ref}' does not match trusted registry value"
@@ -176,33 +227,129 @@ pub fn run_spec(
     verifier_ref: &str,
     spec: &VerifierSpec,
     workspace: &std::path::Path,
-    timeout_secs: u64,
+    _timeout_secs: u64,
     actor: &uni_evidence::Actor,
     executor: &uni_evidence::Actor,
 ) -> Result<Evidence> {
-    let (mut ev, full_output) = run_shell(claim_id, &spec.run, workspace, timeout_secs)?;
+    let verifier = verifier_for(spec)?;
+    let started = Instant::now();
+    let outcome = verifier.run(spec, workspace)?;
+    let mut ev = build_evidence(claim_id, verifier.name(), &outcome.command, &outcome, workspace);
+    ev.duration_ms = started.elapsed().as_millis();
     ev.artifact_hash = artifact_hash(spec, workspace).unwrap_or_default();
     ev.fingerprint = spec_fingerprint(verifier_ref, spec, &actor.id);
     ev.actor = actor.clone();
     ev.executor = executor.clone();
-    // expectations are checked against the FULL output, never the truncated excerpt
-    if !spec.expect.is_empty() && !full_output.contains(&spec.expect) {
+    // Adapters that declare their own content binding (file-hash checks exact
+    // hashes) must not be silently re-bound by globs: keep their state, but
+    // still bind the watched files for invalidation.
+    // Expectations are checked against the FULL output, never the truncated excerpt.
+    if !spec.expect.is_empty() && !outcome.output.contains(&spec.expect) {
         ev.state = EvidenceState::Invalid;
     }
-    if !spec.expect_not.is_empty() && full_output.contains(&spec.expect_not) {
+    if !spec.expect_not.is_empty() && outcome.output.contains(&spec.expect_not) {
         ev.state = EvidenceState::Invalid;
     }
     Ok(ev)
 }
 
+/// Public verifier seam (v0.3). A verifier turns a trusted spec into raw
+/// observations; run_spec wraps them into Evidence with all bindings.
+///
+/// Contract for implementers (see docs/writing-verifiers.md):
+///  1. deterministic: no network, no clock, no RNG in the pass/fail decision
+///  2. report raw exit/observations; never decide acceptance (that is the engine)
+///  3. never read the contract: only the authorized spec and the workspace
+pub trait Verifier {
+    /// Producer name recorded on Evidence.
+    fn name(&self) -> &'static str;
+    fn run(
+        &self,
+        spec: &VerifierSpec,
+        workspace: &std::path::Path,
+    ) -> Result<VerifierOutcome>;
+}
+
+pub struct VerifierOutcome {
+    pub state: EvidenceState,
+    pub exit_code: i32,
+    pub command: String,
+    pub output: String,
+}
+
+pub struct ShellVerifier;
+pub struct FileHashVerifier;
+
+impl Verifier for ShellVerifier {
+    fn name(&self) -> &'static str {
+        "shell-verifier"
+    }
+    fn run(&self, spec: &VerifierSpec, workspace: &std::path::Path) -> Result<VerifierOutcome> {
+        let (code, output) = run_shell(&spec.run, workspace, spec.timeout)?;
+        Ok(VerifierOutcome {
+            state: if code == 0 { EvidenceState::Valid } else { EvidenceState::Invalid },
+            exit_code: code,
+            command: spec.run.clone(),
+            output,
+        })
+    }
+}
+
+/// file-hash: no process runs. Each expected path must exist and its sha256
+/// must equal the expected value; any mismatch or missing file is Invalid.
+impl Verifier for FileHashVerifier {
+    fn name(&self) -> &'static str {
+        "file-hash-verifier"
+    }
+    fn run(&self, spec: &VerifierSpec, workspace: &std::path::Path) -> Result<VerifierOutcome> {
+        let mut lines = vec![];
+        let mut ok = true;
+        for (rel, expected) in &spec.expect_sha256 {
+            let path = workspace.join(rel);
+            match std::fs::read(&path) {
+                Ok(bytes) => {
+                    let actual = sha256_hex(&bytes);
+                    let match_ = actual == *expected;
+                    ok &= match_;
+                    lines.push(format!(
+                        "{rel}: {} (expected {})",
+                        if match_ { "MATCH" } else { "MISMATCH" },
+                        &expected[..12.min(expected.len())]
+                    ));
+                }
+                Err(e) => {
+                    ok = false;
+                    lines.push(format!("{rel}: MISSING ({e})"));
+                }
+            }
+        }
+        let command = format!("file-hash: {}", spec.expect_sha256.keys().cloned().collect::<Vec<_>>().join(", "));
+        Ok(VerifierOutcome {
+            state: if ok { EvidenceState::Valid } else { EvidenceState::Invalid },
+            exit_code: if ok { 0 } else { 1 },
+            command,
+            output: lines.join("\n"),
+        })
+    }
+}
+
+/// Select the built-in adapter for a spec. Unknown kinds are a hard error:
+/// a registry typo must never silently fall back to running a command.
+pub fn verifier_for(spec: &VerifierSpec) -> Result<Box<dyn Verifier>> {
+    match spec.kind.as_str() {
+        "shell" => Ok(Box::new(ShellVerifier)),
+        "file-hash" => Ok(Box::new(FileHashVerifier)),
+        other => Err(anyhow!(
+            "unknown verifier type '{other}' (built-ins: shell, file-hash)"
+        )),
+    }
+}
+
 fn run_shell(
-    claim_id: &str,
     command: &str,
     workspace: &std::path::Path,
     timeout_secs: u64,
-) -> Result<(Evidence, String)> {
-    let start = Instant::now();
-    let (commit_sha, workspace_dirty) = git_info(workspace);
+) -> Result<(i32, String)> {
     // Shell selection is platform-gated (sh on POSIX, cmd on Windows) and the
     // timeout is always enforced natively: the old `timeout`-binary hack is
     // gone, along with its two silent failure modes (binary missing on macOS,
@@ -242,24 +389,31 @@ fn run_shell(
         }
     };
     let full_output = String::from_utf8_lossy(&combined).to_string();
-    let excerpt: String = full_output.chars().take(2000).collect();
-    let ev = Evidence {
+    Ok((code, full_output))
+}
+
+fn build_evidence(
+    claim_id: &str,
+    producer: &str,
+    command: &str,
+    outcome: &VerifierOutcome,
+    workspace: &std::path::Path,
+) -> Evidence {
+    let (commit_sha, workspace_dirty) = git_info(workspace);
+    let excerpt: String = outcome.output.chars().take(2000).collect();
+    Evidence {
         id: format!("{claim_id}-{}", &sha256_hex(command.as_bytes())[..8]),
         claim_id: claim_id.to_string(),
-        producer: "shell-verifier".into(),
+        producer: producer.to_string(),
         command: command.to_string(),
-        exit_code: code,
-        output_hash: sha256_hex(&combined),
+        exit_code: outcome.exit_code,
+        output_hash: sha256_hex(outcome.output.as_bytes()),
         output_excerpt: excerpt,
         commit_sha,
         workspace_dirty,
-        state: if code == 0 {
-            EvidenceState::Valid
-        } else {
-            EvidenceState::Invalid
-        },
+        state: outcome.state.clone(),
         created_at: chrono::Utc::now(),
-        duration_ms: start.elapsed().as_millis(),
+        duration_ms: 0,
         artifact_hash: String::new(),
         fingerprint: String::new(),
         // Verification Context dimensions are filled by the caller (cmd_verify),
@@ -273,8 +427,7 @@ fn run_shell(
         executor: uni_evidence::Actor::default(),
         // Authorization is attached by cmd_verify from the loaded binding.
         binding_hash: String::new(),
-    };
-    Ok((ev, full_output))
+    }
 }
 
 /// High seam: assure a full contract in one call (used by CLI + tests).
@@ -311,13 +464,17 @@ mod tests {
     }
 
     fn spec(run: &str) -> VerifierSpec {
-        VerifierSpec {
-            run: run.into(),
-            expect: String::new(),
-            expect_not: String::new(),
-            files: vec![],
-            timeout: 30,
-        }
+        let mut s = VerifierSpec::shell(run);
+        s.timeout = 30;
+        s
+    }
+
+    fn file_hash_spec(path: &str, hash: &str) -> VerifierSpec {
+        let mut s = VerifierSpec::shell("");
+        s.kind = "file-hash".into();
+        s.files = vec![path.into()];
+        s.expect_sha256.insert(path.into(), hash.into());
+        s
     }
 
     #[test]
@@ -401,19 +558,74 @@ mod tests {
     #[test]
     fn hanging_verifier_is_killed_and_invalid() {
         let d = tmp("timeout");
-        let (ev, full) = run_shell("c", "sleep 30", &d, 1).unwrap();
-        assert_eq!(ev.state, EvidenceState::Invalid);
-        assert_eq!(ev.exit_code, -1);
+        let (code, full) = run_shell("sleep 30", &d, 1).unwrap();
+        assert_eq!(code, -1);
         assert!(full.contains("killed after 1s timeout"), "{full}");
+    }
+
+    #[test]
+    fn file_hash_adapter_matches_and_mismatches() {
+        let d = tmp("filehash");
+        std::fs::write(d.join("artifact.bin"), b"contents").unwrap();
+        let good = sha256_hex(b"contents");
+        let s_ok = file_hash_spec("artifact.bin", &good);
+        let ev = run_spec("c", "k", &s_ok, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        assert_eq!(ev.state, EvidenceState::Valid);
+        assert_eq!(ev.producer, "file-hash-verifier");
+        assert!(ev.command.starts_with("file-hash:"));
+        let s_bad = file_hash_spec("artifact.bin", &sha256_hex(b"tampered"));
+        let ev2 = run_spec("c", "k", &s_bad, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        assert_eq!(ev2.state, EvidenceState::Invalid);
+        assert!(ev2.output_excerpt.contains("MISMATCH"), "{}", ev2.output_excerpt);
+        let s_missing = file_hash_spec("absent.bin", &good);
+        let ev3 = run_spec("c", "k", &s_missing, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        assert_eq!(ev3.state, EvidenceState::Invalid);
+        assert!(ev3.output_excerpt.contains("MISSING"));
+    }
+
+    #[test]
+    fn registry_parses_file_hash_kind() {
+        let d = tmp("reg-fh");
+        std::fs::write(
+            d.join(".uni/config.toml"),
+            "[verifiers.\"wasm\"]\ntype = \"file-hash\"\nfiles = [\"dist/app.wasm\"]\nexpect_sha256 = \"deadbeef\"\n",
+        )
+        .unwrap();
+        let r = load_registry(&d.join(".uni"));
+        assert_eq!(r["wasm"].kind, "file-hash");
+        assert_eq!(r["wasm"].expect_sha256["dist/app.wasm"], "deadbeef");
+    }
+
+    #[test]
+    fn unknown_verifier_type_is_hard_error() {
+        let mut s = VerifierSpec::shell("true");
+        s.kind = "wasm-magic".into();
+        let err = match verifier_for(&s) {
+            Ok(_) => panic!("unknown type must fail"),
+            Err(e) => e.to_string(),
+        };
+        assert!(err.contains("unknown verifier type"), "{err}");
+    }
+
+    #[test]
+    fn non_shell_verifier_refuses_inline_override() {
+        let d = tmp("inline-fh");
+        std::fs::write(
+            d.join(".uni/config.toml"),
+            "[verifiers.\"wasm\"]\ntype = \"file-hash\"\nfiles = [\"a\"]\nexpect_sha256 = \"b\"\n",
+        )
+        .unwrap();
+        let r = load_registry(&d.join(".uni"));
+        let err = resolve_command("wasm", Some("true"), &r).unwrap_err().to_string();
+        assert!(err.contains("inline overrides are refused"), "{err}");
     }
 
     #[cfg(not(windows))]
     #[test]
     fn fast_verifier_passes_with_exit_zero() {
         let d = tmp("fast");
-        let (ev, _) = run_shell("c", "true", &d, 30).unwrap();
-        assert_eq!(ev.state, EvidenceState::Valid);
-        assert_eq!(ev.exit_code, 0);
+        let (code, _) = run_shell("true", &d, 30).unwrap();
+        assert_eq!(code, 0);
     }
 }
 

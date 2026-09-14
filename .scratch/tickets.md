@@ -29,3 +29,4 @@
 - [x] B5 — constitution v0.2 (rules X-XII: Verification Context, assurance scale, VerifierBinding) + mirror, spec 003 (spec/plan/tasks). Gate Track B: 73 tests x3, 0 warnings, dogfood 5 stacks, report stable, no LLM in verify path, actor matrix green. DONE
 - [x] v0.3.1 — release workflow (5 targets tar.gz on tag), public composite action (downloads release binary for runner OS/arch, no build), docs. DONE
 - [x] v0.3.2 — CI matrix ubuntu/macos/windows (build+test+portable examples), POSIX examples gated to Linux explicitly. Native timeout + cmd/sh cfg-gate. DONE
+- [x] v0.3.4 — public Verifier trait (Shell/FileHash adapters, verifier_for dispatch, unknown type hard error, inline override refused for non-shell), registry `type` + expect_sha256 (string/table), examples/artifact demo (ACCEPT + tamper -> EvidenceRequired), 4 new unit tests, docs. DONE

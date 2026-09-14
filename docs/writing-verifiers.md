@@ -22,27 +22,58 @@ Design the expectation on the tool's real stdout (capture a run first; the
 reporter format is part of the contract, see the Node `ℹ fail 0` gotcha in
 `verification.md`).
 
-## 2. Write a code adapter (when exit codes are not enough)
+## 2. Built-in adapters (v0.3)
 
-The Verifier seam (planned v0.2+ as a trait in `uni-verify`, mirroring the
-Execution/Verification interfaces in the blueprint):
+`type` selects the adapter; `shell` is the default.
+
+| Type | Behavior | Extra registry fields |
+|---|---|---|
+| `shell` | runs the command via `sh -c` (POSIX) or `cmd /C` (Windows), native timeout | `run`, `expect`, `expect_not` |
+| `file-hash` | runs nothing; each expected path must exist and match its sha256 | `files`, `expect_sha256` |
+
+```toml
+[verifiers."artifact.digest"]
+type = "file-hash"
+files = ["dist/app.js"]
+expect_sha256 = "057095fd5ef5..."        # single-file shorthand
+# or per-path:
+# expect_sha256 = { "dist/app.js" = "...", "dist/app.css" = "..." }
+```
+
+Any other `type` is a hard error (a registry typo never silently falls back to
+running a command), and inline `shell` overrides are refused for non-shell
+types. See `examples/artifact/` for a working demo.
+
+## 3. Write a code adapter
+
+The seam is implemented in `crates/uni-verify` (`pub trait Verifier`):
 
 ```rust
 pub trait Verifier {
-    fn supports(&self, claim: &Claim) -> bool;
-    fn verify(&self, input: &VerificationInput) -> Result<Evidence>;
+    fn name(&self) -> &'static str;
+    fn run(&self, spec: &VerifierSpec, workspace: &Path) -> Result<VerifierOutcome>;
+}
+
+pub struct VerifierOutcome {
+    pub state: EvidenceState,   // Valid | Invalid
+    pub exit_code: i32,
+    pub command: String,
+    pub output: String,
 }
 ```
 
 An adapter must:
 
-1. Produce `Evidence` with every binding it relied on filled
-   (`commit_sha`, `workspace_dirty`, `artifact_hash` for watched files).
-2. Map "the tool said pass" to `state`, never to a custom truthiness.
-3. Be reproducible: no network, no clock, no RNG (the determinism rule).
-4. Register in `.uni/config.toml` only, so contracts stay declarative.
+1. Return raw observations only: `run_spec` wraps them into `Evidence` with
+   every binding (`commit_sha`, `workspace_dirty`, `artifact_hash`, actor,
+   context hashes). Never build `Evidence` by hand.
+2. Decide `Valid`/`Invalid` from deterministic observations; no network, no
+   clock, no RNG in the pass/fail decision.
+3. Never read the contract: only the authorized spec and the workspace.
+4. Declare `type` in the registry and refuse inline overrides (the loader and
+   `verifier_for` already enforce this for built-ins).
 
-Candidates for first-class adapters (ranked by v0.1 demand): git diff range,
+Candidates for the next adapters (ranked by demand): git diff range,
 Semgrep/CodeQL findings, Playwright report parser, Lighthouse budget, coverage
 ratio with claim-specific test selection.
 
@@ -51,3 +82,4 @@ ratio with claim-specific test selection.
 Given a fixture workspace + a fixed contract, assert the produced
 `Evidence.state` and the final `Decision`. External behavior only, never
 internals (same rule the core follows: test `assure()`, not the parser).
+`crates/uni-verify` unit tests are the model: `file_hash_adapter_matches_and_mismatches`.

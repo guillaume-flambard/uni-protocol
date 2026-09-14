@@ -31,3 +31,8 @@ expect = "pass 1"
 [verifiers."node.t.lower"]
 run = 'node --test --test-name-pattern "lowercased" examples/nodejs/slug.test.mjs'
 expect = "pass 1"
+
+[verifiers."artifact.digest"]
+type = "file-hash"
+files = ["examples/artifact/digest.txt"]
+expect_sha256 = "057095fd5ef5c4a083b16f72040c3388baddd3fc98d418533cc37df253daae2b"
