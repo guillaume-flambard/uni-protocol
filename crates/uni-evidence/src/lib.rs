@@ -193,3 +193,110 @@ pub fn load_valid_for_claim(
     }
     Some(ev)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn tmp(suffix: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "uni-ev-{suffix}-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(d.join(".uni/evidence")).unwrap();
+        d
+    }
+
+    fn ev() -> Evidence {
+        Evidence {
+            id: "c-abc".into(),
+            claim_id: "c".into(),
+            producer: "shell-verifier".into(),
+            command: "true".into(),
+            exit_code: 0,
+            output_hash: "h".into(),
+            output_excerpt: "".into(),
+            commit_sha: "sha1".into(),
+            workspace_dirty: false,
+            state: EvidenceState::Valid,
+            created_at: Utc::now(),
+            duration_ms: 1,
+            artifact_hash: String::new(),
+            fingerprint: "fp1".into(),
+        }
+    }
+
+    #[test]
+    fn sha256_known_vector() {
+        assert_eq!(
+            sha256_hex(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(sha256_hex(b"a").len(), 64);
+    }
+
+    #[test]
+    fn evidence_path_isolates_fingerprint() {
+        let a = evidence_path(std::path::Path::new(".uni"), "x", "fp1");
+        let b = evidence_path(std::path::Path::new(".uni"), "x", "fp2");
+        assert_ne!(a, b);
+        assert!(a.to_string_lossy().contains("x__fp1"));
+    }
+
+    #[test]
+    fn is_stale_matrix() {
+        let e = ev();
+        assert!(!is_stale(&e, "sha1", false));
+        assert!(is_stale(&e, "sha2", false));
+        assert!(is_stale(&e, "sha1", true));
+    }
+
+    #[test]
+    fn load_valid_for_claim_checks_everything() {
+        let d = tmp("load");
+        let du = d.join(".uni");
+        let mut e = ev();
+        save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
+        assert!(load_valid_for_claim(&du, "c", "fp1", "sha1", false, None).is_some());
+        assert!(load_valid_for_claim(&du, "c", "WRONG", "sha1", false, None).is_none());
+        assert!(load_valid_for_claim(&du, "c", "fp1", "other", false, None).is_none());
+        e.state = EvidenceState::Invalid;
+        save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
+        assert!(load_valid_for_claim(&du, "c", "fp1", "sha1", false, None).is_none());
+    }
+
+    #[test]
+    fn load_valid_for_claim_enforces_artifact_hash() {
+        let d = tmp("ah");
+        let du = d.join(".uni");
+        let mut e = ev();
+        e.artifact_hash = "aaa".into();
+        save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
+        assert!(load_valid_for_claim(&du, "c", "fp1", "sha1", false, Some("aaa")).is_some());
+        assert!(load_valid_for_claim(&du, "c", "fp1", "sha1", false, Some("bbb")).is_none());
+        assert!(load_valid_for_claim(&du, "c", "fp1", "sha1", false, None).is_none());
+    }
+
+    #[test]
+    fn lock_excludes_second_holder_and_releases() {
+        let d = tmp("lock");
+        let du = d.join(".uni");
+        let l1 = acquire_lock_with(&du, 3).unwrap();
+        assert!(acquire_lock_with(&du, 2).is_err());
+        drop(l1);
+        assert!(acquire_lock_with(&du, 2).is_ok());
+    }
+
+    #[test]
+    fn save_json_round_trip() {
+        let d = tmp("save");
+        let p = d.join(".uni/evidence/c__fp1.json");
+        save_json(&p, &ev()).unwrap();
+        let back: Evidence = load_json(&p).unwrap();
+        assert_eq!(back.claim_id, "c");
+    }
+}

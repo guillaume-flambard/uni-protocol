@@ -80,3 +80,39 @@ pub fn compile(c: &Contract) -> Result<Ir> {
 pub fn to_json(ir: &Ir) -> Result<String> {
     Ok(serde_json::to_string_pretty(ir)?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample() -> Contract {
+        uni_parser::parse(
+            "VERSION 0.1\nDOMAIN software\nINTENT demo\nGOAL\n ship it\nCLAIM a REQUIRED\n  ENSURE x\nINVARIANT b CRITICAL\n  ENSURE y\nVERIFY a\n  USING project.tests\nVERIFY b\n  USING project.tests\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n",
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn compile_maps_everything() {
+        let ir = compile(&sample()).unwrap();
+        assert_eq!(ir.uni_version, "0.1");
+        assert_eq!(ir.intent.id, "demo");
+        assert_eq!(ir.claims.len(), 2);
+        assert_eq!(ir.claims[0].kind, "claim");
+        assert!(!ir.claims[0].critical);
+        assert_eq!(ir.claims[1].kind, "invariant");
+        assert!(ir.claims[1].critical);
+        assert_eq!(ir.verification.len(), 2);
+        assert!(ir.acceptance.require_verified);
+    }
+
+    #[test]
+    fn to_json_round_trips_schema_keys() {
+        let ir = compile(&sample()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&to_json(&ir).unwrap()).unwrap();
+        for key in ["uni_version", "intent", "claims", "verification", "acceptance"] {
+            assert!(v.get(key).is_some(), "missing {key}");
+        }
+        assert!(v.get("constraints").is_none(), "constraints must be gone (A2)");
+    }
+}
