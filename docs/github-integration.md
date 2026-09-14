@@ -26,6 +26,17 @@ Exit codes map 1:1 to review gates:
 | 1 + "UNI EVIDENCE_REQUIRED" | missing/stale proof | failure, actionable ("Run: uni verify <claim>") |
 | 1 + "UNI ESCALATED" | policy wants a human | action required |
 
+## Where the jobs run
+
+`push` runs on the lab's self-hosted runner (`self-hosted,Linux,X64,uni-protocol`,
+installed by the `github-runner` role in `lab-infra`): 8 native cores, no
+per-minute billing, the release binary already proven on the same architecture
+the Linux artifacts target. `pull_request` stays on GitHub-hosted `ubuntu-latest`
+on purpose: the repository is public, and a fork's code must never execute on
+the VPS. macOS and Windows cannot be self-hosted here, so they remain on GitHub
+images. The runner is repo-scoped and labelled, so it cannot be picked up by
+another repository's workflow.
+
 ## Supported platforms (v0.3)
 
 `cargo test` and the pure-Rust examples (`hello`, `multi`, `booking`) run on

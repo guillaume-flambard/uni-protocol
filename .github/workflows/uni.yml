@@ -1,64 +1,99 @@
 name: uni
 
+# Self-hosted on push, hosted on pull_request. The runner lives on the lab VPS;
+# a pull request from a fork must never execute code there, so PRs (and the
+# macOS/Windows legs, which cannot be self-hosted) stay on GitHub images.
 on: [push, pull_request]
 
+concurrency:
+  group: uni-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # Core portability: the crates must compile and their unit tests must pass on
-  # every supported platform. The shell verifier is platform-gated (`sh -c` on
-  # POSIX, `cmd /C` on Windows) and timeouts are native.
-  matrix:
+  build-and-test:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          # The lab runner: 8 cores, native Linux, no per-runner minutes.
+          - name: linux-selfhosted
+            runner: '["self-hosted","Linux","X64","uni-protocol"]'
+            event: push
+            full: true
+          # Same job on a GitHub image, for pull requests only.
+          - name: linux-pr
+            runner: '["ubuntu-latest"]'
+            event: pull_request
+            full: true
+          - name: macos
+            runner: '["macos-latest"]'
+            event: any
+            full: true
+          - name: windows
+            runner: '["windows-latest"]'
+            event: any
+            full: false
+    runs-on: ${{ fromJSON(matrix.runner) }}
+    if: matrix.event == 'any' || matrix.event == github.event_name
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ matrix.name }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ matrix.name }}-cargo-
       - name: Build
         run: cargo build --release
-      - name: Unit tests (portable)
+      # Unit tests are portable and run everywhere.
+      - name: Unit tests
         run: cargo test --lib
       # CLI integration tests drive the shell verifier with POSIX commands
-      # (true, false, grep, sleep). They are POSIX-only by construction, and
-      # pretending otherwise would be a lie in the matrix.
+      # (true, false, grep, sleep). POSIX-only by construction, so Windows is
+      # excluded rather than pretended.
       - name: Integration tests (POSIX only)
-        if: runner.os != 'Windows'
+        if: matrix.full
         run: cargo test
       - name: Verify portable examples
-        if: runner.os != 'Windows'
+        if: matrix.full
         run: |
           ./target/release/uni verify examples/hello/hello.uni
           ./target/release/uni verify examples/multi/multi.uni
           ./target/release/uni verify examples/booking/booking.uni
         shell: bash
-      - name: UNI Assurance (PR check view)
-        if: matrix.os == 'ubuntu-latest'
-        run: ./target/release/uni report >> "$GITHUB_STEP_SUMMARY"
-        shell: bash
-
-  # Examples that need a POSIX shell or a language runtime: forbid (grep),
-  # python (unittest), node (node --test).
-  examples-posix:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release
-      - name: Verify POSIX-shell examples
+      # forbid (grep), python (unittest), node (node --test), artifact
+      # (file-hash, no runtime).
+      - name: Verify POSIX-shell and runtime examples
+        if: matrix.name == 'linux-selfhosted' || matrix.name == 'linux-pr'
         run: |
           ./target/release/uni verify examples/forbid/forbid.uni
           ./target/release/uni verify examples/python/contract.uni
           ./target/release/uni verify examples/nodejs/contract.uni
           ./target/release/uni verify examples/artifact/artifact.uni
-      - name: Registry trust boundary unchanged
+      - name: Trust boundary unchanged
+        if: matrix.name == 'linux-selfhosted'
         run: ./target/release/uni doctor
+      - name: UNI Assurance (PR check view)
+        if: matrix.name == 'linux-selfhosted' || matrix.name == 'linux-pr'
+        run: ./target/release/uni report >> "$GITHUB_STEP_SUMMARY"
 
   # The published action, exercised for real: it downloads the release binary
   # for the runner platform. The artifact example runs no runtime at all
   # (file-hash), so this isolates the download-and-run path.
   action-smoke:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - runner: '["self-hosted","Linux","X64","uni-protocol"]'
+            event: push
+          - runner: '["ubuntu-latest"]'
+            event: pull_request
+    runs-on: ${{ fromJSON(matrix.runner) }}
+    if: matrix.event == github.event_name
     steps:
       - uses: actions/checkout@v4
       - name: Verify with the published action
