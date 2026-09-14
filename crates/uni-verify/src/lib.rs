@@ -26,6 +26,11 @@ pub struct VerifierSpec {
     /// file-hash only: expected sha256 per workspace-relative path.
     pub expect_sha256: std::collections::BTreeMap<String, String>,
     pub timeout: u64,
+    /// Time dimension of the Verification Context: after this many hours the
+    /// evidence is stale and must be re-established. 0 = never expires.
+    /// Use it for claims whose truth decays (a security scan, a dependency
+    /// audit, an availability probe), not for a deterministic test result.
+    pub max_age_hours: u64,
 }
 
 impl VerifierSpec {
@@ -38,6 +43,7 @@ impl VerifierSpec {
             files: vec![],
             expect_sha256: Default::default(),
             timeout: DEFAULT_TIMEOUT_SECS,
+            max_age_hours: 0,
         }
     }
 }
@@ -93,12 +99,25 @@ pub fn load_registry(dot_uni: &std::path::Path) -> std::collections::HashMap<Str
                     _ => {}
                 }
                 let timeout = tbl.get("timeout").and_then(|t| t.as_integer()).unwrap_or(DEFAULT_TIMEOUT_SECS as i64) as u64;
+                let max_age_hours = tbl
+                    .get("max_age_hours")
+                    .and_then(|h| h.as_integer())
+                    .unwrap_or(0) as u64;
                 let usable = (kind == "shell" && !run.is_empty())
                     || (kind == "file-hash" && !expect_sha256.is_empty());
                 if usable {
                     out.insert(
                         k.clone(),
-                        VerifierSpec { kind, run, expect, expect_not, files, expect_sha256, timeout },
+                        VerifierSpec {
+                            kind,
+                            run,
+                            expect,
+                            expect_not,
+                            files,
+                            expect_sha256,
+                            timeout,
+                            max_age_hours,
+                        },
                     );
                 }
             }
@@ -272,6 +291,14 @@ pub fn run_spec(
     let mut ev = build_evidence(claim_id, verifier.name(), &outcome.command, &outcome, workspace);
     ev.duration_ms = started.elapsed().as_millis();
     ev.artifact_hash = artifact_hash(spec, workspace).unwrap_or_default();
+    // Time dimension: a proof whose truth decays carries its own expiry, so the
+    // loader needs no registry access to honour it.
+    if spec.max_age_hours > 0 {
+        ev.expires_at = Some(
+            ev.created_at
+                + chrono::Duration::hours(spec.max_age_hours.min(i64::MAX as u64) as i64),
+        );
+    }
     // Evidence Completeness Principle: a verifier that declares watched files
     // it cannot observe has not covered its subject. Storing that as "no
     // binding" would let a later appearance of the files count as a cache hit.
@@ -468,6 +495,8 @@ fn build_evidence(
         executor: uni_evidence::Actor::default(),
         // Authorization is attached by cmd_verify from the loaded binding.
         binding_hash: String::new(),
+        // Expiry is attached by run_spec from the verifier spec.
+        expires_at: None,
     }
 }
 
@@ -602,6 +631,34 @@ mod tests {
         let (code, full) = run_shell("sleep 30", &d, 1).unwrap();
         assert_eq!(code, -1);
         assert!(full.contains("killed after 1s timeout"), "{full}");
+    }
+
+    #[test]
+    fn registry_parses_max_age_hours() {
+        let d = tmp("maxage");
+        std::fs::write(
+            d.join(".uni/config.toml"),
+            "[verifiers.\"scan\"]\nrun = \"true\"\nmax_age_hours = 24\n\n[verifiers]\n\"plain\" = \"true\"\n",
+        )
+        .unwrap();
+        let r = load_registry(&d.join(".uni"));
+        assert_eq!(r["scan"].max_age_hours, 24);
+        assert_eq!(r["plain"].max_age_hours, 0, "absent means never expires");
+    }
+
+    #[test]
+    fn run_spec_stamps_the_expiry_from_the_spec() {
+        let d = tmp("stamp");
+        let mut s = VerifierSpec::shell("true");
+        s.max_age_hours = 2;
+        let ev = run_spec("c", "k", &s, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        let expiry = ev.expires_at.expect("expiry must be stamped");
+        let delta = expiry - ev.created_at;
+        assert_eq!(delta.num_hours(), 2);
+        // No max_age declared: no expiry recorded.
+        let plain = VerifierSpec::shell("true");
+        let ev2 = run_spec("c", "k", &plain, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        assert!(ev2.expires_at.is_none());
     }
 
     #[test]

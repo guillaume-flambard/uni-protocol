@@ -30,6 +30,7 @@ expect = "test result: ok. 1 passed"   # substring required in output
 expect_not = "EVIL_WRITE"              # substring forbidden in output
 files = ["src/**"]                     # content-bound invalidation globs
 timeout = 120                          # seconds
+max_age_hours = 24                     # time-bound: the proof decays
 ```
 
 Gotchas verified against real runners: match the reporter the runtime actually

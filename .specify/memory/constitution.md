@@ -33,7 +33,7 @@ v0.1 ships filesystem-only (.uni/), JSON Schema canonical. No Postgres, no Proto
 A claim MUST NOT be accepted from evidence whose identity, scope or observed subject does not fully cover the property being asserted. Partial stdout, partial filesystem, wrong commit, wrong environment, wrong contract, wrong verifier version, expired evidence: all invalidate.
 
 ### X. Verification Context
-Evidence validity = Contract x Subject x Verifier x VerifierConfig x Environment x Policy x Time. Drift on contract, subject, verifier, config, or environment forces re-run; policy drift forces decision recompute. A changed registry names its diff and requires human review.
+Evidence validity = Contract x Subject x Verifier x VerifierConfig x Environment x Policy x Time. Drift on contract, subject, verifier, config, or environment forces re-run; policy drift forces decision recompute; an expired proof is stale and re-established. Time decides availability, not the decision. A changed registry names its diff and requires human review.
 
 ### XI. Assurance scale
 A2 trusted verifier; A3-D independent actor with self-declared identity; A3 independent actor with externally verified identity; A4 signed provenance (reserved). Independence and identity assurance are distinct: a flag is a declaration, never a proof.
@@ -45,4 +45,4 @@ A resolution requirement executes only under a human-authorized binding (claim x
 
 Constitution supersedes all other practices. Amendments require documentation and a migration note. Inert syntax is a hard error, never a silent no-op.
 
-**Version**: 0.5.0 | **Ratified**: 2026-09-13 | **Last Amended**: 2026-09-14
+**Version**: 0.6.0 | **Ratified**: 2026-09-13 | **Last Amended**: 2026-09-14

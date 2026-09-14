@@ -524,3 +524,53 @@ fn declared_watch_matching_nothing_is_invalid() {
         "subject drift must stale the previous proof, journal:\n{after}"
     );
 }
+
+/// Time dimension: a verifier may declare `max_age_hours`. Once the proof is
+/// older than its window it is stale, so the verifier runs again. The expiry
+/// travels on the evidence, so a registry change cannot extend it.
+#[test]
+fn expired_evidence_is_reestablished() {
+    let dir = mk_repo("expiry");
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers.\"scan\"]\nrun = \"true\"\nmax_age_hours = 1\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("c.uni"),
+        "VERSION 0.1\nDOMAIN software\nINTENT expiry\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING scan\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n",
+    )
+    .unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+
+    let first = out(&["verify", "c.uni"], &dir);
+    assert!(first.contains("Accepted"), "{first}");
+
+    // The stamped expiry must be recorded on the evidence file.
+    let ev_file = std::fs::read_dir(dir.join(".uni/evidence")).unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.extension().map(|x| x == "json").unwrap_or(false))
+        .expect("evidence written");
+    let mut ev: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&ev_file).unwrap()).unwrap();
+    assert!(ev["expires_at"].is_string(), "expiry must be recorded: {ev}");
+    // Age it: rewrite the expiry into the past, as elapsed time would.
+    let past = chrono::Utc::now() - chrono::Duration::hours(2);
+    ev["expires_at"] = serde_json::json!(past.to_rfc3339());
+    std::fs::write(&ev_file, serde_json::to_string_pretty(&ev).unwrap()).unwrap();
+
+    let stale_before = std::fs::read_to_string(dir.join(".uni/events.jsonl")).unwrap()
+        .matches("EvidenceStale").count();
+    let second = out(&["verify", "c.uni"], &dir);
+    assert!(second.contains("Accepted"), "a re-established proof accepts again: {second}");
+    let journal = std::fs::read_to_string(dir.join(".uni/events.jsonl")).unwrap();
+    assert!(
+        journal.matches("EvidenceStale").count() > stale_before,
+        "expiry must mark the old proof stale:\n{journal}"
+    );
+    // And the fresh proof carries a new window.
+    let ev2: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&ev_file).unwrap()).unwrap();
+    assert_ne!(ev2["expires_at"], ev["expires_at"], "the window must be renewed");
+}

@@ -32,7 +32,11 @@ enum Cmd {
     Inspect { file: PathBuf },
     ImportSpeckit { dir: PathBuf },
     Report,
-    Events,
+    Events {
+        /// Read the retained archives as well as the current journal.
+        #[arg(long)]
+        all: bool,
+    },
     Lint { file: PathBuf },
     Doctor,
     #[command(subcommand)]
@@ -98,7 +102,7 @@ fn main() -> Result<()> {
         Cmd::Inspect { file } => cmd_inspect(&file, cli.json),
         Cmd::ImportSpeckit { dir } => cmd_import_speckit(&dir, cli.json),
         Cmd::Report => cmd_report(cli.json),
-        Cmd::Events => cmd_events(cli.json, 50),
+        Cmd::Events { all } => cmd_events(cli.json, 50, all),
         Cmd::Lint { file } => cmd_lint(&file, cli.json),
         Cmd::Doctor => cmd_doctor(cli.json),
         Cmd::Pack(sub) => cmd_pack(sub, cli.json),
@@ -387,7 +391,20 @@ fn cmd_doctor(as_json: bool) -> Result<()> {
         .append(true)
         .open(events::journal_path())
         .is_ok();
-    checks.push(("journal writable".into(), jr_ok, String::new()));
+    let jr_size = std::fs::metadata(events::journal_path())
+        .map(|m| m.len())
+        .unwrap_or(0);
+    let jr_archives = events::archives().len();
+    checks.push((
+        "journal writable".into(),
+        jr_ok,
+        format!(
+            "{} KiB current, {} archive(s), rotates at {} KiB",
+            jr_size / 1024,
+            jr_archives,
+            events::JOURNAL_MAX_BYTES / 1024
+        ),
+    ));
 
     let failed = checks.iter().filter(|(_, ok, _)| !ok).count();
     if as_json {
@@ -534,8 +551,12 @@ fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
     Ok(())
 }
 
-fn cmd_events(as_json: bool, max: usize) -> Result<()> {
-    let evts = events::read_all()?;
+fn cmd_events(as_json: bool, max: usize, all: bool) -> Result<()> {
+    let evts = if all {
+        events::read_all_including_archives()?
+    } else {
+        events::read_all()?
+    };
     let n = evts.len();
     if as_json {
         for e in &evts {

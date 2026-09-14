@@ -56,6 +56,11 @@ pub struct Evidence {
     /// (empty when the verification carries no requirement).
     #[serde(default)]
     pub binding_hash: String,
+    /// Time dimension: when this proof stops being valid (None = no expiry).
+    /// Stored on the evidence so the expiry travels with the proof, and a
+    /// registry change cannot silently extend it.
+    #[serde(default)]
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 /// Current verification context, computed fresh on every verify run.
@@ -317,7 +322,12 @@ pub fn load_valid_for_claim(
         || (!ev.platform.is_empty() && ev.platform != ctx.platform)
         || (!ev.binding_hash.is_empty()
             && ctx.binding_hash.as_deref() != Some(ev.binding_hash.as_str()));
-    if drifted {
+    // Expired evidence is stale, not missing: the proof existed and decayed.
+    let expired = ev
+        .expires_at
+        .map(|t| t <= chrono::Utc::now())
+        .unwrap_or(false);
+    if drifted || expired {
         ev.state = EvidenceState::Stale;
         return CacheOutcome::Stale;
     }
@@ -360,6 +370,7 @@ mod tests {
             duration_ms: 1,
             artifact_hash: String::new(),
             fingerprint: "fp1".into(),
+            expires_at: None,
             registry_hash: "reg1".into(),
             policy_hash: "pol1".into(),
             contract_hash: "con1".into(),
@@ -460,6 +471,27 @@ mod tests {
         let mut drift = ctx();
         drift.platform = "darwin-arm64".into();
         assert!(matches!(load_valid_for_claim(&du, "c", &drift), Stale));
+    }
+
+    #[test]
+    fn expired_evidence_is_stale_not_missing() {
+        use CacheOutcome::*;
+        let d = tmp("expiry");
+        let du = d.join(".uni");
+        let mut e = ev();
+        e.expires_at = Some(Utc::now() - chrono::Duration::hours(1));
+        save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
+        assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Stale));
+
+        // Still valid while inside its window.
+        e.expires_at = Some(Utc::now() + chrono::Duration::hours(1));
+        save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
+        assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Hit(_)));
+
+        // No expiry set: never expires (backward compatible with old files).
+        e.expires_at = None;
+        save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
+        assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Hit(_)));
     }
 
     #[test]

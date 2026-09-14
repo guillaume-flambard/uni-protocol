@@ -1,9 +1,25 @@
 # UNI — tickets
 
-Current: **v0.5.2** (latest release, `uni 0.5.2`) · 97 tests, 0 warnings ·
+Current: **v0.6.0** (latest release, `uni 0.5.2`) · 97 tests, 0 warnings ·
 public repo `github.com/guillaume-flambard/uni-protocol` · CI green on
 ubuntu/macOS/Windows + POSIX examples + a smoke job that runs the published
 action.
+
+## Done — evidence lifecycle completed (v0.6.0)
+
+The two gaps left in the Verification Context are closed:
+
+- **Time is real.** A verifier may declare `max_age_hours`; the expiry is stamped
+  on the evidence so it travels with the proof and a registry change cannot
+  extend it. An expired proof is stale, the verifier re-runs, a fresh window is
+  stamped. This is the one clock-reading predicate, and it decides availability,
+  not the decision (documented in `docs/decisions.md`, constitution rule 10).
+- **The journal rotates.** Past 1 MiB the current journal is archived as
+  `events.<timestamp>.jsonl`, keeping the three newest; `uni events --all` reads
+  the history and `uni doctor` reports size and cap. The retention predicate
+  excludes the live journal: a test caught a version that would have pruned it.
+
+104 tests. Remaining gap in this area: none known.
 
 ## Done — CI hosting decision (2026-09-14)
 

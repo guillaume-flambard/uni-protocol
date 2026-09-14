@@ -38,7 +38,7 @@ seven dimensions (Verification Context, v0.2):
 | Verifier configuration | `registry_hash` (sha256 of `config.toml`) | re-run |
 | Environment | `commit_sha` + dirty flag, `platform` (os-arch) | re-run |
 | Policy | `policy_hash` (recorded for audit) | decision recompute, no re-run |
-| Time | `created_at` (recorded; expiry policies are v0.3+) | nothing yet |
+| Time | `created_at`, `expires_at` (from the verifier's `max_age_hours`) | expired evidence is stale, so the verifier re-runs |
 
 1. **Git binding** (`is_stale`): if HEAD moved or dirty-state changed since the
    run, the stored evidence is Stale and `uni verify` re-runs the verifier.
@@ -63,6 +63,15 @@ seven dimensions (Verification Context, v0.2):
 5. **Stale-but-unreprovable**: a claim whose previous proof drifted AND whose
    re-run cannot renew it escalates under `escalate_on_stale` (human look),
    instead of merely reporting missing evidence.
+6. **Time**: a verifier may declare `max_age_hours`. The expiry is stamped on
+   the evidence at run time and travels with it, so nothing in the registry can
+   silently extend a proof that already decayed. Use it for claims whose truth
+   decays (a security scan, a dependency audit, an availability probe) and not
+   for deterministic test results, which do not expire. This is the one
+   time-dependent dimension of validity by design: the decision for a given
+   `(contract, evidence, policy)` is still deterministic, while *whether* a
+   proof is still valid is asked at read time. An expired proof is stale, not
+   missing: the verifier runs again and a fresh window is stamped.
 
 A decision is never silently reused across a binding break: old evidence cannot
 mask a new commit (e2e test: `stale_evidence_does_not_mask_new_commit`).
@@ -72,6 +81,12 @@ mask a new commit (e2e test: `stale_evidence_does_not_mask_new_commit`).
 Every verify appends events (IntentVerified, EvidenceRun, EvidenceReused,
 EvidenceStale, RegistryChanged, BindingAuthorized, IdentityUnverified,
 DecisionIssued) to `.uni/events.jsonl` with `uni.*` attributes. See `uni events`.
+
+The journal is append-only but not unbounded: once it passes 1 MiB it is
+archived as `events.<timestamp>.jsonl` and a fresh one starts, keeping the three
+newest archives. `uni events` reads the current window, `uni events --all` reads
+the archives too, and `uni doctor` reports the size and the rotation cap. The
+live journal is never pruned as if it were an archive.
 
 ## Bundles (v0.3)
 

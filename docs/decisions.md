@@ -3,6 +3,11 @@
 The decision function is deterministic: same contract, same evidence, same
 policies, same decision. No LLM, no clock, no RNG.
 
+One predicate reads the clock by design: evidence expiry (`max_age_hours`). It
+does not make the decision non-deterministic; it decides whether a proof is
+still available to the decision. An expired proof is stale, the verifier re-runs,
+and the decision is taken on the fresh evidence.
+
 ## Stage 1: evidence truth table (`evaluate`)
 
 | Condition | Decision |
