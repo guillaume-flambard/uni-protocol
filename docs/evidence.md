@@ -65,4 +65,23 @@ mask a new commit (e2e test: `stale_evidence_does_not_mask_new_commit`).
 ## Audit trail
 
 Every verify appends events (IntentVerified, EvidenceRun, EvidenceReused,
+EvidenceStale, RegistryChanged, BindingAuthorized, IdentityUnverified,
 DecisionIssued) to `.uni/events.jsonl` with `uni.*` attributes. See `uni events`.
+
+## Bundles (v0.3)
+
+```bash
+uni bundle export contract.uni --out bundle.jsonl
+uni bundle verify bundle.jsonl    # offline, read-only
+```
+
+A bundle is JSONL: a header (version, intent, registry_hash, contract_hash,
+tool) then one record per artifact (contract, registry, policy, evidence,
+binding, decision, events). Every record carries `sha256` over its canonical
+body, so transport tampering is detectable offline. Cross-checks reject
+bundles whose pieces do not belong together: evidence gathered under another
+registry or contract, a decision citing claims with no bundled evidence, a
+REQUIRE without its binding, evidence for claims absent from the contract.
+
+Importing a bundle never injects proofs into a live cache: verification only
+reports. Transport is not authority.

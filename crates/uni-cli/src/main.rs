@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+mod bundle;
 mod events;
 use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
@@ -47,6 +48,20 @@ enum Cmd {
     },
     /// List authorized verifier bindings.
     Bindings,
+    #[command(subcommand)]
+    Bundle(BundleCmd),
+}
+
+#[derive(Subcommand)]
+enum BundleCmd {
+    /// Export a contract's audit surface (contract, registry, evidence, bindings, decision, events)
+    Export {
+        file: PathBuf,
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Verify a bundle offline: record integrity + context cross-checks. Never touches the live cache.
+    Verify { file: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -79,6 +94,7 @@ fn main() -> Result<()> {
             cmd_bind(&claim, &verifier, &requirement, cli.json)
         }
         Cmd::Bindings => cmd_bindings(cli.json),
+        Cmd::Bundle(sub) => cmd_bundle(sub, cli.json),
     }
 }
 
@@ -159,6 +175,64 @@ fn cmd_pack(sub: PackCmd, as_json: bool) -> Result<()> {
                 println!("{}", serde_json::json!({ "written": dst.display().to_string(), "pack": pack, "template": name }));
             } else {
                 println!("wrote {}\nedit claims + verifier refs, then: uni lint {}", dst.display(), dst.display());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn cmd_bundle(sub: BundleCmd, as_json: bool) -> Result<()> {
+    match sub {
+        BundleCmd::Export { file, out } => {
+            let du = dot_uni();
+            let out = out.unwrap_or_else(|| {
+                PathBuf::from(format!("uni-bundle-{}.jsonl", du.display().to_string().replace(['/', '.'], "-")))
+            });
+            let header = bundle::export(&du, &file, &out)?;
+            if as_json {
+                println!("{}", serde_json::json!({
+                    "bundle": out.display().to_string(),
+                    "version": header.version,
+                    "intent": header.intent,
+                    "records": header.records,
+                    "registry_hash": header.registry_hash,
+                    "contract_hash": header.contract_hash,
+                }));
+            } else {
+                println!("bundle written: {}", out.display());
+                println!("intent:  {}", header.intent);
+                println!("records: {}", header.records);
+                println!("tool:    {}", header.tool);
+            }
+        }
+        BundleCmd::Verify { file } => {
+            let (header, report) = bundle::verify(&file)?;
+            let ok = report.integrity_errors.is_empty() && report.cross_check_errors.is_empty();
+            if as_json {
+                println!("{}", serde_json::json!({
+                    "bundle": file.display().to_string(),
+                    "intent": header.intent,
+                    "records": report.records,
+                    "claims_total": report.claims_total,
+                    "claims_covered": report.claims_covered,
+                    "integrity_errors": report.integrity_errors,
+                    "cross_check_errors": report.cross_check_errors,
+                    "ok": ok,
+                }));
+            } else {
+                println!("bundle: {}", file.display());
+                println!("intent: {}  records: {}", header.intent, report.records);
+                println!("claims covered by evidence: {}/{}", report.claims_covered, report.claims_total);
+                for e in &report.integrity_errors {
+                    println!("  INTEGRITY {e}");
+                }
+                for e in &report.cross_check_errors {
+                    println!("  CROSS-CHECK {e}");
+                }
+                println!("\nOK: {ok}");
+            }
+            if !ok {
+                return Err(anyhow!("uni bundle verify: bundle is not internally consistent"));
             }
         }
     }
@@ -905,6 +979,7 @@ fn cmd_import_speckit(dir: &Path, as_json: bool) -> Result<()> {
     let constitution = read_opt("constitution.md");
     let spec = read_opt("spec.md");
     let plan = read_opt("plan.md");
+    let tasks = read_opt("tasks.md");
     if spec.trim().is_empty() {
         return Err(anyhow!("no spec.md in {}", dir.display()));
     }
@@ -913,10 +988,30 @@ fn cmd_import_speckit(dir: &Path, as_json: bool) -> Result<()> {
     // - "#### Scenario: ..." headings (Spec Kit format) → one claim each
     // - "- [ ]" acceptance checkboxes → one claim each
     let mut claims: Vec<(String, String)> = vec![];
-    for line in spec.lines().chain(plan.lines()) {
+    // Strip markdown list markers anywhere they appear: bullets, numeric
+    // ("1. " / "1) "), and heading hashes. Requirements nested in numbered
+    // lists are common in real specs and used to be silently lost.
+    let strip_markers = |line: &str| -> String {
         let mut t = line.trim();
-        t = t.strip_prefix("- ").unwrap_or(t); // list marker
-        t = t.strip_prefix("#### ").unwrap_or(t); // heading level 4
+        let digits = t.chars().take_while(|c| c.is_ascii_digit()).count();
+        if digits > 0 {
+            let rest = &t[digits..];
+            if let Some(r) = rest.strip_prefix(". ").or_else(|| rest.strip_prefix(") ")) {
+                t = r.trim_start();
+            }
+        }
+        for p in ["- ", "* ", "+ "] {
+            if let Some(r) = t.strip_prefix(p) {
+                t = r.trim_start();
+            }
+        }
+        t = t.strip_prefix("#### ").unwrap_or(t);
+        t = t.strip_prefix("### ").unwrap_or(t);
+        t.to_string()
+    };
+    for line in spec.lines().chain(plan.lines()).chain(tasks.lines()) {
+        let owned = strip_markers(line);
+        let t: &str = owned.as_str();
         let (maybe_id, text) = if t.starts_with("FR-") {
             // FR-001: description | FR-001 description
             let head: &str = t.split([':', ' ']).next().unwrap_or("");
@@ -933,8 +1028,8 @@ fn cmd_import_speckit(dir: &Path, as_json: bool) -> Result<()> {
             (t.split_whitespace().next().unwrap_or("").to_lowercase(), t.to_string())
         } else if let Some(s) = t.strip_prefix("Scenario:") {
             (format!("scenario-{:02}", claims.len() + 1), s.trim().to_string())
-        } else if t.starts_with("[ ]") {
-            (format!("check-{:02}", claims.len() + 1), t.trim_start_matches("[ ]").trim().to_string())
+        } else if t.starts_with("[ ]") || t.starts_with("[x]") {
+            (format!("check-{:02}", claims.len() + 1), t[4..].trim().to_string())
         } else {
             continue;
         };
@@ -973,7 +1068,7 @@ fn cmd_import_speckit(dir: &Path, as_json: bool) -> Result<()> {
         })).collect::<Vec<_>>(),
         "note": "CANDIDATE — review required. LLMs/heuristics propose, humans authorize.",
         "candidate_dsl": out_dsl.display().to_string(),
-        "sources": {"constitution_chars": constitution.len(), "spec_chars": spec.len(), "plan_chars": plan.len()},
+        "sources": {"constitution_chars": constitution.len(), "spec_chars": spec.len(), "plan_chars": plan.len(), "tasks_chars": tasks.len()},
     });
     let out = serde_json::to_string_pretty(&candidate)?;
     if as_json {

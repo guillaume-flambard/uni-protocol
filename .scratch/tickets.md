@@ -30,3 +30,5 @@
 - [x] v0.3.1 — release workflow (5 targets tar.gz on tag), public composite action (downloads release binary for runner OS/arch, no build), docs. DONE
 - [x] v0.3.2 — CI matrix ubuntu/macos/windows (build+test+portable examples), POSIX examples gated to Linux explicitly. Native timeout + cmd/sh cfg-gate. DONE
 - [x] v0.3.4 — public Verifier trait (Shell/FileHash adapters, verifier_for dispatch, unknown type hard error, inline override refused for non-shell), registry `type` + expect_sha256 (string/table), examples/artifact demo (ACCEPT + tamper -> EvidenceRequired), 4 new unit tests, docs. DONE
+- [x] v0.3.3 — import-speckit: numbered-list + bold + heading markers stripped, tasks.md read, checked/unchecked checkboxes, markdown-shapes golden test. DONE
+- [x] v0.3.5 — bundles: `uni bundle export` (contract/registry/policy/evidence/binding/decision/events, atomic write) and `uni bundle verify` (per-record sha256, context cross-checks, read-only), 4 integration tests, docs. DONE

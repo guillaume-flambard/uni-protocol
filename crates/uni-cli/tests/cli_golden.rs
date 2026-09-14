@@ -286,3 +286,32 @@ fn golden_software_pack() {
     assert!(lint.status.success(), "{}", String::from_utf8_lossy(&lint.stderr));
     assert!(String::from_utf8_lossy(&lint.stdout).contains("clean"));
 }
+
+/// v0.3.3: markdown shapes that used to lose requirements: numbered lists,
+/// bullets with bold, and tasks.md checkboxes (already checked or not).
+#[test]
+fn golden_import_speckit_markdown_shapes() {
+    let dir = std::env::temp_dir().join(format!("sk-shapes-{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/contracts")).unwrap();
+    std::fs::write(dir.join("spec.md"),
+"# Spec\n1. **FR-010**: numbered list requirement\n- **FR-011**: bullet bold requirement\n").unwrap();
+    std::fs::write(dir.join("tasks.md"),
+"## Tasks\n- [ ] unchecked task\n- [x] already checked task\n").unwrap();
+    std::fs::write(dir.join("constitution.md"), "# C\n").unwrap();
+    std::fs::write(dir.join("plan.md"), "# P\n").unwrap();
+    let o = Command::new(bin()).args(["import-speckit", dir.to_str().unwrap()])
+        .current_dir(&dir).output().unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let mut dsl = String::new();
+    for e in std::fs::read_dir(dir.join(".uni/contracts")).unwrap() {
+        let p = e.unwrap().path();
+        if p.extension().map(|x| x == "uni").unwrap_or(false) {
+            dsl = std::fs::read_to_string(&p).unwrap();
+        }
+    }
+    assert!(dsl.contains("CLAIM fr-010"), "{dsl}");
+    assert!(dsl.contains("CLAIM fr-011"), "{dsl}");
+    assert!(dsl.contains("CLAIM check-03"), "{dsl}");
+    assert!(dsl.contains("CLAIM check-04"), "{dsl}");
+}

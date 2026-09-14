@@ -24,10 +24,15 @@ Rust workspace, single CLI binary `uni`. Deterministic. Filesystem-only. No clou
 | | `uni events` | append-only journal with `uni.*` attributes (OTel-ready) |
 | Health | `uni doctor` | workspace healthcheck (git, registry, policies, writability) |
 | Packs | `uni pack list` / `uni pack template <pack> <name>` | Domain Packs: reusable claim templates (`packs/software`) |
+| Authorization | `uni bind` / `uni bindings` | VerifierBindings for REQUIRE-carrying verifications (human act, journaled) |
+| Transport | `uni bundle export` / `uni bundle verify` | audit surface as JSONL with per-record sha256; verify is offline and read-only |
 | Study | `experiments/study-50/` | harness + metrics (agent self-report vs UNI vs human) |
 
 Stack independence verified in CI: `examples/` covers Rust, Python (unittest),
-and Node (`node --test`) - same contract model, different verifiers.
+Node (`node --test`), and a `file-hash` artifact digest. CI matrix:
+ubuntu, macos, windows for the core; POSIX-shell examples gated to Linux.
+Release workflow builds five cross-compiled targets; the composite action in
+`adapters/github/` downloads the matching release binary (no build).
 
 ## DSL (closed vocabulary v0.1)
 
