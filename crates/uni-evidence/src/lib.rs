@@ -85,8 +85,69 @@ pub fn save_json(path: &std::path::Path, value: &impl Serialize) -> Result<()> {
     if let Some(p) = path.parent() {
         std::fs::create_dir_all(p)?;
     }
-    std::fs::write(path, serde_json::to_string_pretty(value)?)?;
+    let text = serde_json::to_string_pretty(value)?;
+    // Atomic write: tmp sibling + rename, so a concurrent or killed writer
+    // can never leave a half-written JSON behind.
+    let tmp = path.with_extension(format!(
+        "tmp-{}",
+        std::process::id()
+    ));
+    std::fs::write(&tmp, text)?;
+    #[cfg(windows)]
+    let _ = std::fs::remove_file(path);
+    std::fs::rename(&tmp, path)?;
     Ok(())
+}
+
+/// Exclusive, process-safe lock for the persist phase (`.uni/.lock`).
+/// Std-only (create_new is atomic): no new dependency, works on Windows.
+/// A lock older than STALE_AFTER is treated as orphaned (crashed holder) and reaped.
+pub struct DirLock {
+    path: std::path::PathBuf,
+}
+
+const STALE_AFTER: std::time::Duration = std::time::Duration::from_secs(600);
+const ACQUIRE_RETRIES: u32 = 100;
+const ACQUIRE_WAIT: std::time::Duration = std::time::Duration::from_millis(50);
+
+pub fn acquire_lock(dot_uni: &std::path::Path) -> Result<DirLock> {
+    acquire_lock_with(dot_uni, ACQUIRE_RETRIES)
+}
+
+pub fn acquire_lock_with(dot_uni: &std::path::Path, retries: u32) -> Result<DirLock> {
+    std::fs::create_dir_all(dot_uni)?;
+    let path = dot_uni.join(".lock");
+    for _ in 0..retries.max(1) {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(_) => return Ok(DirLock { path }),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                if let Ok(meta) = std::fs::metadata(&path) {
+                    if let Ok(mtime) = meta.modified() {
+                        if mtime.elapsed().unwrap_or_default() > STALE_AFTER {
+                            let _ = std::fs::remove_file(&path);
+                            continue;
+                        }
+                    }
+                }
+                std::thread::sleep(ACQUIRE_WAIT);
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Err(anyhow::anyhow!(
+        "another uni process holds {} (stale locks reap after 10min)",
+        path.display()
+    ))
+}
+
+impl Drop for DirLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 pub fn is_stale(ev: &Evidence, current_sha: &str, current_dirty: bool) -> bool {

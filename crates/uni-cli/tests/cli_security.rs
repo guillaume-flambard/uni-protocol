@@ -207,3 +207,45 @@ fn expect_not_beyond_excerpt_window_invalidates() {
     let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
     assert_ne!(o.status.code(), Some(0), "hidden EVIL_TAIL must invalidate evidence");
 }
+
+/// v0.19 regression (A3): two concurrent verifies must never corrupt state.
+/// Both must exit 0, last.json must parse, every journal line must be complete JSON.
+#[test]
+fn concurrent_verify_never_corrupts_state() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let dir = std::env::temp_dir().join(format!("uni-conc-{}",
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
+    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"p\" = \"true\"\n").unwrap();
+    std::fs::write(dir.join("c1.uni"), "VERSION 0.1\nDOMAIN software\nINTENT k1\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING p\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n").unwrap();
+    std::fs::write(dir.join("c2.uni"), "VERSION 0.1\nDOMAIN software\nINTENT k2\nGOAL\n g\nCLAIM y REQUIRED\n  ENSURE g\nVERIFY y\n  USING p\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n").unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+
+    let exe1 = bin().to_string();
+    let exe2 = exe1.clone();
+    let d1 = dir.clone();
+    let d2 = dir.clone();
+    let h1 = std::thread::spawn(move || {
+        Command::new(&exe1).args(["verify", "c1.uni"]).current_dir(&d1).output().unwrap()
+    });
+    let h2 = std::thread::spawn(move || {
+        Command::new(&exe2).args(["verify", "c2.uni"]).current_dir(&d2).output().unwrap()
+    });
+    let o1 = h1.join().unwrap();
+    let o2 = h2.join().unwrap();
+    assert_eq!(o1.status.code(), Some(0), "{}", String::from_utf8_lossy(&o1.stderr));
+    assert_eq!(o2.status.code(), Some(0), "{}", String::from_utf8_lossy(&o2.stderr));
+    assert!(!dir.join(".uni/.lock").exists(), "lock must be released after verify");
+    let last = std::fs::read_to_string(dir.join(".uni/decisions/last.json")).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&last).expect("last.json must parse after races");
+    assert!(v["decision"].is_string());
+    for line in std::fs::read_to_string(dir.join(".uni/events.jsonl")).unwrap().lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let e: serde_json::Value = serde_json::from_str(line).expect("journal line must be complete JSON");
+        assert!(e["event"].is_string());
+    }
+}

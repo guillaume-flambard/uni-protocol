@@ -435,7 +435,9 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
             None => need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone())),
         }
     }
-    // 2) Re-run only for missing/stale/invalid claims.
+    // 2) Re-run only for missing/stale/invalid claims (unlocked: reruns are
+    // idempotent and deterministic, so concurrent runs only duplicate work).
+    let mut fresh: Vec<(uni_evidence::Evidence, String)> = vec![];
     for (claim_id, ref_r, inline) in need_run {
         let spec = uni_verify::resolve_command(&ref_r, inline.as_deref(), &registry)?;
         journal.push(events::Event {
@@ -451,8 +453,10 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
         if uni_evidence::is_stale(&ev, &cur_sha, cur_dirty) {
             ev.state = uni_evidence::EvidenceState::Stale;
         }
-        uni_evidence::save_json(&uni_evidence::evidence_path(&du, &ev.claim_id, &fingerprint), &ev)?;
-        stored.push(ev);
+        fresh.push((ev, fingerprint));
+    }
+    for (ev, _) in &fresh {
+        stored.push(ev.clone());
     }
     // Policy source selection: OPA bundle when both rego + opa binary exist, else TOML stack.
     let opa_bundle = du.join("policies/opa.rego");
@@ -489,8 +493,20 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
             })),
         ],
     });
-    events::append(&journal)?;
-    uni_evidence::save_json(&du.join("decisions").join("last.json"), &last)?;
+    // 3) Persist phase, serialized: evidence files + journal + last.json are
+    // written atomically under an exclusive lock so concurrent verifies can
+    // never interleave or truncate each other's state.
+    {
+        let _lock = uni_evidence::acquire_lock(&du)?;
+        for (ev, fingerprint) in &fresh {
+            uni_evidence::save_json(
+                &uni_evidence::evidence_path(&du, &ev.claim_id, fingerprint),
+                ev,
+            )?;
+        }
+        events::append(&journal)?;
+        uni_evidence::save_json(&du.join("decisions").join("last.json"), &last)?;
+    }
     if as_json {
         println!(
             "{}",
