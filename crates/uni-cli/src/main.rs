@@ -405,6 +405,38 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
     let registry_text = std::fs::read_to_string(du.join("config.toml")).unwrap_or_default();
     let registry_hash = uni_evidence::sha256_hex(registry_text.as_bytes());
     let platform = uni_evidence::platform();
+    // B2: trust-boundary diff against the last acknowledged registry snapshot.
+    // A changed registry never silently reuses old evidence (B1 already stales
+    // it); here we name what changed and flag it for CI/human review.
+    let prev_registry_hash = std::fs::read_to_string(du.join(".registry.hash"))
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let prev_registry_text =
+        std::fs::read_to_string(du.join(".registry.snapshot.toml")).unwrap_or_default();
+    let trust_boundary_changed =
+        !prev_registry_hash.is_empty() && prev_registry_hash != registry_hash;
+    let tb_diff = if trust_boundary_changed {
+        uni_verify::registry_diff(&prev_registry_text, &registry_text)
+    } else {
+        uni_verify::RegistryDiff::default()
+    };
+    if trust_boundary_changed {
+        if !as_json {
+            println!("REGISTRY_CHANGED");
+            println!("Previous: sha256:{}", &prev_registry_hash[..12.min(prev_registry_hash.len())]);
+            println!("Current:  sha256:{}", &registry_hash[..12]);
+            println!(
+                "Existing evidence: STALE\nAuthorization: REQUIRED ({} added, {} removed, {} changed)",
+                tb_diff.added.len(),
+                tb_diff.removed.len(),
+                tb_diff.changed.len()
+            );
+            for name in tb_diff.added.iter().chain(tb_diff.removed.iter()).chain(tb_diff.changed.iter()).take(10) {
+                println!("  - {name}");
+            }
+        }
+    }
     // 1) Try persisted evidence first (cheap, content-addressed).
     let mut stored = vec![];
     let mut need_run = vec![];
@@ -416,6 +448,18 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
             ("uni.contract.version".into(), ir.uni_version.clone()),
         ],
     }];
+    if trust_boundary_changed {
+        journal.push(events::Event {
+            name: "RegistryChanged",
+            attrs: vec![
+                ("uni.registry.previous".into(), prev_registry_hash[..8.min(prev_registry_hash.len())].into()),
+                ("uni.registry.current".into(), registry_hash[..8].into()),
+                ("uni.registry.added".into(), tb_diff.added.join(",")),
+                ("uni.registry.removed".into(), tb_diff.removed.join(",")),
+                ("uni.registry.changed".into(), tb_diff.changed.join(",")),
+            ],
+        });
+    }
     for v in &ir.verification {
         // content-bound evidence: hash computed from the verifier's watched files
         let current_ah = registry
@@ -551,6 +595,10 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
         }
         events::append(&journal)?;
         uni_evidence::save_json(&du.join("decisions").join("last.json"), &last)?;
+        // Acknowledge the current registry as the new trust-boundary baseline
+        // (only after a completed verify: a failed run leaves the flag armed).
+        std::fs::write(du.join(".registry.hash"), &registry_hash)?;
+        std::fs::write(du.join(".registry.snapshot.toml"), &registry_text)?;
     }
     if as_json {
         println!(
@@ -561,6 +609,7 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
                 "reason": decision.reason,
                 "claims": decision.claims,
                 "evidence": stored,
+                "trust_boundary_changed": trust_boundary_changed,
             })
         );
     } else {

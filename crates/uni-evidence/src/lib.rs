@@ -78,8 +78,12 @@ pub fn git_info(workspace: &std::path::Path) -> (String, bool) {
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_else(|_| "no-git".into());
+    // Dirtiness excludes UNI's own runtime files: a verify must never
+    // invalidate its own (or a concurrent verify's) fresh evidence through
+    // the files it writes itself. Trust-relevant .uni changes (config.toml,
+    // policies) are covered by registry/policy hashes instead.
     let dirty = std::process::Command::new("git")
-        .args(["status", "--porcelain"])
+        .args(["status", "--porcelain", "--", ".", ":!.uni"])
         .current_dir(workspace)
         .output()
         .map(|o| !o.stdout.is_empty())

@@ -368,3 +368,73 @@ mod tests {
         assert!(!ev3.fingerprint.is_empty());
     }
 }
+
+/// Trust-boundary diff (B2): compare two registry texts key by key.
+/// Used to name which verifiers changed between the acknowledged registry
+/// snapshot and the current one. Pure function, fully unit-tested.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RegistryDiff {
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    pub changed: Vec<String>,
+}
+
+fn verifiers_table(text: &str) -> toml::map::Map<String, toml::Value> {
+    text.parse::<toml::Value>()
+        .ok()
+        .and_then(|v| v.get("verifiers").cloned())
+        .and_then(|v| v.as_table().cloned())
+        .unwrap_or_default()
+}
+
+pub fn registry_diff(old_text: &str, new_text: &str) -> RegistryDiff {
+    let old = verifiers_table(old_text);
+    let new = verifiers_table(new_text);
+    let mut diff = RegistryDiff::default();
+    for k in new.keys() {
+        if !old.contains_key(k) {
+            diff.added.push(k.clone());
+        } else if old.get(k) != new.get(k) {
+            diff.changed.push(k.clone());
+        }
+    }
+    for k in old.keys() {
+        if !new.contains_key(k) {
+            diff.removed.push(k.clone());
+        }
+    }
+    diff.added.sort();
+    diff.removed.sort();
+    diff.changed.sort();
+    diff
+}
+
+#[cfg(test)]
+mod registry_diff_tests {
+    use super::*;
+
+    #[test]
+    fn diff_names_added_removed_changed() {
+        let old = "[verifiers]\n\"a\" = \"true\"\n\"b\" = \"false\"\n\"c\" = \"true\"\n";
+        let new = "[verifiers]\n\"a\" = \"true\"\n\"b\" = \"true\"\n\"d\" = \"true\"\n";
+        let d = registry_diff(old, new);
+        assert_eq!(d.added, vec!["d".to_string()]);
+        assert_eq!(d.removed, vec!["c".to_string()]);
+        assert_eq!(d.changed, vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn diff_empty_on_identical() {
+        let t = "[verifiers]\n\"a\" = \"true\"\n";
+        assert_eq!(registry_diff(t, t), RegistryDiff::default());
+    }
+
+    #[test]
+    fn diff_table_form_compares_fields() {
+        let old = "[verifiers.\"x\"]\nrun = \"a\"\nexpect = \"1\"\n";
+        let same = "[verifiers.\"x\"]\nrun = \"a\"\nexpect = \"1\"\n";
+        let other = "[verifiers.\"x\"]\nrun = \"a\"\nexpect = \"2\"\n";
+        assert!(registry_diff(old, same).changed.is_empty());
+        assert_eq!(registry_diff(old, other).changed, vec!["x".to_string()]);
+    }
+}

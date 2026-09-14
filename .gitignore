@@ -4,6 +4,9 @@
 .uni/artifacts/
 .uni/contracts/candidate-*.uni
 .uni/events.jsonl
+.uni/.registry.hash
+.uni/.registry.snapshot.toml
+.uni/.lock
 
 experiments/study-50/tasks/**/Cargo.lock
 experiments/study-50/tasks/**/target/

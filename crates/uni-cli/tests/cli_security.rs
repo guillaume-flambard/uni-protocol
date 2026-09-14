@@ -297,3 +297,51 @@ fn policy_change_governs_recomputed_decision() {
         "new policy must govern the recompute, got: {stdout}"
     );
 }
+
+/// B2: registry change names what changed, flags CI JSON once, then clears.
+#[test]
+fn registry_change_flags_trust_boundary_once() {
+    let dir = mk_repo("registry-diff");
+    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"p\" = \"true\"\n").unwrap();
+    std::fs::write(
+        dir.join("c.uni"),
+        "VERSION 0.1\nDOMAIN software\nINTENT tb\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING p\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n",
+    )
+    .unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    let r1 = out(&["verify", "c.uni"], &dir);
+    assert!(r1.contains("Accepted"), "{r1}");
+    assert!(dir.join(".uni/.registry.hash").exists());
+    assert!(dir.join(".uni/.registry.snapshot.toml").exists());
+
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers]\n\"p\" = \"true\"\n\"q\" = \"false\"\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "regchange"]);
+
+    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    let stdout = String::from_utf8_lossy(&o.stdout).to_string();
+    assert!(stdout.contains("REGISTRY_CHANGED"), "{stdout}");
+    assert!(stdout.contains("1 added") && stdout.contains("- q"), "{stdout}");
+
+    let j = Command::new(bin()).args(["--json", "verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&j.stdout).unwrap();
+    assert_eq!(v["trust_boundary_changed"], false, "baseline acknowledged by the human run");
+
+    // A new drift raises the flag again on the very run that observes it.
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers]\n\"p\" = \"true\"\n\"q\" = \"true\"\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "regchange2"]);
+    let j2 = Command::new(bin()).args(["--json", "verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    let v2: serde_json::Value = serde_json::from_slice(&j2.stdout).unwrap();
+    assert_eq!(v2["trust_boundary_changed"], true);
+}
