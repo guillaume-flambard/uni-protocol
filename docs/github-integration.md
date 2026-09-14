@@ -62,6 +62,20 @@ Inputs: `contract` (required), `version` (default `v0.5.1`), `repository`
 (default `guillaume-flambard/uni-protocol`, replace with your fork), `report-to-summary`
 (default true). Unknown runner OS fails loudly instead of silently skipping.
 
+## Verified in CI (2026-09-14)
+
+All of the above ran for real on the published repository:
+
+- `uni` workflow: matrix ubuntu / macos / windows (build, portable unit tests,
+  POSIX integration tests outside Windows) plus a POSIX-examples job, all green.
+- `release` workflow: five targets built and attached on tag push
+  (`uni-<target>.tar.gz`), for `v0.5.0` and `v0.5.1`.
+- the composite action itself: an `action-smoke` job downloads the released
+  binary and verifies a runtime-free contract (`examples/artifact`).
+
+Pushing the tag and `main` in the same breath races the smoke job against the
+release assets; push the tag first, or re-run the job.
+
 ## Evidence lifecycle in CI
 
 Runners are ephemeral, so evidence regenerates per run; git and content bindings
