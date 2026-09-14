@@ -36,6 +36,24 @@ CLI exit codes: 0 for Accepted; 1 otherwise (stderr carries the label).
 `DRAFT/READY/EXECUTING/...` lifecycle states from the blueprint are a later
 scope (needs an execution provider binding).
 
+## Assurance scale (v0.2: derived from the evidence graph)
+
+Independence (who proved vs who launched) and identity assurance (how strongly
+the prover's identity is proven) are DISTINCT properties:
+
+| Level | Meaning |
+|---|---|
+| A2 | Trusted verifier observed a complete subject. Default ceiling. |
+| A3-D | Independent actor (`executor != verifier`), identity SELF-DECLARED. Logically independent, identity unproven. |
+| A3 | Independent actor with EXTERNALLY VERIFIED identity (adapters are stubs in v0.2, so unreachable yet except in unit tests). |
+| A4 | Reserved: signed provenance has no producer yet (`--attest` refuses explicitly). |
+
+Rules: `uni verify` alone caps at A2 (local actor). `uni verify --actor ci:build-12`
+enables A3-D and `uni report`/`explain` display `independent actor: YES,
+identity: SELF-DECLARED`. A `spiffe://` (or entra/oidc) prefix is recorded but
+stays self-declared with an `IdentityUnverified` journal event. `--actor bob`
+is a declaration, never a proof: passing someone else's name cannot mint A3.
+
 ## Reading a decision
 
 - `uni explain` : per-claim table, evidence detail, reason, next commands.

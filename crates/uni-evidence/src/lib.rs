@@ -43,6 +43,13 @@ pub struct Evidence {
     /// "<os>-<arch>" at run time; cross-platform reuse is never trusted.
     #[serde(default)]
     pub platform: String,
+    /// Who produced this proof (the verifier side). Defaults to anonymous for
+    /// pre-B3 files, which can therefore never satisfy independence.
+    #[serde(default)]
+    pub actor: Actor,
+    /// Who launched the verified work (defaults to the local user).
+    #[serde(default)]
+    pub executor: Actor,
 }
 
 /// Current verification context, computed fresh on every verify run.
@@ -192,6 +199,71 @@ pub struct EvidenceBundle {
     pub by_claim: Vec<Evidence>,
 }
 
+/// An identity attached to evidence (B3). Independence (who) and identity
+/// assurance (how strongly proven) are DISTINCT properties: a self-declared
+/// `--actor someone-else` is independent on paper but proves nothing about
+/// identity. Only externally verified sources count toward real A3.
+#[derive(Debug, Clone, serde::Serialize, Deserialize, PartialEq)]
+pub struct Actor {
+    /// e.g. "local:alice", "ci:build-12", "spiffe://acme/verifier/build-12"
+    pub id: String,
+    /// "local" | "cli" | "spiffe" | "entra" | "oidc" | ...
+    pub source: String,
+    /// "self-declared" | "verified". Nothing in v0.2 sets "verified":
+    /// identity adapters are documented stubs until then.
+    pub assurance: String,
+}
+
+impl Default for Actor {
+    fn default() -> Self {
+        Actor {
+            id: String::new(),
+            source: "local".into(),
+            assurance: "self-declared".into(),
+        }
+    }
+}
+
+impl Actor {
+    pub fn local() -> Self {
+        let user = std::env::var("USER")
+            .or_else(|_| std::env::var("USERNAME"))
+            .unwrap_or_else(|_| "unknown".into());
+        Actor {
+            id: format!("local:{user}"),
+            source: "local".into(),
+            assurance: "self-declared".into(),
+        }
+    }
+
+    /// Parse a `--actor` flag value. Scheme-prefixed ids keep their scheme as
+    /// source but stay self-declared: v0.2 has no identity adapters, and a
+    /// prefix is not a proof.
+    pub fn declared(id: &str) -> Self {
+        let source = if let Some((scheme, _)) = id.split_once("://") {
+            match scheme {
+                "spiffe" | "entra" | "oidc" => scheme.to_string(),
+                _ => "cli".to_string(),
+            }
+        } else {
+            "cli".to_string()
+        };
+        Actor {
+            id: id.to_string(),
+            source,
+            assurance: "self-declared".into(),
+        }
+    }
+
+    pub fn is_anonymous(&self) -> bool {
+        self.id.trim().is_empty() || self.id == "anonymous"
+    }
+
+    pub fn is_verified(&self) -> bool {
+        self.assurance == "verified"
+    }
+}
+
 pub fn load_json<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Option<T> {
     std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str(&t).ok())
 }
@@ -276,6 +348,8 @@ mod tests {
             policy_hash: "pol1".into(),
             contract_hash: "con1".into(),
             platform: "linux-x86_64".into(),
+            actor: Actor::local(),
+            executor: Actor::local(),
         }
     }
 

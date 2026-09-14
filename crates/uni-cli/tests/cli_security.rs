@@ -345,3 +345,65 @@ fn registry_change_flags_trust_boundary_once() {
     let v2: serde_json::Value = serde_json::from_slice(&j2.stdout).unwrap();
     assert_eq!(v2["trust_boundary_changed"], true);
 }
+
+/// B3: default verify caps at A2; --actor reaches A3-D but never A3;
+/// identity stays SELF-DECLARED; --attest refuses (A4 reserved).
+#[test]
+fn actor_model_caps_assurance_honestly() {
+    let dir = mk_repo("actor-caps");
+    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"p\" = \"true\"\n").unwrap();
+    std::fs::write(
+        dir.join("c.uni"),
+        "VERSION 0.1\nDOMAIN software\nINTENT act\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING p\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n",
+    )
+    .unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+
+    // Default: local actor, max A2.
+    let r1 = out(&["verify", "c.uni"], &dir);
+    assert!(r1.contains("Accepted"), "{r1}");
+    let rep = Command::new(bin()).args(["report", "--json"]).current_dir(&dir).output().unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&rep.stdout).unwrap();
+    assert_eq!(v["assurance"], "A2", "{v}");
+    assert_eq!(v["independent_actor"], false);
+
+    // Explicit distinct actor: independence YES, identity still SELF-DECLARED, max A3-D.
+    let o = Command::new(bin())
+        .args(["verify", "--actor", "ci:build-12", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    let rep2 = Command::new(bin()).args(["report", "--json"]).current_dir(&dir).output().unwrap();
+    let v2: serde_json::Value = serde_json::from_slice(&rep2.stdout).unwrap();
+    assert_eq!(v2["assurance"], "A3-D", "{v2}");
+    assert_eq!(v2["independent_actor"], true);
+    assert_eq!(v2["identity_assurance"], "SELF-DECLARED");
+
+    // A scheme prefix without an adapter proves nothing: still A3-D at best.
+    let o3 = Command::new(bin())
+        .args(["verify", "--actor", "spiffe://acme/verifier/b12", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_eq!(o3.status.code(), Some(0));
+    let rep3 = Command::new(bin()).args(["report", "--json"]).current_dir(&dir).output().unwrap();
+    let v3: serde_json::Value = serde_json::from_slice(&rep3.stdout).unwrap();
+    assert_eq!(v3["assurance"], "A3-D", "{v3}");
+    assert_eq!(v3["identity_assurance"], "SELF-DECLARED");
+
+    // --attest is a hard refusal: A4 has no producer yet.
+    let o4 = Command::new(bin())
+        .args(["verify", "--attest", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_ne!(o4.status.code(), Some(0));
+    assert!(
+        String::from_utf8_lossy(&o4.stderr).contains("reserved"),
+        "{}",
+        String::from_utf8_lossy(&o4.stderr)
+    );
+}

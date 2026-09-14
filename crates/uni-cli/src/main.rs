@@ -16,7 +16,16 @@ struct Cli {
 enum Cmd {
     Init,
     Compile { file: PathBuf },
-    Verify { file: PathBuf },
+    Verify {
+        file: PathBuf,
+        /// Verifier actor identity (e.g. ci:build-12). Self-declared unless an
+        /// identity adapter verifies it; enables at most A3-D, never A3.
+        #[arg(long)]
+        actor: Option<String>,
+        /// Reserved: signed provenance (A4) has no producer yet.
+        #[arg(long, default_value_t = false)]
+        attest: bool,
+    },
     Explain { claim_or_intent: Option<String> },
     Inspect { file: PathBuf },
     ImportSpeckit { dir: PathBuf },
@@ -45,7 +54,7 @@ fn main() -> Result<()> {
     match cli.cmd {
         Cmd::Init => cmd_init(),
         Cmd::Compile { file } => cmd_compile(&file, cli.json),
-        Cmd::Verify { file } => cmd_verify(&file, cli.json),
+        Cmd::Verify { file, actor, attest } => cmd_verify(&file, cli.json, actor.as_deref(), attest),
         Cmd::Explain { claim_or_intent } => cmd_explain(claim_or_intent, cli.json),
         Cmd::Inspect { file } => cmd_inspect(&file, cli.json),
         Cmd::ImportSpeckit { dir } => cmd_import_speckit(&dir, cli.json),
@@ -310,6 +319,13 @@ fn stable_report() -> Result<serde_json::Value> {
         "claims": claims.iter().map(|c| serde_json::json!({
             "claim_id": c["claim_id"], "state": c["state"],
         })).collect::<Vec<_>>(),
+        // Persisted at verify time; legacy files fall back to the decision-only base.
+        "assurance": v.get("assurance").cloned().unwrap_or_else(|| {
+            let a = uni_decision::assurance_of_json(&v["decision"]);
+            serde_json::json!(format!("A{a}"))
+        }),
+        "independent_actor": v.get("independent_actor").cloned().unwrap_or(serde_json::Value::Bool(false)),
+        "identity_assurance": v.get("identity_assurance").cloned().unwrap_or(serde_json::json!("SELF-DECLARED")),
     }))
 }
 
@@ -327,8 +343,10 @@ fn cmd_report(as_json: bool) -> Result<()> {
     let s = &r["summary"];
     println!("Claims      {}/{} verified",
         s["claims_verified"], s["claims_total"]);
-    let a = uni_decision::assurance_of_json(&r["decision"]);
-    println!("Assurance   A{a} ({})", uni_decision::assurance_label(a));
+    println!("Assurance   {} (independent actor: {}, identity: {})",
+        r["assurance"].as_str().unwrap_or("A0"),
+        if r["independent_actor"].as_bool().unwrap_or(false) { "YES" } else { "NO" },
+        r["identity_assurance"].as_str().unwrap_or("SELF-DECLARED"));
     if let Some(claims) = r["claims"].as_array() {
         println!("\nClaims");
         for c in claims {
@@ -391,10 +409,31 @@ fn cmd_inspect(file: &Path, as_json: bool) -> Result<()> {
     cmd_compile(file, as_json)
 }
 
-fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
+fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, attest: bool) -> Result<()> {
+    if attest {
+        return Err(anyhow!(
+            "signed provenance (A4) is reserved: no signer is configured in v0.2 (see docs/decisions.md)"
+        ));
+    }
     let (ir, _) = load_contract(file)?;
     let ws = std::env::current_dir()?;
     let du = dot_uni();
+    // B3 actor model: the executor is whoever runs this command (local,
+    // self-declared, capped at A2); the verifier actor defaults to the same
+    // identity unless --actor names a distinct one (still self-declared:
+    // a flag is a declaration, not a proof; max A3-D, never A3).
+    let executor = uni_evidence::Actor::local();
+    let actor = match actor_flag {
+        Some(id) => uni_evidence::Actor::declared(id),
+        None => executor.clone(),
+    };
+    let external_scheme = actor_flag.map(|id| {
+        id.split_once("://").map(|(s, _)| s).unwrap_or("")
+    });
+    // v0.2 has no identity adapters: a scheme prefix is recorded but stays
+    // self-declared, and the journal says so explicitly.
+    let identity_unverified_warning =
+        matches!(external_scheme, Some("spiffe") | Some("entra") | Some("oidc"));
     let (cur_sha, cur_dirty) = uni_evidence::git_info(&ws);
     let registry = uni_verify::load_registry(&du);
     // Verification Context, computed once per run: any drift on these
@@ -448,6 +487,16 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
             ("uni.contract.version".into(), ir.uni_version.clone()),
         ],
     }];
+    if identity_unverified_warning {
+        journal.push(events::Event {
+            name: "IdentityUnverified",
+            attrs: vec![
+                ("uni.actor.id".into(), actor.id.clone()),
+                ("uni.actor.source".into(), actor.source.clone()),
+                ("uni.actor.assurance".into(), actor.assurance.clone()),
+            ],
+        });
+    }
     if trust_boundary_changed {
         journal.push(events::Event {
             name: "RegistryChanged",
@@ -466,8 +515,8 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
             .get(&v.verifier_ref)
             .and_then(|spec| uni_verify::artifact_hash(spec, &ws));
         let fingerprint = match registry.get(&v.verifier_ref) {
-            Some(spec) => uni_verify::spec_fingerprint(&v.verifier_ref, spec),
-            None => format!("inline:{}", &v.verifier_ref),
+            Some(spec) => uni_verify::spec_fingerprint(&v.verifier_ref, spec, &actor.id),
+            None => format!("inline:{}:{}", &v.verifier_ref, actor.id),
         };
         let ctx = uni_evidence::EvidenceContext {
             fingerprint,
@@ -479,7 +528,10 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
             platform: platform.clone(),
         };
         match uni_evidence::load_valid_for_claim(&du, &v.claim_id, &ctx) {
-            uni_evidence::CacheOutcome::Hit(ev) => {
+            uni_evidence::CacheOutcome::Hit(mut ev) => {
+                // The proof is reused, but the decision context is now:
+                // independence is evaluated against the CURRENT executor.
+                ev.executor = executor.clone();
                 journal.push(events::Event {
                     name: "EvidenceReused",
                     attrs: vec![
@@ -537,8 +589,8 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
                 ("uni.intent.id".into(), ir.intent.id.clone()),
             ],
         });
-        let fingerprint = uni_verify::spec_fingerprint(&ref_r, &spec);
-        let mut ev = uni_verify::run_spec(&claim_id, &ref_r, &spec, &ws, spec.timeout)?;
+        let fingerprint = uni_verify::spec_fingerprint(&ref_r, &spec, &actor.id);
+        let mut ev = uni_verify::run_spec(&claim_id, &ref_r, &spec, &ws, spec.timeout, &actor, &executor)?;
         ev.registry_hash = registry_hash.clone();
         ev.contract_hash = contract_hash.clone();
         ev.platform = platform.clone();
@@ -568,18 +620,26 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
             decision.reason = format!("policy escalate_on_stale: stale proof could not be renewed: {}", decision.reason);
         }
     }
+    let assurance = uni_decision::assurance_for(&decision.decision, &stored);
+    let independent = uni_decision::independence(&stored) == uni_decision::Independence::Independent;
+    let identity = uni_decision::identity_assurance(&stored);
     let last = serde_json::json!({
         "intent": {"id": ir.intent.id, "domain": ir.intent.domain, "goal": ir.intent.goal},
         "decision": decision.decision,
         "reason": decision.reason,
         "claims": decision.claims,
+        "assurance": assurance,
+        "independent_actor": independent,
+        "identity_assurance": identity,
     });
     journal.push(events::Event {
         name: "DecisionIssued",
         attrs: vec![
             ("uni.intent.id".into(), ir.intent.id.clone()),
             ("uni.decision.state".into(), format!("{:?}", decision.decision)),
-            ("uni.assurance.level".into(), format!("A{}", uni_decision::assurance_of(&decision.decision))),
+            ("uni.assurance.level".into(), assurance.to_string()),
+            ("uni.actor.independent".into(), independent.to_string()),
+            ("uni.actor.identity_assurance".into(), identity.to_string()),
         ],
     });
     // 3) Persist phase, serialized: evidence files + journal + last.json are
@@ -673,10 +733,17 @@ fn cmd_explain(arg: Option<String>, as_json: bool) -> Result<()> {
         let tested = a.iter().filter(|c| c["state"] == "Valid").count();
         format!("{}/{} verified", tested, a.len())
     }).unwrap_or_default();
-    let a = uni_decision::assurance_of_json(&v["decision"]);
+    // Persisted assurance wins; legacy files fall back to the decision-only base.
+    let assurance = v["assurance"].as_str().map(str::to_string).unwrap_or_else(|| {
+        let a = uni_decision::assurance_of_json(&v["decision"]);
+        format!("A{a}")
+    });
+    let independent = v["independent_actor"].as_bool().unwrap_or(false);
+    let identity = v["identity_assurance"].as_str().unwrap_or("SELF-DECLARED");
     println!("\nSummary");
     println!("  Claims     {summary}");
-    println!("  Assurance  A{a} ({})", uni_decision::assurance_label(a));
+    println!("  Assurance  {assurance} (independent actor: {}, identity: {})",
+        if independent { "YES" } else { "NO" }, identity);
     println!("\n{}", v["reason"].as_str().unwrap_or(""));
 
     if let Some(c) = v["claims"].as_array().and_then(|a| a.iter().find(|c| c["state"] != "Valid")) {

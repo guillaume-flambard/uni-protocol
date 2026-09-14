@@ -154,10 +154,14 @@ pub fn artifact_hash(spec: &VerifierSpec, workspace: &std::path::Path) -> Option
 }
 
 /// Cache-isolating identity of a verifier spec (prevents evidence reuse
-/// across contracts that merely share a claim id).
-pub fn spec_fingerprint(verifier_ref: &str, spec: &VerifierSpec) -> String {
+/// across contracts that merely share a claim id) AND of the actor that
+/// produced the proof: a proof by actor A never silently satisfies a run
+/// as actor B (Evidence Completeness Principle). The executor is NOT part
+/// of the key: on a cache hit the caller refreshes it to the current
+/// executor, because independence is evaluated in the reusing context.
+pub fn spec_fingerprint(verifier_ref: &str, spec: &VerifierSpec, actor_id: &str) -> String {
     let seed = format!(
-        "{verifier_ref}|{}|{}|{}|{}",
+        "{verifier_ref}|{}|{}|{}|{}|actor:{actor_id}",
         spec.run,
         spec.expect,
         spec.expect_not,
@@ -172,10 +176,14 @@ pub fn run_spec(
     spec: &VerifierSpec,
     workspace: &std::path::Path,
     timeout_secs: u64,
+    actor: &uni_evidence::Actor,
+    executor: &uni_evidence::Actor,
 ) -> Result<Evidence> {
     let (mut ev, full_output) = run_shell(claim_id, &spec.run, workspace, timeout_secs)?;
     ev.artifact_hash = artifact_hash(spec, workspace).unwrap_or_default();
-    ev.fingerprint = spec_fingerprint(verifier_ref, spec);
+    ev.fingerprint = spec_fingerprint(verifier_ref, spec, &actor.id);
+    ev.actor = actor.clone();
+    ev.executor = executor.clone();
     // expectations are checked against the FULL output, never the truncated excerpt
     if !spec.expect.is_empty() && !full_output.contains(&spec.expect) {
         ev.state = EvidenceState::Invalid;
@@ -239,6 +247,9 @@ fn run_shell(
         policy_hash: String::new(),
         contract_hash: String::new(),
         platform: String::new(),
+        // Identities are attached by run_spec (caller owns the actor view).
+        actor: uni_evidence::Actor::default(),
+        executor: uni_evidence::Actor::default(),
     };
     Ok((ev, full_output))
 }
@@ -258,10 +269,11 @@ pub fn assure_contract(
     workspace: &std::path::Path,
 ) -> Result<Vec<Evidence>> {
     let registry = load_registry(dot_uni);
+    let actor = uni_evidence::Actor::local();
     let mut out = vec![];
     for v in &ir.verification {
         let spec = resolve_command(&v.verifier_ref, v.inline_shell.as_deref(), &registry)?;
-        out.push(run_spec(&v.claim_id, &v.verifier_ref, &spec, workspace, spec.timeout)?);
+        out.push(run_spec(&v.claim_id, &v.verifier_ref, &spec, workspace, spec.timeout, &actor, &actor)?);
     }
     Ok(out)
 }
@@ -326,11 +338,12 @@ mod tests {
     fn fingerprint_stable_and_discriminating() {
         let a = spec("cargo test");
         let b = spec("cargo test");
-        assert_eq!(spec_fingerprint("k", &a), spec_fingerprint("k", &b));
-        assert_ne!(spec_fingerprint("k1", &a), spec_fingerprint("k2", &a));
+        assert_eq!(spec_fingerprint("k", &a, "alice"), spec_fingerprint("k", &b, "alice"));
+        assert_ne!(spec_fingerprint("k1", &a, "alice"), spec_fingerprint("k2", &a, "alice"));
         let mut c = spec("cargo test");
         c.expect = "x".into();
-        assert_ne!(spec_fingerprint("k", &a), spec_fingerprint("k", &c));
+        assert_ne!(spec_fingerprint("k", &a, "alice"), spec_fingerprint("k", &c, "alice"));
+        assert_ne!(spec_fingerprint("k", &a, "alice"), spec_fingerprint("k", &a, "bob"));
     }
 
     #[test]
@@ -356,14 +369,14 @@ mod tests {
         let d = tmp("run");
         let mut s = spec("printf 'aaaa' && echo MARK");
         s.expect = "MARK".into();
-        let ev = run_spec("c", "k", &s, &d, 30).unwrap();
+        let ev = run_spec("c", "k", &s, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
         assert_eq!(ev.state, uni_evidence::EvidenceState::Valid);
         s.expect_not = "MARK".into();
-        let ev2 = run_spec("c", "k", &s, &d, 30).unwrap();
+        let ev2 = run_spec("c", "k", &s, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
         assert_eq!(ev2.state, uni_evidence::EvidenceState::Invalid);
         let mut s3 = spec("false");
         s3.expect = String::new();
-        let ev3 = run_spec("c", "k", &s3, &d, 30).unwrap();
+        let ev3 = run_spec("c", "k", &s3, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
         assert_eq!(ev3.state, uni_evidence::EvidenceState::Invalid);
         assert!(!ev3.fingerprint.is_empty());
     }

@@ -40,6 +40,64 @@ pub fn assurance_of_json(v: &serde_json::Value) -> u8 {
         .unwrap_or(0)
 }
 
+/// Independence of the evidence graph (B3): is every proof produced by an
+/// actor distinct from the one who launched the work, with no anonymous
+/// producers? Independence says nothing about identity strength (see below).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Independence {
+    Independent,
+    SameActor,
+    Anonymous,
+}
+
+pub fn independence(evidences: &[Evidence]) -> Independence {
+    if evidences.is_empty() {
+        return Independence::Anonymous;
+    }
+    for ev in evidences {
+        if ev.actor.is_anonymous() || ev.executor.is_anonymous() {
+            return Independence::Anonymous;
+        }
+        if ev.actor.id == ev.executor.id {
+            return Independence::SameActor;
+        }
+    }
+    Independence::Independent
+}
+
+/// Identity assurance across the evidence set: VERIFIED only if every actor
+/// carries an externally verified identity. Anything else is SELF-DECLARED.
+/// (v0.2 sets "verified" nowhere: identity adapters are documented stubs.)
+pub fn identity_assurance(evidences: &[Evidence]) -> &'static str {
+    if evidences.is_empty() {
+        return "SELF-DECLARED";
+    }
+    if evidences.iter().all(|ev| ev.actor.is_verified()) {
+        "VERIFIED"
+    } else {
+        "SELF-DECLARED"
+    }
+}
+
+/// Full assurance level derived from decision + evidence graph (v0.2).
+/// A2: trusted verifier. A3-D: independent actors, self-declared identities
+/// (logically independent, identity unproven). A3: independent + externally
+/// verified identities. A4 is never returned here: signed provenance has no
+/// producer yet (see --attest refusal in the CLI).
+pub fn assurance_for(decision: &Decision, evidences: &[Evidence]) -> &'static str {
+    if *decision != Decision::Accepted {
+        return match assurance_of(decision) {
+            1 => "A1",
+            _ => "A0",
+        };
+    }
+    match (independence(evidences), identity_assurance(evidences)) {
+        (Independence::Independent, "VERIFIED") => "A3",
+        (Independence::Independent, _) => "A3-D",
+        _ => "A2",
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClaimResult {
     pub claim_id: String,
@@ -352,6 +410,8 @@ mod tests {
             policy_hash: String::new(),
             contract_hash: String::new(),
             platform: String::new(),
+            actor: uni_evidence::Actor::local(),
+            executor: uni_evidence::Actor::local(),
         }
     }
     #[test]
@@ -437,6 +497,8 @@ mod property_tests {
             policy_hash: String::new(),
             contract_hash: String::new(),
             platform: String::new(),
+            actor: uni_evidence::Actor::local(),
+            executor: uni_evidence::Actor::local(),
         }
     }
 
@@ -503,6 +565,8 @@ mod decision_matrix {
             policy_hash: String::new(),
             contract_hash: String::new(),
             platform: String::new(),
+            actor: uni_evidence::Actor::local(),
+            executor: uni_evidence::Actor::local(),
         };
         // valid + exit 0 → Accepted
         assert_eq!(evaluate(&ir, &[mk(EvidenceState::Valid, 0)]).decision, Decision::Accepted);
@@ -572,6 +636,8 @@ mod policy_tests {
             policy_hash: String::new(),
             contract_hash: String::new(),
             platform: String::new(),
+            actor: uni_evidence::Actor::local(),
+            executor: uni_evidence::Actor::local(),
         }
     }
 
@@ -661,6 +727,8 @@ mod policy_property {
             policy_hash: String::new(),
             contract_hash: String::new(),
             platform: String::new(),
+            actor: uni_evidence::Actor::local(),
+            executor: uni_evidence::Actor::local(),
         }
     }
 
@@ -715,5 +783,89 @@ mod assurance_tests {
         assert_eq!(assurance_of_json(&serde_json::json!("Accepted")), 2);
         assert_eq!(assurance_of_json(&serde_json::json!("nonsense")), 0);
         assert_eq!(assurance_of_json(&serde_json::json!(null)), 0);
+    }
+}
+
+#[cfg(test)]
+mod independence_tests {
+    use super::*;
+    use uni_evidence::{Actor, Evidence, EvidenceState};
+
+    fn ev(actor_id: &str, executor_id: &str, assurance: &str) -> Evidence {
+        Evidence {
+            id: "e".into(),
+            claim_id: "c".into(),
+            producer: "t".into(),
+            command: "c".into(),
+            exit_code: 0,
+            output_hash: "h".into(),
+            output_excerpt: "".into(),
+            commit_sha: "s".into(),
+            workspace_dirty: false,
+            state: EvidenceState::Valid,
+            created_at: chrono::Utc::now(),
+            duration_ms: 1,
+            artifact_hash: String::new(),
+            fingerprint: "f".into(),
+            registry_hash: String::new(),
+            policy_hash: String::new(),
+            contract_hash: String::new(),
+            platform: String::new(),
+            actor: Actor { id: actor_id.into(), source: "cli".into(), assurance: assurance.into() },
+            executor: Actor { id: executor_id.into(), source: "local".into(), assurance: "self-declared".into() },
+        }
+    }
+
+    #[test]
+    fn empty_or_anonymous_is_never_independent() {
+        assert_eq!(independence(&[]), Independence::Anonymous);
+        assert_eq!(
+            independence(&[ev("", "local:alice", "self-declared")]),
+            Independence::Anonymous
+        );
+    }
+
+    #[test]
+    fn same_actor_is_not_independent() {
+        assert_eq!(
+            independence(&[ev("local:alice", "local:alice", "self-declared")]),
+            Independence::SameActor
+        );
+    }
+
+    #[test]
+    fn distinct_actors_are_independent() {
+        assert_eq!(
+            independence(&[ev("ci:build-12", "local:alice", "self-declared")]),
+            Independence::Independent
+        );
+    }
+
+    #[test]
+    fn assurance_splits_independence_from_identity() {
+        let declared =
+            vec![ev("ci:build-12", "local:alice", "self-declared")];
+        assert_eq!(assurance_for(&Decision::Accepted, &declared), "A3-D");
+        assert_eq!(identity_assurance(&declared), "SELF-DECLARED");
+        let verified = vec![ev("spiffe://acme/v", "local:alice", "verified")];
+        assert_eq!(assurance_for(&Decision::Accepted, &verified), "A3");
+        assert_eq!(identity_assurance(&verified), "VERIFIED");
+        let same = vec![ev("local:alice", "local:alice", "self-declared")];
+        assert_eq!(assurance_for(&Decision::Accepted, &same), "A2");
+        // Non-accepted decisions never upgrade, whatever the actors.
+        assert_eq!(assurance_for(&Decision::Rejected, &verified), "A1");
+        assert_eq!(assurance_for(&Decision::EvidenceRequired, &verified), "A0");
+    }
+
+    #[test]
+    fn actor_parsing_never_confuses_prefix_with_proof() {
+        let a = Actor::declared("ci:build-12");
+        assert_eq!(a.source, "cli");
+        assert_eq!(a.assurance, "self-declared");
+        let s = Actor::declared("spiffe://acme/verifier/b12");
+        assert_eq!(s.source, "spiffe");
+        assert_eq!(s.assurance, "self-declared");
+        assert!(Actor { id: "".into(), source: "cli".into(), assurance: "self-declared".into() }.is_anonymous());
+        assert!(!Actor::local().is_anonymous());
     }
 }
