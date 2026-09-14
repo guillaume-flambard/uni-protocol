@@ -1,0 +1,11 @@
+diff --git a/src/api.rs b/src/api.rs
+index cbb7e38..cc75916 100644
+--- a/src/api.rs
++++ b/src/api.rs
+@@ -7,5 +7,5 @@ pub fn format_price(cents: u64) -> String {
+ 
+ /// Format a price given in cents with a currency symbol, e.g. "$1.50".
+ pub fn format_price_with(cents: u64, symbol: &str) -> String {
+-    format!("{symbol}{}.{:02}", cents / 100, cents % 100)
++    format!("{symbol}{}", cents / 100)
+ }
