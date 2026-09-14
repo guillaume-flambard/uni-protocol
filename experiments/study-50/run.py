@@ -107,7 +107,7 @@ def fixture_reset(repo, tasks_rel):
         subprocess.run(["git", "-C", repo, "checkout", "--", tasks_rel])
 
 
-def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False):
+def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_contract=False):
     tid = os.path.basename(task_dir.rstrip("/"))
     repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     tasks_rel = os.path.join("experiments", "study-50", "tasks")
@@ -146,6 +146,9 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False):
 "mini.t.cancel.ok" = {"run" = "cargo test cancel_ok -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.cancel.missing" = {"run" = "cargo test cancel_missing -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.layering" = {"run" = "! grep -n 'crate::store' src/service.rs", "expect_not" = "crate::store", "files" = ["src/service.rs"]}
+"mini.t.port.valid" = {"run" = "cargo test parse_valid -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.port.invalid" = {"run" = "cargo test parse_invalid -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.no.unwrap" = {"run" = "! grep -Rn 'unwrap()' src", "expect_not" = "unwrap()", "files" = ["src/config.rs", "src/lib.rs"]}
 "mini.t.clamp.lower" = {"run" = "cargo test clamp_lower_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.clamp.upper" = {"run" = "cargo test clamp_upper_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.sum.basic" = {"run" = "cargo test sum_three -- --exact", "expect" = "test result: ok. 1 passed"}
@@ -174,6 +177,13 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False):
     # Reset evidence so the agent's result is measured from a clean slate.
     shutil.rmtree(os.path.join(work, ".uni", "evidence"), ignore_errors=True)
     os.makedirs(os.path.join(work, ".uni", "evidence"), exist_ok=True)
+
+    # Arm: the agent gets the issue only, no contract, no brief. This is the
+    # realistic "handed an issue from a tracker" case, and the only arm that can
+    # show UNI catching work that looks plausible but violates a declared rule.
+    if hide_contract:
+        os.remove(os.path.join(work, "contract.uni"))
+        print("    arm: contract hidden from the agent")
 
     # A/B arm: hand the agent the deterministic work order (uni brief), which
     # names the exact evidence each claim needs, including test selectors.
@@ -217,6 +227,7 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False):
         "claims_verified": claims_verified,
         "baseline_decision": baseline_decision,
         "brief_mode": 1 if brief_mode else 0,
+        "contract_visible": 0 if hide_contract else 1,
         "diff_lines": len(agent_diff.splitlines()),
     })
     print(f"  {tid}: {decision} ({claims_verified}/{n_claims} claims)")
@@ -240,6 +251,7 @@ if __name__ == "__main__":
     ap.add_argument("--only", default=None)
     ap.add_argument("--append", action="store_true", help="keep existing rows in --out")
     ap.add_argument("--brief", action="store_true", help="A/B arm: generate uni brief into the agent workspace")
+    ap.add_argument("--hide-contract", action="store_true", help="arm: remove the contract from the agent workspace (issue-only handoff)")
     args = ap.parse_args()
     keep_dir = args.keep
     rows = []
@@ -252,10 +264,10 @@ if __name__ == "__main__":
             continue
         if args.only and args.only != name:
             continue
-        run_task(path, args.agent, rows, args.keep, brief_mode=args.brief)
+        run_task(path, args.agent, rows, args.keep, brief_mode=args.brief, hide_contract=args.hide_contract)
     cols = [
         "issue", "agent_done", "agent_self_report", "uni_decision", "human_review",
-        "claims_total", "claims_verified", "baseline_decision", "brief_mode",
+        "claims_total", "claims_verified", "baseline_decision", "brief_mode", "contract_visible",
         "agent_seconds", "agent_cost_usd", "diff_lines",
     ]
     with open(args.out, "w", newline="") as f:

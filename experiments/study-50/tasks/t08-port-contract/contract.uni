@@ -1,0 +1,24 @@
+VERSION 0.1
+DOMAIN software
+INTENT study-t08
+GOAL
+  Port parsing works and stays panic-free.
+CLAIM valid-port REQUIRED
+  ENSURE parse_port("8080") returns Ok(8080)
+CLAIM invalid-port REQUIRED
+  ENSURE a non-numeric or out-of-range port returns Err instead of panicking
+INVARIANT no-unwrap CRITICAL
+  ENSURE library code contains no unwrap() call
+INVARIANT tests-green CRITICAL
+  ENSURE all tests pass
+VERIFY valid-port
+  USING mini.t.port.valid
+VERIFY invalid-port
+  USING mini.t.port.invalid
+VERIFY no-unwrap
+  USING mini.no.unwrap
+VERIFY tests-green
+  USING mini.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0
