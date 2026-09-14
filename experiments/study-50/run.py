@@ -107,7 +107,7 @@ def fixture_reset(repo, tasks_rel):
         subprocess.run(["git", "-C", repo, "checkout", "--", tasks_rel])
 
 
-def run_task(task_dir, agent_name, out_rows, keep_dir):
+def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False):
     tid = os.path.basename(task_dir.rstrip("/"))
     repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     tasks_rel = os.path.join("experiments", "study-50", "tasks")
@@ -172,6 +172,13 @@ def run_task(task_dir, agent_name, out_rows, keep_dir):
     shutil.rmtree(os.path.join(work, ".uni", "evidence"), ignore_errors=True)
     os.makedirs(os.path.join(work, ".uni", "evidence"), exist_ok=True)
 
+    # A/B arm: hand the agent the deterministic work order (uni brief), which
+    # names the exact evidence each claim needs, including test selectors.
+    if brief_mode:
+        code, _, err = sh([UNI, "brief", "contract.uni", "--out", "brief.md"], work)
+        if code != 0:
+            raise RuntimeError(f"{tid}: could not generate brief.md: {err[:200]}")
+
     # agent implements; the self-report is data, not truth
     ok, self_report = AGENTS[agent_name](task_dir, work)
 
@@ -206,6 +213,7 @@ def run_task(task_dir, agent_name, out_rows, keep_dir):
         "claims_total": n_claims,
         "claims_verified": claims_verified,
         "baseline_decision": baseline_decision,
+        "brief_mode": 1 if brief_mode else 0,
         "diff_lines": len(agent_diff.splitlines()),
     })
     print(f"  {tid}: {decision} ({claims_verified}/{n_claims} claims)")
@@ -228,6 +236,7 @@ if __name__ == "__main__":
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--only", default=None)
     ap.add_argument("--append", action="store_true", help="keep existing rows in --out")
+    ap.add_argument("--brief", action="store_true", help="A/B arm: generate uni brief into the agent workspace")
     args = ap.parse_args()
     keep_dir = args.keep
     rows = []
@@ -240,10 +249,10 @@ if __name__ == "__main__":
             continue
         if args.only and args.only != name:
             continue
-        run_task(path, args.agent, rows, args.keep)
+        run_task(path, args.agent, rows, args.keep, brief_mode=args.brief)
     cols = [
         "issue", "agent_done", "agent_self_report", "uni_decision", "human_review",
-        "claims_total", "claims_verified", "baseline_decision",
+        "claims_total", "claims_verified", "baseline_decision", "brief_mode",
         "agent_seconds", "agent_cost_usd", "diff_lines",
     ]
     with open(args.out, "w", newline="") as f:

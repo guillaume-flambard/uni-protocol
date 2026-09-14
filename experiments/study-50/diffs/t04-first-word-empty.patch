@@ -1,46 +1,30 @@
 diff --git a/src/lib.rs b/src/lib.rs
-index ed5a3ea..a09df0d 100644
+index ed5a3ea..ca35246 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -1,5 +1,6 @@
- /// First word of a sentence.
-+///
-+/// Returns an empty string for empty or whitespace-only input instead of panicking.
+@@ -1,5 +1,4 @@
+-/// First word of a sentence.
++/// First word of a sentence. Returns "" for empty or whitespace-only input.
  pub fn first_word(s: &str) -> &str {
 -    // BUG: panics on empty string
 -    s.split(' ').next().unwrap()
 +    s.split_whitespace().next().unwrap_or("")
  }
 diff --git a/tests/it.rs b/tests/it.rs
-index c55c66e..6719913 100644
+index c55c66e..6e5529e 100644
 --- a/tests/it.rs
 +++ b/tests/it.rs
-@@ -4,3 +4,28 @@ use mini_app::first_word;
+@@ -4,3 +4,13 @@ use mini_app::first_word;
  fn normal_sentence() {
      assert_eq!(first_word("hello world"), "hello");
  }
 +
 +#[test]
-+fn empty_string_returns_empty() {
++fn empty_string() {
 +    assert_eq!(first_word(""), "");
 +}
 +
 +#[test]
-+fn whitespace_only_returns_empty() {
-+    assert_eq!(first_word("   "), "");
-+}
-+
-+#[test]
-+fn tabs_and_newlines_only_returns_empty() {
-+    assert_eq!(first_word("\t\n  \r\n"), "");
-+}
-+
-+#[test]
-+fn single_word() {
-+    assert_eq!(first_word("hello"), "hello");
-+}
-+
-+#[test]
-+fn leading_whitespace_is_trimmed() {
-+    assert_eq!(first_word("  hello world"), "hello");
++fn whitespace_only_string() {
++    assert_eq!(first_word("   \t\n "), "");
 +}

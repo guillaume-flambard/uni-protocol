@@ -1,5 +1,5 @@
 diff --git a/src/lib.rs b/src/lib.rs
-index 296143e..1b8052d 100644
+index 296143e..22bfe7e 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -3,9 +3,10 @@ pub fn add(a: i64, b: i64) -> i64 {
@@ -10,12 +10,12 @@ index 296143e..1b8052d 100644
      if x < lo {
          lo
 +    } else if x > hi {
-+        lo
++        hi
      } else {
          x
      }
 diff --git a/tests/it.rs b/tests/it.rs
-index d3d6038..c08e10e 100644
+index d3d6038..1b44f3d 100644
 --- a/tests/it.rs
 +++ b/tests/it.rs
 @@ -9,3 +9,8 @@ fn add_works() {
@@ -25,5 +25,5 @@ index d3d6038..c08e10e 100644
 +
 +#[test]
 +fn clamp_upper_works() {
-+    assert_eq!(clamp(15, 5, 10), 10);
++    assert_eq!(clamp(11, 5, 10), 10);
 +}
