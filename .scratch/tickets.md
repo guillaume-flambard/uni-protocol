@@ -78,9 +78,17 @@ Ordered by value. Nothing here is started unless marked.
    no-ops (they print the session header and exit). The harness is ready:
    `UNI_AGENT_MODEL=<model> python3 run.py --agent opencode --only <task>`.
    Needs: one working implementer, then the same 15-task protocol.
-2. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
+2. **A3 against a real issuer** — the mechanism ships and is tested against a
+   locally generated keypair pinned as JWKS. Nothing has been verified against a
+   live Google, Entra or SPIFFE issuer. Needs: one real token, one worked example
+   under `examples/`, and the report row upgraded from "demontre en test".
+3. **Contracts still pin test names** — the measured cause of the study's 23%
+   false-rejection rate. `uni brief` fixes the handoff and `uni bind --selector`
+   makes the authorization readable, but a contract that demands a name still
+   demands a name. Unresolved by design so far; needs a decision, not a patch.
+4. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
    Deliberately after the single-user story is convincing.
-3. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
+5. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
    present. Low value until the project has a broader audience.
 
 ## Done
