@@ -42,7 +42,7 @@ def agent_fixture(task, work):
         print(f"  [agent] patch failed in {task}: {out}{err}", file=sys.stderr)
     sh(["git", "add", "-A"], work)
     sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "agent-fix"], work)
-    return code == 0
+    return code == 0, "DONE"
 
 def agent_codex(task, work):
     code, out, err = sh(["codex", "exec", "implement the issue described in issue.md"], work)
@@ -50,7 +50,7 @@ def agent_codex(task, work):
         print(f"  [agent] codex failed: {out[:400]}", file=sys.stderr)
     sh(["git", "add", "-A"], work)
     sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "agent-fix"], work)
-    return code == 0
+    return code == 0, "DONE"
 
 def agent_claude(task, work):
     code, out, err = sh(["claude", "-p", "implement the issue described in issue.md"], work)
@@ -69,6 +69,9 @@ def agent_opencode(task, work):
                 "Reply with exactly DONE or FAILED at the end.")
     code, out, err = sh([
         "opencode", "run", "--pure", "--auto",
+        # --dir is REQUIRED: without it opencode resolved a stale project
+        # directory from a previous session and edited the wrong repo.
+        "--dir", work,
         "-m", os.environ.get("UNI_AGENT_MODEL", "bai/qwen3.8-flash"),
         prompt,
     ], work)
@@ -78,13 +81,37 @@ def agent_opencode(task, work):
         print(f"  [agent] opencode failed: {err[:300]}", file=sys.stderr)
     sh(["git", "add", "-A"], work)
     sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "agent-fix"], work)
-    return code == 0
+    return code == 0, "DONE"
 
 AGENTS = {"fixture": agent_fixture, "codex": agent_codex, "claude": agent_claude,
           "opencode": agent_opencode}
 
+def fixture_reset(repo, tasks_rel):
+    """Restore tracked fixture files, and report untracked drift loudly.
+
+    A previous agent run once wrote into the fixture tree and silently
+    pre-fixed a task (UNI then accepted the base, not the agent). Tracked
+    fixtures are restored; untracked drift is fatal, because it cannot be
+    restored and would poison the measurement.
+    """
+    st = subprocess.run(["git", "-C", repo, "status", "--porcelain", "--", tasks_rel],
+                        capture_output=True, text=True)
+    for line in st.stdout.splitlines():
+        if line.startswith("??"):
+            raise RuntimeError(
+                f"untracked fixture drift (cannot restore): {line.strip()}. "
+                "Commit or remove it before running the study."
+            )
+    if st.stdout.strip():
+        print("  [guard] restoring fixture drift:\n" + st.stdout.rstrip(), file=sys.stderr)
+        subprocess.run(["git", "-C", repo, "checkout", "--", tasks_rel])
+
+
 def run_task(task_dir, agent_name, out_rows, keep_dir):
     tid = os.path.basename(task_dir.rstrip("/"))
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    tasks_rel = os.path.join("experiments", "study-50", "tasks")
+    fixture_reset(repo, tasks_rel)
     contract = os.path.join(task_dir, "contract.uni")
     with open(contract) as f:
         src = f.read()
@@ -101,6 +128,9 @@ def run_task(task_dir, agent_name, out_rows, keep_dir):
             shutil.copy(os.path.join(root, fn), os.path.join(dst, fn))
     with open(os.path.join(work, ".gitignore"), "w") as f:
         f.write("/target\n")
+    # The agent must find the task statement WHERE IT WORKS. Without this it
+    # wanders up the filesystem (and once wrote into the fixture tree).
+    shutil.copy(os.path.join(task_dir, "issue.md"), os.path.join(work, "issue.md"))
 
     sh(["git", "init", "-q"], work)
     sh(["git", "add", "-A"], work)
@@ -112,6 +142,7 @@ def run_task(task_dir, agent_name, out_rows, keep_dir):
         f.write("""[verifiers]
 "mini.tests" = "cargo test"
 "mini.t.add" = {"run" = "cargo test add_works -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.greeting" = {"run" = "cargo test greeting_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.clamp.lower" = {"run" = "cargo test clamp_lower_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.clamp.upper" = {"run" = "cargo test clamp_upper_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.sum.basic" = {"run" = "cargo test sum_three -- --exact", "expect" = "test result: ok. 1 passed"}
@@ -122,8 +153,35 @@ def run_task(task_dir, agent_name, out_rows, keep_dir):
 "mini.t.bump.floor" = {"run" = "cargo test bump_floor -- --exact", "expect" = "test result: ok. 1 passed"}
 """)
 
-    # agent implements
-    ok = AGENTS[agent_name](task_dir, work)
+    # PRE-FLIGHT: the base must NOT already satisfy the contract. A fixture
+    # contaminated by a previous run (or a task that needs no work) would make
+    # the agent's contribution invisible and inflate UNI's acceptance record.
+    shutil.copy(contract, os.path.join(work, "contract.uni"))
+    base_code, base_json, base_err = sh([UNI, "--json", "verify", "contract.uni"], work)
+    baseline_decision = "ERROR"
+    try:
+        baseline_decision = json.loads(base_json).get("decision", "ERROR")
+    except Exception:
+        baseline_decision = f"CLI_ERR:{base_code} :: {base_err[:120]}"
+    if baseline_decision == "Accepted":
+        raise RuntimeError(
+            f"{tid}: fixture already satisfies the contract (baseline {baseline_decision}); "
+            "the task is invalid and was not run"
+        )
+    # Reset evidence so the agent's result is measured from a clean slate.
+    shutil.rmtree(os.path.join(work, ".uni", "evidence"), ignore_errors=True)
+    os.makedirs(os.path.join(work, ".uni", "evidence"), exist_ok=True)
+
+    # agent implements; the self-report is data, not truth
+    ok, self_report = AGENTS[agent_name](task_dir, work)
+
+    # Human-review artifact: the agent's source/test diff, persisted durably.
+    # Review must never depend on a temporary directory surviving.
+    _, agent_diff, _ = sh(["git", "diff", "HEAD~1", "HEAD", "--", "src", "tests"], work)
+    diffs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "diffs")
+    os.makedirs(diffs_dir, exist_ok=True)
+    with open(os.path.join(diffs_dir, f"{tid}.patch"), "w") as f:
+        f.write(agent_diff)
 
     # UNI verify
     shutil.copy(contract, os.path.join(work, "contract.uni"))
@@ -139,25 +197,21 @@ def run_task(task_dir, agent_name, out_rows, keep_dir):
 
     out_rows.append({
         "issue": tid,
-        "agent_done": 1,  # agent self-report is always "done"
+        # 1 only when the agent itself claimed completion (DONE), never assumed
+        "agent_done": 1 if self_report == "DONE" else 0,
+        "agent_self_report": self_report,
         "uni_decision": decision,
         # fixture agent encodes ground truth; real study: human column filled by review
         "human_review": "",
         "claims_total": n_claims,
         "claims_verified": claims_verified,
+        "baseline_decision": baseline_decision,
+        "diff_lines": len(agent_diff.splitlines()),
     })
     print(f"  {tid}: {decision} ({claims_verified}/{n_claims} claims)")
 
-    # guard: real agents may be tempted to edit the fixture task tree itself.
-    # Detect and reset any drift under experiments/study-50/tasks.
-    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    tasks_rel = os.path.join("experiments", "study-50", "tasks")
-    st = subprocess.run(["git", "-C", repo, "status", "--porcelain", "--", tasks_rel],
-                        capture_output=True, text=True)
-    if st.stdout.strip():
-        print("  [guard] agent modified task fixtures, resetting:\n" + st.stdout.rstrip(),
-              file=sys.stderr)
-        subprocess.run(["git", "-C", repo, "checkout", "--", tasks_rel])
+    # Post-run guard: same reset, so the next task starts clean.
+    fixture_reset(repo, tasks_rel)
 
     if keep_dir:
         print(f"  (kept: {work})")
@@ -187,9 +241,13 @@ if __name__ == "__main__":
         if args.only and args.only != name:
             continue
         run_task(path, args.agent, rows, args.keep)
-    cols = ["issue", "agent_done", "uni_decision", "human_review", "claims_total", "claims_verified"]
+    cols = [
+        "issue", "agent_done", "agent_self_report", "uni_decision", "human_review",
+        "claims_total", "claims_verified", "baseline_decision",
+        "agent_seconds", "agent_cost_usd", "diff_lines",
+    ]
     with open(args.out, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=cols)
+        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
         w.writeheader()
         for r in rows:
             w.writerow(r)

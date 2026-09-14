@@ -1,0 +1,29 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 47c23ab..6cb13d6 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,5 +1,4 @@
+ /// Sum of integers 1..=n (inclusive).
+ pub fn sum_to(n: i64) -> i64 {
+-    // BUG: off by one - excludes n
+-    (1..n).sum()
++    (1..=n).sum()
+ }
+diff --git a/tests/it.rs b/tests/it.rs
+index 6caef1b..69c35d2 100644
+--- a/tests/it.rs
++++ b/tests/it.rs
+@@ -4,3 +4,13 @@ use mini_app::sum_to;
+ fn sum_zero() {
+     assert_eq!(sum_to(0), 0);
+ }
++
++#[test]
++fn sum_three() {
++    assert_eq!(sum_to(3), 6);
++}
++
++#[test]
++fn sum_one() {
++    assert_eq!(sum_to(1), 1);
++}

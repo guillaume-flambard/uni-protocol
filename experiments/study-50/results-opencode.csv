@@ -1,0 +1,7 @@
+issue,agent_done,agent_self_report,uni_decision,human_review,claims_total,claims_verified,baseline_decision,agent_seconds,agent_cost_usd,diff_lines
+t01-upper-clamp,1,DONE,Accepted,1,4,4,EvidenceRequired,,,29
+t02-upper-clamp-partial,0,FAILED,Rejected,0,4,2,EvidenceRequired,,,29
+t03-int-sum-offbyone,1,DONE,Accepted,1,3,3,EvidenceRequired,,,29
+t04-first-word-empty,1,DONE,EvidenceRequired,1,3,2,EvidenceRequired,,,46
+t05-async-order,1,DONE,Accepted,1,3,3,Rejected,,,31
+t06-greeting,1,DONE,Accepted,1,2,2,EvidenceRequired,,,22

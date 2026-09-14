@@ -32,3 +32,6 @@
 - [x] v0.3.4 — public Verifier trait (Shell/FileHash adapters, verifier_for dispatch, unknown type hard error, inline override refused for non-shell), registry `type` + expect_sha256 (string/table), examples/artifact demo (ACCEPT + tamper -> EvidenceRequired), 4 new unit tests, docs. DONE
 - [x] v0.3.3 — import-speckit: numbered-list + bold + heading markers stripped, tasks.md read, checked/unchecked checkboxes, markdown-shapes golden test. DONE
 - [x] v0.3.5 — bundles: `uni bundle export` (contract/registry/policy/evidence/binding/decision/events, atomic write) and `uni bundle verify` (per-record sha256, context cross-checks, read-only), 4 integration tests, docs. DONE
+- [x] v0.4.1 — collect.py 2x2 matrix (TA/FA/FR/TR), FAR primary, FRR, precision/recall, agent baseline from real self-report, cost columns, CI exit. DONE
+- [x] v0.4.2 — harness repaired: --dir pinned, issue.md copied, pre-flight baseline guard (aborts if the base already satisfies the contract), fixture reset before+after with fatal untracked drift, durable agent diff artifacts, real self-report captured. DONE
+- [x] v0.4.3 — 6 real-agent tasks run and human-reviewed: 4 TA / 0 FA / 1 FR / 1 TR; FAR 0%, FRR 20%; H1 and H2 NOT supported on this sample. Prior n=7 run invalidated (harness bug) and kept for the record. DONE

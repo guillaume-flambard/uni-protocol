@@ -1,0 +1,29 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 296143e..22bfe7e 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -3,9 +3,10 @@ pub fn add(a: i64, b: i64) -> i64 {
+ }
+ 
+ pub fn clamp(x: i64, lo: i64, hi: i64) -> i64 {
+-    // BUG: upper bound never enforced
+     if x < lo {
+         lo
++    } else if x > hi {
++        hi
+     } else {
+         x
+     }
+diff --git a/tests/it.rs b/tests/it.rs
+index d3d6038..c08e10e 100644
+--- a/tests/it.rs
++++ b/tests/it.rs
+@@ -9,3 +9,8 @@ fn add_works() {
+ fn clamp_lower_works() {
+     assert_eq!(clamp(1, 5, 10), 5);
+ }
++
++#[test]
++fn clamp_upper_works() {
++    assert_eq!(clamp(15, 5, 10), 10);
++}
