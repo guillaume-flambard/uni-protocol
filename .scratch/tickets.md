@@ -1,43 +1,88 @@
-# UNI v0.1 — Vertical tracer bullets (Matt to-tickets)
+# UNI — tickets
 
-- [x] T1 — First end-to-end outcome (hello.uni, cargo check → ACCEPTED). Blocked by: none. DONE (dogfood on).
-- [x] T2 — Explainability (`uni explain` human + --json). Blocked by: T1. DONE.
-- [x] T3 — Git-bound evidence (SHA + dirty + SHA-256 → STALE). Blocked by: T2. DONE.
-- [x] T4 — Multiple claims + invariants (multi.uni: CLAIM ×2 + INVARIANT CRITICAL). Blocked by: T3. DONE.
-- [x] T5 — Real software oracle (booking.cancel, 3 claims incl. ledger invariant). Blocked by: T4. DONE.
-- [x] T6 — Playwright pipeline entry (browser.uni + registry `e2e.smoke`). Blocked by: T5. DONE (smoke verifier wired; real Playwright run is per-project).
-- [x] T7 — GitHub CI (`.github/workflows/uni.yml` + `adapters/github/action.yml`). Blocked by: T6. DONE.
-- [x] P5 — SpecKit importer minimal (`uni import-speckit` → candidate JSON, review required). DONE.
-- [x] v0.2a — Proptest determinism + truth table + critical rejection, exhaustive decision matrix, parser fixtures. DONE.
-- [x] v0.2b — Persisted-evidence pipeline (re-run only when stale/missing/invalid), STALE-never-masks-new-commit e2e git fixture, registry security tests (inline shell refused, unknown ref refused), CLI golden tests. DONE. Next: decision-matrix CLI report, then 50-issue study.
-- [x] v0.3a — `uni explain` enriched report (claims table, summary 3/3, Assurance A0-A4, per-claim evidence detail, match filter), PRD §16 error UX (`Run: uni verify <claim>`), negative example + study-50 harness (collect.py, false-accept release criterion). DONE. Next: study-50 real data, then v0.4 agent comparison.
-- [x] v0.4a — study-50 execution harness (run.py fixture/codex/claude agents, per-test verifier registry with expect matcher, stdout/stderr separation), smoke: t01 ACCEPTED 4/4, t02 partial fix blocked. Registry expressiveness caught the single-verifier-for-all-claims hole. DONE. Next: real 50-issue data + human review column, then cost per accepted outcome.
-- [x] v0.4b — 5-task sample (t01-t05), UNI 100% agreement vs agent self-report 80%, 0 false accepts, true block 1/1, coverage 94%. UNI rejected a flawed ground-truth fixture mid-study (assurance working as intended). Real agents wired but blocked: codex absent, claude org-disabled. DONE. Next: agent data when an implementer becomes available.
-- [x] v0.5b — Spec Kit runtime real: specify init (--here --non-interactive) scaffolded .specify + /speckit-* skills; constitution stamped (canonical = /constitution.md); plan.md added under canonical specs/001. DONE. Next: PR check JSON stabilization for CI, then real run through /speckit-* loop on a feature.
-- [x] v0.6 — `uni report` stable CI/PR assurance view (bytes-identical across verify runs, golden test), intent persisted in last.json, step-summary wiring in workflow. DONE. Next: run a real feature through the full speckit loop, then cloud/VS Code phase.
-- [x] v0.7 — Feature 002 via speckit loop: expect_not matcher, content-bound evidence (VerifierSpec.files globs + artifact_hash, cache invalidation on watched-content change), examples/forbid demo (clean ACCEPTED / dirty EvidenceRequired / restored ACCEPTED). Dogfood caught the non-content-bound cache bug. 20 tests green. DONE. Next: speckit tasks->implement via real agent when available, else cloud phase.
-- [x] v0.8 — Append-only event journal (.uni/events.jsonl), uni.* attributes (uni.intent.id/claim.id/verifier.id/decision.state/assurance.level), `uni events` human + --json, golden journal test, EvidenceRun/Reused distinction. DONE. Next: OPA policy adapter interface, then cloud phase.
-- [x] v0.9 — PolicyProvider: .uni/policies/*.toml merged deterministically, apply_policy (reject_on_invalid / escalate_on_stale / escalate_on_missing / min_verified_ratio), ESCALATED exit distinct, 4 policy tests + e2e Escalated demo. 25 tests green. DONE. Next: rules engine (when-conditions) if needed, or cloud phase (org/dashboards), or OPA outbound adapter.
-- [x] v0.11 — `uni lint` preflight (missing-verify error / unknown-verifier + duplicate warns, no exec ever), REQUIRE directive parsed to IR constraints, schema updated. 27 tests green. DONE
-- [x] v0.12 — PolicyProvider seam: trait + TomlPolicy (local) + OpaPolicy (outbound opa eval, graceful fallback, arg order fixed, rego bundle .uni/policies/opa.rego), provider selection in verify, OPA shim golden test. 28 tests green, 0 warnings. DONE
-- [x] v0.13 — `uni doctor` healthcheck. DONE.
-- [x] v0.14 — Stack independence examples: Python (unittest) + Node (node --test) contracts both ACCEPTED, registry expectations tuned to real reporter output (spec-reporter ℹ chars, glob paths), quickstart + language docs, lint in capability map, candidate DSL gitignore, CI verifies all 4 stacks, golden stack-independence test (skips when runtime absent). 30 tests green. DONE
-- [x] v0.15 — PRD §24 docs set: why-uni, claims, evidence, verification, decisions, github-integration, writing-verifiers, specification + docs/index, all written from the shipped binary (trust-boundary phrasing fixed against real code, Node reporter gotcha documented). DONE
-- [x] v0.16 — Software Domain Pack: packs/software/{pack.toml,3 templates}; `uni pack list` (./packs + .uni/packs, human + json); `uni pack template` materializes to uni/intents + lint-clean; parser multi-line FORBID (fix to match spec); dogfood EVIL injection -> REJECTED via critical invariant; fixed PATH race flake in opa test (child env only + opa-absent fallback). 31 tests green x3. DONE
-- [x] v0.17 — Real-agent study run (n=7, headless opencode free tier): DONE 7/7 vs human-rejected 7/7 vs UNI blocks 7/7, 0 false accepts. Caught: no-op "DONE" pattern, fixture tampering (run.py guard added), PATH overwrite (recovered via git), headless opencode invocation recipe. Honest limitations documented (weak implementer, test-name coupling). RESULTS-2026-09-13.md. DONE
-- [x] A5 done (assurance_of single source). Track A complete, ready for v0.1.0 tag gate.
-- [x] B5 — constitution v0.2 (rules X-XII: Verification Context, assurance scale, VerifierBinding) + mirror, spec 003 (spec/plan/tasks). Gate Track B: 73 tests x3, 0 warnings, dogfood 5 stacks, report stable, no LLM in verify path, actor matrix green. DONE
-- [x] v0.3.1 — release workflow (5 targets tar.gz on tag), public composite action (downloads release binary for runner OS/arch, no build), docs. DONE
-- [x] v0.3.2 — CI matrix ubuntu/macos/windows (build+test+portable examples), POSIX examples gated to Linux explicitly. Native timeout + cmd/sh cfg-gate. DONE
-- [x] v0.3.4 — public Verifier trait (Shell/FileHash adapters, verifier_for dispatch, unknown type hard error, inline override refused for non-shell), registry `type` + expect_sha256 (string/table), examples/artifact demo (ACCEPT + tamper -> EvidenceRequired), 4 new unit tests, docs. DONE
-- [x] v0.3.3 — import-speckit: numbered-list + bold + heading markers stripped, tasks.md read, checked/unchecked checkboxes, markdown-shapes golden test. DONE
-- [x] v0.3.5 — bundles: `uni bundle export` (contract/registry/policy/evidence/binding/decision/events, atomic write) and `uni bundle verify` (per-record sha256, context cross-checks, read-only), 4 integration tests, docs. DONE
-- [x] v0.4.1 — collect.py 2x2 matrix (TA/FA/FR/TR), FAR primary, FRR, precision/recall, agent baseline from real self-report, cost columns, CI exit. DONE
-- [x] v0.4.2 — harness repaired: --dir pinned, issue.md copied, pre-flight baseline guard (aborts if the base already satisfies the contract), fixture reset before+after with fatal untracked drift, durable agent diff artifacts, real self-report captured. DONE
-- [x] v0.4.3 — 6 real-agent tasks run and human-reviewed: 4 TA / 0 FA / 1 FR / 1 TR; FAR 0%, FRR 20%; H1 and H2 NOT supported on this sample. Prior n=7 run invalidated (harness bug) and kept for the record. DONE
-- [x] v0.5.1/2 — `uni brief`: deterministic work order (claims, obligations, resolved verifier command, expect/expect_not, watched files, extracted test selector), markdown byte-stable + --json + atomic --out, unresolvable-verifier reporting, 2 golden tests + selector unit tests, docs/brief.md. DONE
-- [x] v0.5.3 - A/B: run.py --brief generates the work order into the agent workspace; t04 (the false-reject case) now ACCEPTED 3/3 naming the required test; t02 also ACCEPTED (correct fix this time). n=2, confounded by nondeterminism; the naming failure is a handoff defect, not a model defect. DONE
-- [x] v0.10 - t10 ledger conservation task (owner-frozen invariant tests, file-hash pinned, overdraft/bounds/self-transfer semantics): fixture ACCEPTED 4/4; real agent ACCEPTED 4/4 (fourth designed trap that did not fire). Consolidated 15-run results: FAR 0%, FRR 23%, precision 100%; model claimed DONE 13/13 with 0 human rejections; the only baseline false accept is the scripted careless run. Product conclusion: lead with the artifact guarantee, ship uni brief as default handoff. DONE
-- [ ] Second-model study arm: BLOCKED externally (billing/credit on every bai model; opencode free models are headless no-ops). Harness ready, one working model away.
-- [x] Remote published: github.com/guillaume-flambard/uni-protocol (public; the name `uni` was taken by an unrelated older repo). CI green on 3 OS + POSIX examples + action-smoke; releases v0.5.0 and v0.5.1 with 5 assets each. Real bugs the first runs exposed and fixed: unix-only test API unguarded, golden tests racing on shared .uni state, node reporter expectation tied to a TTY, artifact_hash globs matching nothing on Windows (backslash separators), empty-match returning a fake hash instead of None, committed __pycache__. DONE
-- [x] Deploy: all tags pushed (v0.1.0, v0.3.0, v0.4.0, v0.5.0, v0.5.1, v0.5.2); releases published for v0.3.0 through v0.5.2 with 5 cross-compiled assets each; v0.5.2 marked Latest with notes; main CI green 5/5 and the v0.5.2 tag CI re-run green. v0.3.0/v0.4.0 tag CI stay red on purpose: they predate the fixes (records of versions that were never CI-clean). DONE
+Current: **v0.5.2** (latest release, `uni 0.5.2`) · 97 tests, 0 warnings ·
+public repo `github.com/guillaume-flambard/uni-protocol` · CI green on
+ubuntu/macOS/Windows + POSIX examples + a smoke job that runs the published
+action.
+
+## Open
+
+Ordered by value. Nothing here is started unless marked.
+
+1. **Second-model study arm** — BLOCKED externally. Every `bai/*` model is
+   refused (credit/deposit), and the `opencode/*` "free" models are headless
+   no-ops (they print the session header and exit). The harness is ready:
+   `UNI_AGENT_MODEL=<model> python3 run.py --agent opencode --only <task>`.
+   Needs: one working implementer, then the same 15-task protocol.
+2. **Contract-level test binding without a registry hop** — PARTIAL. Selector
+   templates (`{{selector}}`) plus `uni bind --selector` close the false
+   rejection the study measured, but the binding still lives per claim and is
+   authorized by hand. Open question: is a per-claim binding the right
+   granularity for a repo with hundreds of claims, or does it need a
+   suite-level binding?
+3. **A3 real** — the assurance scale reaches A3-D (independent actor,
+   self-declared identity). A3 needs identity adapters (spiffe/entra/oidc);
+   they are stubs today, so A3 is unreachable outside unit tests. A4 stays
+   refused by design (`--attest` names the missing signer).
+4. **Execution** — no `uni run`, no execution provider. The blueprint's
+   Codex/Claude/Temporal adapters are unbuilt; UNI only verifies what is
+   already on disk.
+5. **Observability export** — events carry `uni.*` attributes but nothing
+   exports them. An OTel exporter is a small, self-contained slice.
+6. **Evidence lifecycle gaps** — event journal has no rotation; evidence has no
+   expiry (the Time dimension is recorded, not enforced).
+7. **`crates/uni-cli/src/main.rs`** — all commands plus helpers in one file
+   (~1000 lines). Split before the cloud phase.
+8. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
+   Deliberately after the single-user story is convincing.
+9. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
+   present. Low value until the project has a broader audience.
+
+## Done
+
+Condensed by milestone; the detailed history is in git.
+
+- **v0.1 — core frozen.** DSL (closed vocabulary, hard errors for reserved
+  syntax), canonical IR + JSON Schema, trusted-registry verifiers, git- and
+  content-bound evidence, deterministic decision engine, `explain`/`report`/
+  `events`/`lint`/`doctor`, Software Pack, 5 stack examples. Evidence
+  Completeness Principle in the constitution.
+- **v0.2 — assurance model.** Verification Context (registry/policy/contract/
+  platform hashes), Hit/Stale/Miss cache outcomes, registry trust-boundary diff
+  with `trust_boundary_changed` for CI, actor/executor separation with the
+  A2 / A3-D / A3 / A4 scale, VerifierBinding (`uni bind`, `REQUIRE`).
+- **v0.3 — portability and distribution.** Native verifier timeout, `cmd /C`
+  vs `sh -c`, public `Verifier` trait with a `file-hash` adapter, evidence
+  bundles (`uni bundle export|verify`, read-only verification), release
+  workflow for five targets, published action that downloads the release
+  binary.
+- **v0.4 — the study, corrected.** The first real-agent run (n=7) was
+  invalidated: `opencode run` resolved a stale project directory and fixtures
+  were silently pre-fixed. The harness now pins `--dir`, copies the task
+  statement, refuses a base that already satisfies the contract, restores
+  fixtures, and keeps the agent's diff. Corrected 15-run results:
+  **FAR 0%, FRR 23%**, the model claimed DONE 13/13 with zero human rejections,
+  and the only baseline false accept is the scripted "careless" run
+  (verified at revision A, delivered revision B). Four designed traps
+  (architecture invariant, vague issue, frozen API, conservation semantics) did
+  not fire: the model read the contract and behaved.
+- **v0.5 — work order and selector templates.** `uni brief` (deterministic
+  claims + exact evidence, including the test selector, byte-stable, markdown
+  and JSON) and its emission beside imported Spec Kit candidates; selector
+  templates with `uni bind --selector` (worker names the test, human authorizes
+  it, selector included in the binding hash); tracked-only dirtiness (a
+  verifier that compiles no longer stales its own evidence); Windows path
+  separator fix; a declared watch that observes nothing is Invalid.
+- **Review + deploy.** Two-axis review applied (spec honesty, remediation
+  branching, finding ids as data, JSON token leak, unobservable subject).
+  All tags pushed; releases `v0.3.0` through `v0.5.2` with five assets each,
+  `v0.5.2` marked latest. `v0.3.0`/`v0.4.0` tag CI stays red on purpose: those
+  versions predate the fixes, which is the honest record.
+
+## Test debt
+
+- `crates/uni-cli/tests/` is the bulk of the suite (golden, security, binding,
+  bundle). The three low crates gained unit tests in v0.1; keep that direction
+  rather than growing the CLI integration surface.
+- Study fixtures are committed intentionally; the harness refuses untracked
+  fixture drift.
