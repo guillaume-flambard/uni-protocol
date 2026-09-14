@@ -87,12 +87,23 @@ specification.
 ## Dogfood & tests
 
 ```bash
-cargo test                  # 25 tests incl. propperty-based decision determinism
+cargo test                  # 114 tests incl. property-based decision determinism
 ./target/release/uni verify examples/hello/hello.uni && echo OK
 ```
 
-Study results so far: UNI 100% agreement on 5-task sample, agent self-report 80%,
-0 false accepts (release criterion), 1/1 true block.
+Evidence so far, in three parts:
+
+- **The check, in the pull request**: a drifted proof lands as an inline
+  annotation on the file that moved. [docs/flagship-check.md](docs/flagship-check.md)
+- **Stale Evidence Benchmark**, 100 manufactured drift scenarios with no model
+  involved: on the 70 where the artifact stopped satisfying the claims, an
+  exit-code CI stayed green 50 times, a cached CI 70 times, UNI 0 times. UNI
+  detection 86 percent (100 percent in every detectable category), false-stale 0
+  percent. [experiments/stale-bench/RESULTS-2026-09-14.md](experiments/stale-bench/RESULTS-2026-09-14.md)
+- **Agent study**, 15 reviewed runs: 0 false accepts, 23 percent false rejects all
+  caused by test naming, fixed by `uni brief`; the model never misreported on 13
+  runs. H1/H2 not supported.
+  [experiments/study-50/RESULTS-2026-09-14.md](experiments/study-50/RESULTS-2026-09-14.md)
 
 ## Constitution
 

@@ -25,5 +25,6 @@ describes. Constitution: `../constitution.md`. Spec source:
 
 ## Stale evidence
 
+- [The check, in the pull request](flagship-check.md)
 - [Why a proof stopped applying](decisions.md#why-a-proof-stopped-applying)
 - [Stale Evidence Benchmark, 2026-09-14](../experiments/stale-bench/RESULTS-2026-09-14.md)
