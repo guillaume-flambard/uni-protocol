@@ -169,6 +169,64 @@ pub fn resolve_command(
 /// Content-addressed hash over the files a verifier watches (FR-010/FR-013).
 /// Pattern semantics: matched against path RELATIVE to workspace; `*` within a
 /// segment, `**` across segments; prefix/suffix matching otherwise.
+/// Per-file hashes of the watched files, workspace-relative and sorted. This is
+/// what lets UNI name *which* files changed since a proof was established,
+/// instead of only reporting that the subject drifted.
+pub fn artifact_hashes(
+    spec: &VerifierSpec,
+    workspace: &std::path::Path,
+) -> std::collections::BTreeMap<String, String> {
+    if spec.files.is_empty() {
+        return Default::default();
+    }
+    let matches_glob = |rel: &str, pat: &str| -> bool {
+        let pat_parts: Vec<&str> = pat.split('/').collect();
+        let rel_parts: Vec<&str> = rel.split('/').collect();
+        fn m(p: &[&str], r: &[&str]) -> bool {
+            if p.is_empty() {
+                return r.is_empty();
+            }
+            match p[0] {
+                "**" => (0..=r.len()).any(|i| m(&p[1..], &r[i..])),
+                "*" => {
+                    if r.is_empty() {
+                        false
+                    } else {
+                        m(&p[1..], &r[1..])
+                    }
+                }
+                seg => r.first() == Some(&seg) && m(&p[1..], &r[1..]),
+            }
+        }
+        m(&pat_parts, &rel_parts)
+    };
+    let skip = ["target", ".git", ".uni", "evidence"];
+    let mut out = std::collections::BTreeMap::new();
+    let mut stack = vec![workspace.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for entry in rd.flatten() {
+                let path = entry.path();
+                let rel = path
+                    .strip_prefix(workspace)
+                    .map(|p| p.to_string_lossy().replace('\\', "/"))
+                    .unwrap_or_default();
+                if path.is_dir() {
+                    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if !skip.contains(&name) {
+                        stack.push(path);
+                    }
+                } else if spec.files.iter().any(|g| matches_glob(&rel, g)) {
+                    if let Ok(bytes) = std::fs::read(&path) {
+                        out.insert(rel, sha256_hex(&bytes));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 pub fn artifact_hash(spec: &VerifierSpec, workspace: &std::path::Path) -> Option<String> {
     if spec.files.is_empty() {
         return None;
@@ -290,6 +348,7 @@ pub fn run_spec(
     let outcome = verifier.run(spec, workspace)?;
     let mut ev = build_evidence(claim_id, verifier.name(), &outcome.command, &outcome, workspace);
     ev.duration_ms = started.elapsed().as_millis();
+    ev.artifact_files = artifact_hashes(spec, workspace);
     ev.artifact_hash = artifact_hash(spec, workspace).unwrap_or_default();
     // Time dimension: a proof whose truth decays carries its own expiry, so the
     // loader needs no registry access to honour it.
@@ -483,6 +542,7 @@ fn build_evidence(
         created_at: chrono::Utc::now(),
         duration_ms: 0,
         artifact_hash: String::new(),
+        artifact_files: Default::default(),
         fingerprint: String::new(),
         // Verification Context dimensions are filled by the caller (cmd_verify),
         // which owns the registry/contract/policy view of the run.

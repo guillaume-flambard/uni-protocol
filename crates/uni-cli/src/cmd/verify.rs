@@ -191,6 +191,8 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
     let mut stored = vec![];
     let mut need_run = vec![];
     let mut stale_ids: Vec<String> = vec![];
+    let mut stale_reasons: std::collections::BTreeMap<String, Vec<uni_evidence::StaleReason>> =
+        std::collections::BTreeMap::new();
     let mut journal: Vec<events::Event> = vec![events::Event {
         name: "IntentVerified",
         attrs: vec![
@@ -252,11 +254,16 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
             Some(spec) => uni_verify::spec_fingerprint(&v.verifier_ref, spec, &actor.id),
             None => format!("inline:{}:{}", &v.verifier_ref, actor.id),
         };
+        let current_af = resolved_spec
+            .as_ref()
+            .map(|spec| uni_verify::artifact_hashes(spec, &ws))
+            .unwrap_or_default();
         let ctx = uni_evidence::EvidenceContext {
             fingerprint,
             commit_sha: cur_sha.clone(),
             workspace_dirty: cur_dirty,
             artifact_hash: current_ah,
+            artifact_files: current_af,
             registry_hash: registry_hash.clone(),
             contract_hash: contract_hash.clone(),
             platform: platform.clone(),
@@ -276,12 +283,29 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
                 });
                 stored.push(ev)
             }
-            uni_evidence::CacheOutcome::Stale => {
+            uni_evidence::CacheOutcome::Stale(reasons) => {
+                stale_reasons.insert(v.claim_id.clone(), reasons.clone());
                 journal.push(events::Event {
                     name: "EvidenceStale",
                     attrs: vec![
                         ("uni.claim.id".into(), v.claim_id.clone()),
                         ("uni.intent.id".into(), ir.intent.id.clone()),
+                        (
+                            "uni.stale.reasons".into(),
+                            reasons
+                                .iter()
+                                .map(|r| r.label())
+                                .collect::<Vec<_>>()
+                                .join(","),
+                        ),
+                        (
+                            "uni.stale.detail".into(),
+                            reasons
+                                .iter()
+                                .map(|r| r.describe())
+                                .collect::<Vec<_>>()
+                                .join(" | "),
+                        ),
                     ],
                 });
                 stale_ids.push(v.claim_id.clone());
@@ -364,8 +388,43 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
     let assurance = uni_decision::assurance_for(&decision.decision, &stored);
     let independent = uni_decision::independence(&stored) == uni_decision::Independence::Independent;
     let identity = uni_decision::identity_assurance(&stored);
+    // Durable drift record: a claim that went stale keeps its reasons until it is
+    // proved again, so `uni explain` can narrate the drift on later runs too
+    // (the re-run may already have overwritten the proof file).
+    let stale_path = du.join("decisions").join("stale.json");
+    let mut drift: std::collections::BTreeMap<String, Vec<uni_evidence::StaleReason>> =
+        uni_evidence::load_json(&stale_path).unwrap_or_default();
+    for id in stale_reasons.keys() {
+        drift.insert(id.clone(), stale_reasons[id].clone());
+    }
+    let verified_now: Vec<String> = decision
+        .claims
+        .iter()
+        .filter(|c| c.state == uni_evidence::EvidenceState::Valid)
+        .map(|c| c.claim_id.clone())
+        .collect();
+    for id in verified_now {
+        drift.remove(&id);
+    }
+    uni_evidence::save_json(&stale_path, &drift)?;
+
     let last = serde_json::json!({
         "intent": {"id": ir.intent.id, "domain": ir.intent.domain, "goal": ir.intent.goal},
+        // The revision the decision was made against, and why any previous
+        // proof stopped applying. This is what `uni explain` narrates.
+        "commit": cur_sha,
+        "stale": drift.iter().map(|(claim, reasons)| (
+            claim.clone(),
+            serde_json::Value::Array(
+                reasons
+                    .iter()
+                    .map(|r| serde_json::json!({
+                        "dimension": r.label(),
+                        "detail": r.describe(),
+                    }))
+                    .collect(),
+            ),
+        )).collect::<serde_json::Map<String, serde_json::Value>>(),
         "decision": decision.decision,
         "reason": decision.reason,
         "claims": decision.claims,
@@ -421,7 +480,16 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
                 uni_evidence::EvidenceState::Invalid => "FAIL",
                 uni_evidence::EvidenceState::Stale => "STALE",
             };
-            println!("{:<24} {mark}  {}", c.claim_id, c.detail);
+            let why = stale_reasons
+                .get(&c.claim_id)
+                .and_then(|r| r.first())
+                .map(|r| r.describe())
+                .unwrap_or_default();
+            if why.is_empty() {
+                println!("{:<24} {mark}  {}", c.claim_id, c.detail);
+            } else {
+                println!("{:<24} {mark}  {}", c.claim_id, why);
+            }
         }
         println!("\nDecision: {:?}", decision.decision);
         println!("Reason: {}", decision.reason);

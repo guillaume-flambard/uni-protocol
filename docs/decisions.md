@@ -59,6 +59,39 @@ identity: SELF-DECLARED`. A `spiffe://` (or entra/oidc) prefix is recorded but
 stays self-declared with an `IdentityUnverified` journal event. `--actor bob`
 is a declaration, never a proof: passing someone else's name cannot mint A3.
 
+## Why a proof stopped applying
+
+Staleness is data, not a boolean. Each dimension that drifted is recorded as a
+reason, and `uni explain` narrates it:
+
+```
+$ uni explain
+
+CLAIM ledger.integrity
+  status       Invalid
+  command      grep -q 'A: u32 = 1' src/ledger.rs
+  watched      src/ledger.rs
+  why          artifact moved from commit 0f7ef140 to 14da6ff5 (commit_changed)
+  why          watched subject moved (changed: src/ledger.rs) (subject_changed)
+  action       uni verify ledger.integrity
+```
+
+Dimensions: `commit_changed`, `uncommitted_changes`, `subject_changed` (with the
+files named), `contract_changed`, `verifier_config_changed`,
+`platform_changed`, `authorization_changed`, `expired`.
+
+Two properties worth knowing. First, the drift is **remembered**: the reasons
+live in `.uni/decisions/stale.json` until the claim is proved again, so a later
+run whose re-verification already overwrote the proof file can still explain
+what moved. Second, staleness **forces re-verification, it does not fail a
+claim**: if the verifier passes again on the delivered revision, the outcome is
+`Accepted` and the old proof is simply replaced. Only a verifier that fails
+leaves the claim unproven.
+
+The same reasons travel in the journal (`uni.stale.reasons`,
+`uni.stale.detail`) and in `uni verify --json`, so a CI annotation or a bot can
+render them without parsing prose.
+
 ## Reading a decision
 
 - `uni explain` : per-claim table, evidence detail, reason, next commands.

@@ -102,20 +102,68 @@ pub(crate) fn cmd_explain(arg: Option<String>, as_json: bool) -> Result<()> {
         if independent { "YES" } else { "NO" }, identity);
     println!("\n{}", v["reason"].as_str().unwrap_or(""));
 
-    if let Some(c) = v["claims"].as_array().and_then(|a| a.iter().find(|c| c["state"] != "Valid")) {
+    // One block per claim that is not Valid, telling the story: what was
+    // proven before, what is being delivered now, and why the proof stopped
+    // applying. This is the product's central message, so it is spelled out.
+    let failing: Vec<serde_json::Value> = v["claims"]
+        .as_array()
+        .map(|a| a.iter().filter(|c| c["state"] != "Valid").cloned().collect())
+        .unwrap_or_default();
+    let current_commit = v["commit"].as_str().unwrap_or("");
+    for c in failing {
         let claim_id = c["claim_id"].as_str().unwrap_or("");
         let ev = uni_evidence::latest_for_claim(&dot_uni(), claim_id);
         println!("\nCLAIM {claim_id}");
         match &ev {
             None => {
-                println!("Status:\nEVIDENCE_REQUIRED\n\nRequired:\n  trusted registry verifier\n\nFound:\n  no valid evidence bound to this commit\n\nRun:\n  uni verify {claim_id}");
+                println!("  status       EVIDENCE_REQUIRED");
+                println!("  found        no evidence bound to this revision");
+                println!("  action       uni verify {claim_id}");
             }
             Some(e) => {
+                let reasons = v["stale"].get(claim_id).and_then(|r| r.as_array());
                 println!("  status       {:?}", e.state);
                 println!("  command      {}", e.command);
-                println!("  exit_code    {}", e.exit_code);
-                println!("  commit       {}", &e.commit_sha[..e.commit_sha.len().min(8)]);
-                println!("  duration_ms  {}", e.duration_ms);
+                let files: Vec<String> = e.artifact_files.keys().cloned().collect();
+                if !files.is_empty() {
+                    println!("  watched      {}", files.join(", "));
+                }
+                match reasons {
+                    // Drift is the interesting case: the reasons name what moved,
+                    // so restating the commit twice would only add noise.
+                    Some(rs) if !rs.is_empty() => {
+                        for r in rs {
+                            println!(
+                                "  why          {} ({})",
+                                r["detail"].as_str().unwrap_or(""),
+                                r["dimension"].as_str().unwrap_or("")
+                            );
+                        }
+                        if let Some(at) = e.expires_at {
+                            println!("  expired      {}", at.to_rfc3339());
+                        }
+                    }
+                    _ => {
+                        println!("  exit_code    {}", e.exit_code);
+                        println!(
+                            "  proven on    {}",
+                            &e.commit_sha[..e.commit_sha.len().min(8)]
+                        );
+                        if !current_commit.is_empty() {
+                            println!(
+                                "  delivering   {}",
+                                &current_commit[..current_commit.len().min(8)]
+                            );
+                        }
+                        if !e.output_excerpt.is_empty() {
+                            let last = e.output_excerpt.lines().last().unwrap_or("").trim();
+                            if !last.is_empty() {
+                                println!("  output       {last}");
+                            }
+                        }
+                    }
+                }
+                println!("  action       uni verify {claim_id}");
             }
         }
     }

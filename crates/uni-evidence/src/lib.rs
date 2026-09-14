@@ -29,6 +29,10 @@ pub struct Evidence {
     /// sha256 over watched files content (empty = not content-bound)
     #[serde(default)]
     pub artifact_hash: String,
+    /// Per-file hashes of the watched subject, so a stale proof can name the
+    /// files that changed instead of only saying that something did.
+    #[serde(default)]
+    pub artifact_files: std::collections::BTreeMap<String, String>,
     /// sha256(ref|run|expect|expect_not|files): isolates the cache per verifier spec.
     /// Without it, two contracts sharing a claim id could reuse each other's evidence.
     #[serde(default)]
@@ -70,6 +74,8 @@ pub struct EvidenceContext {
     pub commit_sha: String,
     pub workspace_dirty: bool,
     pub artifact_hash: Option<String>,
+    /// Per-file hashes of the watched subject, when the verifier declares one.
+    pub artifact_files: std::collections::BTreeMap<String, String>,
     pub registry_hash: String,
     pub contract_hash: String,
     pub platform: String,
@@ -293,8 +299,96 @@ pub fn load_json<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Opti
 #[derive(Debug, Clone)]
 pub enum CacheOutcome {
     Hit(Evidence),
-    Stale,
+    /// The proof exists but no longer applies, and here is why. This is the
+    /// product's central message, so it travels as data, not as a boolean.
+    Stale(Vec<StaleReason>),
     Miss,
+}
+
+/// One concrete reason a previous proof stopped covering what is being
+/// delivered. Every variant names the dimension of the Verification Context
+/// that drifted, and carries what a human needs to act.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "dimension", rename_all = "snake_case")]
+pub enum StaleReason {
+    /// The artifact under proof is a different revision now.
+    CommitChanged { from: String, to: String },
+    /// Tracked content changed without a commit.
+    UncommittedChanges { workspace_dirty: bool },
+    /// Watched files changed, with the files named.
+    SubjectChanged {
+        changed: Vec<String>,
+        added: Vec<String>,
+        removed: Vec<String>,
+    },
+    /// The contract that defined the claim changed.
+    ContractChanged { from: String, to: String },
+    /// The trusted registry changed, and the diff is named by the caller.
+    VerifierConfigChanged { from: String, to: String },
+    /// The evidence was produced on another platform.
+    PlatformChanged { from: String, to: String },
+    /// The authorized resolution changed (re-bound, or a new selector).
+    AuthorizationChanged { from: String, to: String },
+    /// The proof outlived its declared window.
+    Expired { at: String },
+}
+
+impl StaleReason {
+    /// Short label for logs, journal attributes and CI annotations.
+    pub fn label(&self) -> &'static str {
+        match self {
+            StaleReason::CommitChanged { .. } => "commit_changed",
+            StaleReason::UncommittedChanges { .. } => "uncommitted_changes",
+            StaleReason::SubjectChanged { .. } => "subject_changed",
+            StaleReason::ContractChanged { .. } => "contract_changed",
+            StaleReason::VerifierConfigChanged { .. } => "verifier_config_changed",
+            StaleReason::PlatformChanged { .. } => "platform_changed",
+            StaleReason::AuthorizationChanged { .. } => "authorization_changed",
+            StaleReason::Expired { .. } => "expired",
+        }
+    }
+
+    /// One line, human-facing, for `uni explain` and the GitHub check body.
+    pub fn describe(&self) -> String {
+        match self {
+            StaleReason::CommitChanged { from, to } => format!(
+                "artifact moved from commit {} to {}",
+                short(from),
+                short(to)
+            ),
+            StaleReason::UncommittedChanges { .. } => {
+                "tracked files were modified after the proof".to_string()
+            }
+            StaleReason::SubjectChanged { changed, added, removed } => {
+                let mut parts = vec![];
+                if !changed.is_empty() {
+                    parts.push(format!("changed: {}", changed.join(", ")));
+                }
+                if !added.is_empty() {
+                    parts.push(format!("added: {}", added.join(", ")));
+                }
+                if !removed.is_empty() {
+                    parts.push(format!("removed: {}", removed.join(", ")));
+                }
+                format!("watched subject moved ({})", parts.join("; "))
+            }
+            StaleReason::ContractChanged { .. } => "the contract changed".to_string(),
+            StaleReason::VerifierConfigChanged { .. } => {
+                "the trusted verifier registry changed".to_string()
+            }
+            StaleReason::PlatformChanged { from, to } => {
+                format!("proof made on {from}, running on {to}")
+            }
+            StaleReason::AuthorizationChanged { .. } => {
+                "the authorized verifier binding changed".to_string()
+            }
+            StaleReason::Expired { at } => format!("proof expired at {at}"),
+        }
+    }
+}
+
+fn short(sha: &str) -> String {
+    sha.chars().take(8).collect()
 }
 
 /// Load persisted evidence for a claim; re-validate against the full
@@ -313,23 +407,73 @@ pub fn load_valid_for_claim(
     if ev.fingerprint != ctx.fingerprint {
         return CacheOutcome::Miss; // foreign or pre-fingerprint artifact
     }
-    // Any context drift marks the previous proof stale (never silently reused).
-    let drifted = is_stale(&ev, &ctx.commit_sha, ctx.workspace_dirty)
-        || (!ev.artifact_hash.is_empty()
-            && ctx.artifact_hash.as_deref() != Some(ev.artifact_hash.as_str()))
-        || (!ev.contract_hash.is_empty() && ev.contract_hash != ctx.contract_hash)
-        || (!ev.registry_hash.is_empty() && ev.registry_hash != ctx.registry_hash)
-        || (!ev.platform.is_empty() && ev.platform != ctx.platform)
-        || (!ev.binding_hash.is_empty()
-            && ctx.binding_hash.as_deref() != Some(ev.binding_hash.as_str()));
+    // Collect every drifted dimension, not just the fact of drift.
+    let mut reasons: Vec<StaleReason> = vec![];
+    if ev.commit_sha != ctx.commit_sha {
+        reasons.push(StaleReason::CommitChanged {
+            from: ev.commit_sha.clone(),
+            to: ctx.commit_sha.clone(),
+        });
+    }
+    if ev.workspace_dirty != ctx.workspace_dirty {
+        reasons.push(StaleReason::UncommittedChanges {
+            workspace_dirty: ctx.workspace_dirty,
+        });
+    }
+    if !ev.artifact_hash.is_empty() && ctx.artifact_hash.as_deref() != Some(ev.artifact_hash.as_str())
+    {
+        // Name the files when the proof carries per-file hashes.
+        let mut changed = vec![];
+        let mut added = vec![];
+        let mut removed = vec![];
+        for (path, old) in &ev.artifact_files {
+            match ctx.artifact_files.get(path) {
+                Some(new) if new != old => changed.push(path.clone()),
+                Some(_) => {}
+                None => removed.push(path.clone()),
+            }
+        }
+        for path in ctx.artifact_files.keys() {
+            if !ev.artifact_files.contains_key(path) {
+                added.push(path.clone());
+            }
+        }
+        reasons.push(StaleReason::SubjectChanged { changed, added, removed });
+    }
+    if !ev.contract_hash.is_empty() && ev.contract_hash != ctx.contract_hash {
+        reasons.push(StaleReason::ContractChanged {
+            from: ev.contract_hash.clone(),
+            to: ctx.contract_hash.clone(),
+        });
+    }
+    if !ev.registry_hash.is_empty() && ev.registry_hash != ctx.registry_hash {
+        reasons.push(StaleReason::VerifierConfigChanged {
+            from: ev.registry_hash.clone(),
+            to: ctx.registry_hash.clone(),
+        });
+    }
+    if !ev.platform.is_empty() && ev.platform != ctx.platform {
+        reasons.push(StaleReason::PlatformChanged {
+            from: ev.platform.clone(),
+            to: ctx.platform.clone(),
+        });
+    }
+    if !ev.binding_hash.is_empty() && ctx.binding_hash.as_deref() != Some(ev.binding_hash.as_str())
+    {
+        reasons.push(StaleReason::AuthorizationChanged {
+            from: ev.binding_hash.clone(),
+            to: ctx.binding_hash.clone().unwrap_or_default(),
+        });
+    }
     // Expired evidence is stale, not missing: the proof existed and decayed.
-    let expired = ev
-        .expires_at
-        .map(|t| t <= chrono::Utc::now())
-        .unwrap_or(false);
-    if drifted || expired {
+    if let Some(at) = ev.expires_at.filter(|t| *t <= chrono::Utc::now()) {
+        reasons.push(StaleReason::Expired {
+            at: at.to_rfc3339(),
+        });
+    }
+    if !reasons.is_empty() {
         ev.state = EvidenceState::Stale;
-        return CacheOutcome::Stale;
+        return CacheOutcome::Stale(reasons);
     }
     if ev.state == EvidenceState::Invalid {
         return CacheOutcome::Miss;
@@ -369,6 +513,7 @@ mod tests {
             created_at: Utc::now(),
             duration_ms: 1,
             artifact_hash: String::new(),
+            artifact_files: Default::default(),
             fingerprint: "fp1".into(),
             expires_at: None,
             registry_hash: "reg1".into(),
@@ -387,6 +532,7 @@ mod tests {
             commit_sha: "sha1".into(),
             workspace_dirty: false,
             artifact_hash: None,
+            artifact_files: Default::default(),
             registry_hash: "reg1".into(),
             contract_hash: "con1".into(),
             platform: "linux-x86_64".into(),
@@ -432,7 +578,7 @@ mod tests {
         assert!(matches!(load_valid_for_claim(&du, "c", &wrong_fp), Miss));
         let mut other_sha = ctx();
         other_sha.commit_sha = "other".into();
-        assert!(matches!(load_valid_for_claim(&du, "c", &other_sha), Stale));
+        assert!(matches!(load_valid_for_claim(&du, "c", &other_sha), Stale(_)));
         e.state = EvidenceState::Invalid;
         save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
         assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Miss));
@@ -451,8 +597,8 @@ mod tests {
         assert!(matches!(load_valid_for_claim(&du, "c", &ok), Hit(_)));
         let mut bad = ctx();
         bad.artifact_hash = Some("bbb".into());
-        assert!(matches!(load_valid_for_claim(&du, "c", &bad), Stale));
-        assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Stale));
+        assert!(matches!(load_valid_for_claim(&du, "c", &bad), Stale(_)));
+        assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Stale(_)));
     }
 
     #[test]
@@ -464,13 +610,13 @@ mod tests {
         save_json(&evidence_path(&du, "c", "fp1"), &ev()).unwrap();
         let mut drift = ctx();
         drift.contract_hash = "con2".into();
-        assert!(matches!(load_valid_for_claim(&du, "c", &drift), Stale));
+        assert!(matches!(load_valid_for_claim(&du, "c", &drift), Stale(_)));
         let mut drift = ctx();
         drift.registry_hash = "reg2".into();
-        assert!(matches!(load_valid_for_claim(&du, "c", &drift), Stale));
+        assert!(matches!(load_valid_for_claim(&du, "c", &drift), Stale(_)));
         let mut drift = ctx();
         drift.platform = "darwin-arm64".into();
-        assert!(matches!(load_valid_for_claim(&du, "c", &drift), Stale));
+        assert!(matches!(load_valid_for_claim(&du, "c", &drift), Stale(_)));
     }
 
     #[test]
@@ -481,7 +627,7 @@ mod tests {
         let mut e = ev();
         e.expires_at = Some(Utc::now() - chrono::Duration::hours(1));
         save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
-        assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Stale));
+        assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Stale(_)));
 
         // Still valid while inside its window.
         e.expires_at = Some(Utc::now() + chrono::Duration::hours(1));
