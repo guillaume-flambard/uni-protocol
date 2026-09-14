@@ -10,7 +10,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.8.1"
+version = "0.9.0"
 edition = "2021"
 
 [workspace.dependencies]
@@ -22,3 +22,6 @@ clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 wait-timeout = "0.2"
+# Identity adapter (A3). Pure-Rust crypto backend so the cross-compiled release
+# binaries pull no C/asm toolchain; exactly one backend feature is required.
+jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto", "use_pem"] }

@@ -27,6 +27,7 @@ Rust workspace, single CLI binary `uni`. Deterministic. Filesystem-only. No clou
 | Execute | `uni run <contract> -- <command>` | runs your executor (any agent, any tool), then verifies; the exit code is the decision's |
 | Work order | `uni brief <contract>` | deterministic agent handoff: claims + exact evidence required (markdown/json, byte-stable) |
 | Authorization | `uni bind` / `uni bindings` | VerifierBindings for REQUIRE-carrying verifications (human act, journaled) |
+| Identity | `UNI_IDENTITY_TOKEN` + `[identities]` | verifies a signed JWT against a registry-pinned issuer (JWKS offline), lifting an independent proof from A3-D to A3 |
 | Transport | `uni bundle export` / `uni bundle verify` | audit surface as JSONL with per-record sha256; verify is offline and read-only |
 | Study | `experiments/study-50/` | harness + metrics (agent self-report vs UNI vs human) |
 

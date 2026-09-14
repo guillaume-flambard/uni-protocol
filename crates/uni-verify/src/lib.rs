@@ -4,6 +4,9 @@ use uni_evidence::{git_info, sha256_hex, Evidence, EvidenceState};
 use uni_ir::Ir;
 use wait_timeout::ChildExt;
 
+/// Identity adapters (A3): verify a presented token against pinned issuers.
+pub mod identity;
+
 /// Trusted verifier registry lives in `.uni/config.toml` (never inline untrusted commands).
 /// Two forms:
 /// ```toml

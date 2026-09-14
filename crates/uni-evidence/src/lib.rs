@@ -284,6 +284,16 @@ impl Actor {
         self.id.trim().is_empty() || self.id == "anonymous"
     }
 
+    /// An actor whose identity was verified externally (A3). Only an identity
+    /// adapter may construct one: a prefix or a flag never does.
+    pub fn verified(id: &str, source: &str) -> Self {
+        Actor {
+            id: id.to_string(),
+            source: source.to_string(),
+            assurance: "verified".into(),
+        }
+    }
+
     pub fn is_verified(&self) -> bool {
         self.assurance == "verified"
     }

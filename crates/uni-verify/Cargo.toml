@@ -12,3 +12,4 @@ uni-evidence = { path = "../uni-evidence" }
 toml.workspace = true
 chrono.workspace = true
 wait-timeout.workspace = true
+jsonwebtoken.workspace = true

@@ -3,10 +3,13 @@
 The decision function is deterministic: same contract, same evidence, same
 policies, same decision. No LLM, no clock, no RNG.
 
-One predicate reads the clock by design: evidence expiry (`max_age_hours`). It
-does not make the decision non-deterministic; it decides whether a proof is
-still available to the decision. An expired proof is stale, the verifier re-runs,
-and the decision is taken on the fresh evidence.
+Two validity checks read the clock by design, and neither enters the decision
+function: evidence expiry (`max_age_hours`), which decides whether a proof is
+still available to the decision, and token expiry (`exp`), which decides whether
+a presented identity is still valid. An expired proof is stale, the verifier
+re-runs, and the decision is taken on the fresh evidence; an expired token is
+refused. The decision for a given (contract, evidence, policy) stays
+deterministic.
 
 ## Stage 1: evidence truth table (`evaluate`)
 
@@ -50,14 +53,41 @@ the prover's identity is proven) are DISTINCT properties:
 |---|---|
 | A2 | Trusted verifier observed a complete subject. Default ceiling. |
 | A3-D | Independent actor (`executor != verifier`), identity SELF-DECLARED. Logically independent, identity unproven. |
-| A3 | Independent actor with EXTERNALLY VERIFIED identity (adapters are stubs in v0.2, so unreachable yet except in unit tests). |
+| A3 | Independent actor with an EXTERNALLY VERIFIED identity. |
 | A4 | Reserved: signed provenance has no producer yet (`--attest` refuses explicitly). |
 
 Rules: `uni verify` alone caps at A2 (local actor). `uni verify --actor ci:build-12`
 enables A3-D and `uni report`/`explain` display `independent actor: YES,
-identity: SELF-DECLARED`. A `spiffe://` (or entra/oidc) prefix is recorded but
-stays self-declared with an `IdentityUnverified` journal event. `--actor bob`
-is a declaration, never a proof: passing someone else's name cannot mint A3.
+identity: SELF-DECLARED`. `--actor bob` is a declaration, never a proof: passing
+someone else's name cannot mint A3.
+
+A3 needs a verified identity, and the one source of one is a signed token:
+
+```
+UNI_IDENTITY_TOKEN=<jwt> uni verify c.uni
+```
+
+The token is verified offline against an issuer pinned in the registry, never
+against a URL fetched at runtime:
+
+```toml
+[identities."https://issuer.example"]
+source = "oidc"                 # oidc | entra | spiffe
+jwks_file = ".uni/identity/issuer.jwks.json"
+audiences = ["uni-cli"]         # optional; when set, aud must intersect
+algorithms = ["RS256"]          # optional; default RS256, ES256
+```
+
+The registry is the only root of trust, so the key material lives beside it, not
+behind a network call: a token whose `iss` the registry does not declare is
+refused. The id comes from the token, never the flag: `oidc://<issuer>#<sub>`,
+`entra://<issuer>#<sub>`, or the SPIFFE id for `spiffe`. A token that fails
+verification (bad signature, wrong issuer, wrong audience, expired) is a hard
+error, not a silent downgrade to A3-D, and `--actor` and `UNI_IDENTITY_TOKEN`
+are mutually exclusive. A `spiffe://`/`entra://`/`oidc://` prefix on `--actor`
+with no token is recorded as an `IdentityUnverified` declaration and stays
+self-declared.
+
 
 ## Why a proof stopped applying
 

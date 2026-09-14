@@ -1,8 +1,8 @@
 # UNI — tickets
 
-Current: **v0.8.1** · 114 tests, 0 warnings · public repo
+Current: **v0.9.0** · 128 tests, 0 warnings · public repo
 `github.com/guillaume-flambard/uni-protocol` · CI green on ubuntu/macOS/Windows +
-POSIX examples + a smoke job that runs the published action · release `v0.8.1`
+POSIX examples + a smoke job that runs the published action · release `v0.9.0`
 with five binaries.
 
 ## Done — CI hosting decision (2026-09-14)
@@ -41,6 +41,26 @@ is measured.
 - **Flagship page.** `docs/flagship-check.md`, with screenshots of the red check
   and the step order (prove, drift, annotate, fail).
 
+## Done — identity adapters: A3 is reachable (v0.9.0)
+
+A proof's actor identity is verified, not merely named.
+
+- **The adapter.** `UNI_IDENTITY_TOKEN=<jwt> uni verify` verifies a JWT offline
+  against an issuer pinned in `.uni/config.toml` `[identities]` (`source` is
+  oidc/entra/spiffe, `jwks_file`, optional `audiences`/`algorithms`). Signature
+  via the pinned JWKS, `iss`/`aud`/`exp` checked, `kid` selects the key; `exp`
+  is the one clock read (a validity check on the identity, documented as such).
+  Success mints an actor with assurance `verified`, which the decision engine
+  already turns into A3 when the actor is independent. `--actor` stays
+  self-declared (A3-D), a bad token is a hard error (never a silent downgrade),
+  and `--actor` together with a token is refused.
+- **Trust root unchanged.** The JWKS lives beside the registry, not behind a
+  network call: the registry stays the only root of trust, and a token whose
+  `iss` is not declared there is refused.
+- **Proven end to end.** `crates/uni-cli/tests/cli_identity.rs` (A3, A3-D, A2,
+  mutual exclusion, expired/untrusted refused) plus the adapter unit tests
+  (wrong issuer, tampering, audience, spiffe subject, half-wired config).
+
 ## Open
 
 Ordered by value. Nothing here is started unless marked.
@@ -50,13 +70,9 @@ Ordered by value. Nothing here is started unless marked.
    no-ops (they print the session header and exit). The harness is ready:
    `UNI_AGENT_MODEL=<model> python3 run.py --agent opencode --only <task>`.
    Needs: one working implementer, then the same 15-task protocol.
-2. **A3 real** — the assurance scale reaches A3-D (independent actor,
-   self-declared identity). A3 needs identity adapters (spiffe/entra/oidc);
-   they are stubs today, so A3 is unreachable outside unit tests. A4 stays
-   refused by design (`--attest` names the missing signer).
-3. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
+2. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
    Deliberately after the single-user story is convincing.
-4. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
+3. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
    present. Low value until the project has a broader audience.
 
 ## Done
@@ -114,8 +130,8 @@ Condensed by milestone; the detailed history is in git.
   plain exit-code CI misses 71% of the lost proofs, a cache misses all 70).
 - **Review + deploy.** Two-axis review applied (spec honesty, remediation
   branching, finding ids as data, JSON token leak, unobservable subject).
-  All tags pushed; releases `v0.3.0` through `v0.8.1` with five assets each,
-  `v0.8.1` marked latest. `v0.3.0`/`v0.4.0` tag CI stays red on purpose: those
+  All tags pushed; releases `v0.3.0` through `v0.9.0` with five assets each,
+  `v0.9.0` marked latest. `v0.3.0`/`v0.4.0` tag CI stays red on purpose: those
   versions predate the fixes, which is the honest record.
 
 ## Test debt

@@ -130,19 +130,37 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
     let ws = std::env::current_dir()?;
     let du = dot_uni();
     // B3 actor model: the executor is whoever runs this command (local,
-    // self-declared, capped at A2); the verifier actor defaults to the same
-    // identity unless --actor names a distinct one (still self-declared:
-    // a flag is a declaration, not a proof; max A3-D, never A3).
+    // self-declared, capped at A2). The verifier actor is proven in one of two
+    // ways: a JWT in UNI_IDENTITY_TOKEN, verified against an issuer pinned in
+    // .uni/config.toml [identities] (A3), or `--actor`, a self-declared
+    // identity that reaches no further than A3-D.
     let executor = uni_evidence::Actor::local();
-    let actor = match actor_flag {
-        Some(id) => uni_evidence::Actor::declared(id),
-        None => executor.clone(),
+    let identity_token = std::env::var("UNI_IDENTITY_TOKEN")
+        .ok()
+        .filter(|t| !t.trim().is_empty());
+    let (actor, identity_verified) = match identity_token.as_deref() {
+        Some(token) => {
+            if actor_flag.is_some() {
+                return Err(anyhow!(
+                    "--actor and UNI_IDENTITY_TOKEN are mutually exclusive: the verified token names the actor"
+                ));
+            }
+            let identities = uni_verify::identity::load_identities(&du, &ws)?;
+            (uni_verify::identity::verify_token(token, &identities)?, true)
+        }
+        None => (
+            match actor_flag {
+                Some(id) => uni_evidence::Actor::declared(id),
+                None => executor.clone(),
+            },
+            false,
+        ),
     };
     let external_scheme = actor_flag.map(|id| {
         id.split_once("://").map(|(s, _)| s).unwrap_or("")
     });
-    // v0.2 has no identity adapters: a scheme prefix is recorded but stays
-    // self-declared, and the journal says so explicitly.
+    // A scheme prefix without a token is a declaration, not a proof: recorded
+    // explicitly, and it stays self-declared.
     let identity_unverified_warning =
         matches!(external_scheme, Some("spiffe") | Some("entra") | Some("oidc"));
     let (cur_sha, cur_dirty) = uni_evidence::git_info(&ws);
@@ -200,6 +218,16 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
             ("uni.contract.version".into(), ir.uni_version.clone()),
         ],
     }];
+    if identity_verified {
+        journal.push(events::Event {
+            name: "IdentityVerified",
+            attrs: vec![
+                ("uni.actor.id".into(), actor.id.clone()),
+                ("uni.actor.source".into(), actor.source.clone()),
+                ("uni.actor.assurance".into(), actor.assurance.clone()),
+            ],
+        });
+    }
     if identity_unverified_warning {
         journal.push(events::Event {
             name: "IdentityUnverified",
@@ -493,6 +521,9 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
         }
         println!("\nDecision: {:?}", decision.decision);
         println!("Reason: {}", decision.reason);
+        if identity_verified {
+            println!("Identity: {} (verified)", actor.id);
+        }
     }
     if !as_json
         && decision.decision != uni_decision::Decision::Accepted

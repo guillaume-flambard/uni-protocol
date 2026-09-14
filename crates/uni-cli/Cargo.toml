@@ -21,3 +21,6 @@ uni-ir = { path = "../uni-ir" }
 uni-evidence = { path = "../uni-evidence" }
 uni-verify = { path = "../uni-verify" }
 uni-decision = { path = "../uni-decision" }
+
+[dev-dependencies]
+jsonwebtoken.workspace = true
