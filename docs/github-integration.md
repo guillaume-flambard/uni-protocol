@@ -59,7 +59,7 @@ action repo root:
 ```
 
 Inputs: `contract` (required), `version` (default `v0.5.0`), `repository`
-(default `uni-protocol/uni`, replace with your fork), `report-to-summary`
+(default `guillaume-flambard/uni`, replace with your fork), `report-to-summary`
 (default true). Unknown runner OS fails loudly instead of silently skipping.
 
 ## Evidence lifecycle in CI
