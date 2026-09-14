@@ -36,44 +36,79 @@ fn github_annotations(v: &serde_json::Value) -> Vec<String> {
     let claims = v["claims"].as_array().cloned().unwrap_or_default();
     for c in claims.iter().filter(|c| c["state"] != "Valid") {
         let claim = c["claim_id"].as_str().unwrap_or("claim");
-        let drifted = v["stale"]
+        let reasons = v["stale"]
             .get(claim)
             .and_then(|r| r.as_array())
             .cloned()
             .unwrap_or_default();
-        if drifted.is_empty() {
+        let level = if c["critical"].as_bool().unwrap_or(false) {
+            "error"
+        } else {
+            "warning"
+        };
+        if reasons.is_empty() {
             out.push(format!(
-                "::error title=claim {claim}::no valid evidence for this revision; run `uni verify {claim}`"
+                "::{level} title=claim {claim}::no valid evidence for this revision; run `uni verify {claim}`"
             ));
             continue;
         }
-        for r in drifted {
-            let detail = r["detail"].as_str().unwrap_or("context changed");
-            let dimension = r["dimension"].as_str().unwrap_or("stale");
-            let file = file_from_detail(detail)
-                .map(|f| format!("file={f},"))
-                .unwrap_or_default();
+        // One annotation per file, preferring the reason that names it: a
+        // file-less reason ("tracked files were modified") would otherwise
+        // duplicate the file-naming one and land on the workflow file.
+        let mut files: Vec<String> = Vec::new();
+        for r in &reasons {
+            if let Some(detail) = r["detail"].as_str() {
+                for f in files_from_detail(detail) {
+                    if !files.contains(&f) {
+                        files.push(f);
+                    }
+                }
+            }
+        }
+        if files.is_empty() {
+            let detail = reasons[0]["detail"].as_str().unwrap_or("context changed");
+            let dimension = reasons[0]["dimension"].as_str().unwrap_or("stale");
             out.push(format!(
-                "::{level} {file}title=claim {claim}::{detail} ({dimension}); run `uni verify {claim}`",
-                level = if c["critical"].as_bool().unwrap_or(false) { "error" } else { "warning" }
+                "::{level} title=claim {claim}::{detail} ({dimension}); run `uni verify {claim}`"
+            ));
+            continue;
+        }
+        for f in files {
+            let best = reasons
+                .iter()
+                .find(|r| {
+                    r["detail"]
+                        .as_str()
+                        .map(|d| files_from_detail(d).contains(&f))
+                        .unwrap_or(false)
+                })
+                .unwrap();
+            let detail = best["detail"].as_str().unwrap_or("context changed");
+            let dimension = best["dimension"].as_str().unwrap_or("stale");
+            out.push(format!(
+                "::{level} file={f},title=claim {claim}::{detail} ({dimension}); run `uni verify {claim}`"
             ));
         }
     }
     out
 }
 
-/// The first path named in a `changed: a, b` / `added: a` detail, if any.
-fn file_from_detail(detail: &str) -> Option<String> {
+/// Every path named in a `changed: a, b` / `added: a` / `removed: a` detail.
+fn files_from_detail(detail: &str) -> Vec<String> {
+    let mut out = Vec::new();
     for (marker, rest) in [("changed: ", 9), ("added: ", 7), ("removed: ", 9)] {
         if let Some(i) = detail.find(marker) {
             let list = &detail[i + rest..];
-            let first = list.split([',', ')']).next().unwrap_or("").trim();
-            if !first.is_empty() {
-                return Some(first.to_string());
+            let list = list.split(')').next().unwrap_or(list);
+            for part in list.split(',') {
+                let part = part.trim();
+                if !part.is_empty() {
+                    out.push(part.to_string());
+                }
             }
         }
     }
-    None
+    out
 }
 
 pub(crate) fn cmd_report(as_json: bool) -> Result<()> {
