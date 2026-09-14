@@ -12,6 +12,7 @@
 | [github-integration.md](github-integration.md) | PR check, step summary, stable report |
 | [writing-verifiers.md](writing-verifiers.md) | registering commands vs writing adapters |
 | [brief.md](brief.md) | the work order handed to an implementing agent |
+| [run.md](run.md) | the execute half: run your command, then verify |
 | [specification.md](specification.md) | grammar, canonical IR, behavior contract |
 | [DEEP-ANALYSIS-2026-09-14.md](DEEP-ANALYSIS-2026-09-14.md) | audit, findings, maturity, roadmap |
 | [DEEP-ANALYSIS-2026-09-14.md](DEEP-ANALYSIS-2026-09-14.md) | full audit: architecture, F1/F2 fixes, maturity scores, roadmap |

@@ -15,6 +15,7 @@ toml.workspace = true
 clap.workspace = true
 chrono.workspace = true
 sha2.workspace = true
+wait-timeout.workspace = true
 uni-parser = { path = "../uni-parser" }
 uni-ir = { path = "../uni-ir" }
 uni-evidence = { path = "../uni-evidence" }

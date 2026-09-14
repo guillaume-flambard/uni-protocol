@@ -3,6 +3,7 @@ mod brief;
 mod bundle;
 mod events;
 use clap::{Parser, Subcommand};
+use wait_timeout::ChildExt;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
@@ -61,6 +62,20 @@ enum Cmd {
     },
     /// List authorized verifier bindings.
     Bindings,
+    /// Run a command in the workspace, then verify the contract: the execute
+    /// half of the loop. UNI integrates no agent; you pass the command.
+    Run {
+        file: PathBuf,
+        /// The command to run, as a shell command line (quote it yourself).
+        #[arg(last = true, required = true)]
+        command: Vec<String>,
+        /// Verifier actor identity for the verification that follows.
+        #[arg(long)]
+        actor: Option<String>,
+        /// Milliseconds to wait for the command before killing it.
+        #[arg(long, default_value_t = 900_000)]
+        timeout_ms: u64,
+    },
     /// Emit the deterministic work order for an implementing agent
     /// (claims + the exact evidence each one requires). Guidance, not authority.
     Brief {
@@ -123,6 +138,9 @@ fn main() -> Result<()> {
         Cmd::Bindings => cmd_bindings(cli.json),
         Cmd::Bundle(sub) => cmd_bundle(sub, cli.json),
         Cmd::Brief { file, out } => cmd_brief(&file, out.as_deref(), cli.json),
+        Cmd::Run { file, command, actor, timeout_ms } => {
+            cmd_run(&file, &command.join(" "), actor.as_deref(), timeout_ms, cli.json)
+        }
     }
 }
 
@@ -207,6 +225,70 @@ fn cmd_pack(sub: PackCmd, as_json: bool) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// The execute half of the loop: run the command the human chose, then verify
+/// the contract. The command comes from the command line, never from the
+/// contract, so this adds no trust surface; the executor's exit code is
+/// reported but never decides, because only evidence decides.
+fn cmd_run(
+    file: &Path,
+    command: &str,
+    actor: Option<&str>,
+    timeout_ms: u64,
+    as_json: bool,
+) -> Result<()> {
+    use std::process::Stdio;
+    let ws = std::env::current_dir()?;
+    let started = std::time::Instant::now();
+
+    let mut child = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .current_dir(&ws)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let timeout = std::time::Duration::from_millis(timeout_ms.max(1));
+    let (executor_code, executor_output) = match child.wait_timeout(timeout)? {
+        Some(_) => {
+            let out = child.wait_with_output()?;
+            let code = out.status.code().unwrap_or(-1);
+            let text = [out.stdout, out.stderr].concat();
+            (code, String::from_utf8_lossy(&text).to_string())
+        }
+        None => {
+            let _ = child.kill();
+            let out = child.wait_with_output()?;
+            let mut text = String::from_utf8_lossy(&[out.stdout, out.stderr].concat()).to_string();
+            text.push_str(&format!("\n[uni] executor killed after {timeout_ms}ms\n"));
+            (-1, text)
+        }
+    };
+    if !as_json {
+        print!("{executor_output}");
+        if !executor_output.ends_with('\n') {
+            println!();
+        }
+        println!(
+            "[uni] executor exit {executor_code} in {}ms; verifying the outcome",
+            started.elapsed().as_millis()
+        );
+    }
+
+    let journal_path = dot_uni();
+    let _ = events::append(&[events::Event {
+        name: "ExecutionRun",
+        attrs: vec![
+            ("uni.execution.command".into(), command.to_string()),
+            ("uni.execution.exit_code".into(), executor_code.to_string()),
+            ("uni.execution.duration_ms".into(), started.elapsed().as_millis().to_string()),
+        ],
+    }]);
+    let _ = journal_path;
+
+    // The executor's exit code is data, not truth: the decision is the verdict.
+    cmd_verify(file, as_json, actor, false)
 }
 
 fn cmd_brief(file: &Path, out: Option<&Path>, as_json: bool) -> Result<()> {

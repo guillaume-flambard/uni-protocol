@@ -755,6 +755,7 @@ dependencies = [
  "uni-ir",
  "uni-parser",
  "uni-verify",
+ "wait-timeout",
 ]
 
 [[package]]

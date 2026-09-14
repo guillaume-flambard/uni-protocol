@@ -24,6 +24,7 @@ Rust workspace, single CLI binary `uni`. Deterministic. Filesystem-only. No clou
 | | `uni events` | append-only journal with `uni.*` attributes (OTel-ready) |
 | Health | `uni doctor` | workspace healthcheck (git, registry, policies, writability) |
 | Packs | `uni pack list` / `uni pack template <pack> <name>` | Domain Packs: reusable claim templates (`packs/software`) |
+| Execute | `uni run <contract> -- <command>` | runs your executor (any agent, any tool), then verifies; the exit code is the decision's |
 | Work order | `uni brief <contract>` | deterministic agent handoff: claims + exact evidence required (markdown/json, byte-stable) |
 | Authorization | `uni bind` / `uni bindings` | VerifierBindings for REQUIRE-carrying verifications (human act, journaled) |
 | Transport | `uni bundle export` / `uni bundle verify` | audit surface as JSONL with per-record sha256; verify is offline and read-only |
