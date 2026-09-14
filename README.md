@@ -21,7 +21,7 @@ Rust workspace, single CLI binary `uni`. Deterministic. Filesystem-only. No clou
 | Policy | `.uni/policies/*.toml` | reject_on_invalid, escalate_on_stale/missing, min_verified_ratio (deterministic) |
 | Decision | - | truth table → policy → ACCEPTED/REJECTED/EVIDENCE_REQUIRED/ESCALATED |
 | Audit | `uni report` | byte-stable CI/PR view (`GitHub step summary` ready) |
-| | `uni events` | append-only journal with `uni.*` attributes (OTel-ready) |
+| | `uni events` | append-only journal with `uni.*` attributes; `--otlp` emits OTLP/JSON, `--all` reads archives |
 | Health | `uni doctor` | workspace healthcheck (git, registry, policies, writability) |
 | Packs | `uni pack list` / `uni pack template <pack> <name>` | Domain Packs: reusable claim templates (`packs/software`) |
 | Execute | `uni run <contract> -- <command>` | runs your executor (any agent, any tool), then verifies; the exit code is the decision's |

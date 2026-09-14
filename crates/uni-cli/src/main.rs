@@ -37,6 +37,9 @@ enum Cmd {
         /// Read the retained archives as well as the current journal.
         #[arg(long)]
         all: bool,
+        /// Emit an OTLP/JSON document (one span per event) for a collector.
+        #[arg(long)]
+        otlp: bool,
     },
     Lint { file: PathBuf },
     Doctor,
@@ -121,7 +124,7 @@ fn main() -> Result<()> {
         Cmd::Inspect { file } => cmd_inspect(&file, cli.json),
         Cmd::ImportSpeckit { dir } => cmd_import_speckit(&dir, cli.json),
         Cmd::Report => cmd_report(cli.json),
-        Cmd::Events { all } => cmd_events(cli.json, 50, all),
+        Cmd::Events { all, otlp } => cmd_events(cli.json, 50, all, otlp),
         Cmd::Lint { file } => cmd_lint(&file, cli.json),
         Cmd::Doctor => cmd_doctor(cli.json),
         Cmd::Pack(sub) => cmd_pack(sub, cli.json),
@@ -678,12 +681,16 @@ fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
     Ok(())
 }
 
-fn cmd_events(as_json: bool, max: usize, all: bool) -> Result<()> {
+fn cmd_events(as_json: bool, max: usize, all: bool, otlp: bool) -> Result<()> {
     let evts = if all {
         events::read_all_including_archives()?
     } else {
         events::read_all()?
     };
+    if otlp {
+        println!("{}", serde_json::to_string_pretty(&events::to_otlp(&evts))?);
+        return Ok(());
+    }
     let n = evts.len();
     if as_json {
         for e in &evts {

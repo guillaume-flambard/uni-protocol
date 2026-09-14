@@ -88,6 +88,13 @@ newest archives. `uni events` reads the current window, `uni events --all` reads
 the archives too, and `uni doctor` reports the size and the rotation cap. The
 live journal is never pruned as if it were an archive.
 
+`uni events --otlp` emits the journal as an OTLP/JSON document (one span per
+event, resource `service.name=uni`, the `uni.*` attributes as span attributes),
+so an existing collector can ingest UNI without a UNI-specific integration.
+Trace and span ids are derived from the event content, so the export is
+deterministic for a given journal rather than random: two exports of the same
+journal are byte-identical.
+
 ## Bundles (v0.3)
 
 ```bash

@@ -160,6 +160,68 @@ fn read_file(path: &std::path::Path) -> Result<Vec<JournalEvent>> {
     Ok(out)
 }
 
+/// OTLP/JSON projection of the journal (no SDK, no dependency): one span per
+/// event, resource `service.name=uni`, and the `uni.*` attributes carried as
+/// string values. Trace and span ids are derived from the event content, so the
+/// export is deterministic for a given journal rather than random.
+pub fn to_otlp(events: &[JournalEvent]) -> serde_json::Value {
+    fn hex16(seed: &str) -> String {
+        uni_evidence::sha256_hex(seed.as_bytes())[..16].to_string()
+    }
+    fn hex32(seed: &str) -> String {
+        uni_evidence::sha256_hex(seed.as_bytes())[..32].to_string()
+    }
+    let spans: Vec<serde_json::Value> = events
+        .iter()
+        .map(|e| {
+            let nanos = chrono::DateTime::parse_from_rfc3339(&e.timestamp)
+                .map(|t| t.timestamp_nanos_opt().unwrap_or(0).to_string())
+                .unwrap_or_else(|_| "0".to_string());
+            let attrs: Vec<serde_json::Value> = e
+                .attributes
+                .iter()
+                .map(|(k, v)| {
+                    let sval = match v {
+                        serde_json::Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    };
+                    serde_json::json!({"key": k, "value": {"stringValue": sval}})
+                })
+                .collect();
+            let seed = serde_json::to_string(e).unwrap_or_default();
+            let intent = e
+                .attributes
+                .get("uni.intent.id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("uni")
+                .to_string();
+            serde_json::json!({
+                "traceId": hex32(&intent),
+                "spanId": hex16(&seed),
+                "name": e.event,
+                "kind": 1,
+                "startTimeUnixNano": nanos,
+                "endTimeUnixNano": nanos,
+                "attributes": attrs,
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "resourceSpans": [{
+            "resource": {
+                "attributes": [
+                    {"key": "service.name", "value": {"stringValue": "uni"}},
+                    {"key": "service.version", "value": {"stringValue": env!("CARGO_PKG_VERSION")}}
+                ]
+            },
+            "scopeSpans": [{
+                "scope": {"name": "uni", "version": env!("CARGO_PKG_VERSION")},
+                "spans": spans,
+            }]
+        }]
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,6 +257,37 @@ mod tests {
         let mut sorted = kept.clone();
         sorted.sort();
         assert_eq!(kept, sorted);
+    }
+
+    #[test]
+    fn otlp_projection_carries_the_attributes() {
+        let ev = JournalEvent {
+            event: "DecisionIssued".into(),
+            timestamp: "2026-09-14T10:00:00Z".into(),
+            attributes: [
+                ("uni.intent.id".to_string(), serde_json::json!("booking.cancel")),
+                ("uni.assurance.level".to_string(), serde_json::json!("A2")),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        let doc = to_otlp(&[ev]);
+        let span = &doc["resourceSpans"][0]["scopeSpans"][0]["spans"][0];
+        assert_eq!(span["name"], "DecisionIssued");
+        assert_eq!(span["traceId"].as_str().unwrap().len(), 32);
+        assert_eq!(span["spanId"].as_str().unwrap().len(), 16);
+        assert!(span["startTimeUnixNano"].as_str().unwrap().parse::<u128>().is_ok());
+        let keys: Vec<&str> = span["attributes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a["key"].as_str().unwrap())
+            .collect();
+        assert!(keys.contains(&"uni.intent.id") && keys.contains(&"uni.assurance.level"), "{keys:?}");
+        assert_eq!(
+            doc["resourceSpans"][0]["resource"]["attributes"][0]["value"]["stringValue"],
+            "uni"
+        );
     }
 
     #[test]
