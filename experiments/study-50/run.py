@@ -27,7 +27,6 @@ UNI = os.environ.get(
     os.path.join(os.path.dirname(__file__), "..", "..", "target", "release", "uni"),
 )
 
-REGISTRY = ''
 
 def sh(args, cwd, capture=True):
     p = subprocess.run(args, cwd=cwd, text=True,
@@ -107,6 +106,41 @@ def fixture_reset(repo, tasks_rel):
         subprocess.run(["git", "-C", repo, "checkout", "--", tasks_rel])
 
 
+REGISTRY = """[verifiers]
+"mini.tests" = "cargo test"
+"mini.t.add" = {"run" = "cargo test add_works -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.greeting" = {"run" = "cargo test greeting_works -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.cancel.ok" = {"run" = "cargo test cancel_ok -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.cancel.missing" = {"run" = "cargo test cancel_missing -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.layering" = {"run" = "! grep -n 'crate::store' src/service.rs", "expect_not" = "crate::store", "files" = ["src/service.rs"]}
+"mini.t.port.valid" = {"run" = "cargo test parse_valid -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.port.invalid" = {"run" = "cargo test parse_invalid -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.no.unwrap" = {"run" = '! grep -Rn "\\.unwrap()" src', "expect_not" = ".unwrap()", "files" = ["src/config.rs", "src/lib.rs"]}
+"mini.t.clamp.lower" = {"run" = "cargo test clamp_lower_works -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.clamp.upper" = {"run" = "cargo test clamp_upper_works -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.sum.basic" = {"run" = "cargo test sum_three -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.sum.one" = {"run" = "cargo test sum_one -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.first.normal" = {"run" = "cargo test normal_sentence -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.first.empty" = {"run" = "cargo test empty_string -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.bump.basic" = {"run" = "cargo test bump_ten -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.t.bump.floor" = {"run" = "cargo test bump_floor -- --exact", "expect" = "test result: ok. 1 passed"}
+"""
+
+
+def write_registry(work):
+    """Write the trusted registry, and refuse to continue if it is not valid
+    TOML: a parse error empties the registry, which silently turns every
+    verifier reference into 'unknown verifier' and poisons the measurement."""
+    import tomllib
+    try:
+        tomllib.loads(REGISTRY)
+    except Exception as exc:  # pragma: no cover - guard
+        raise RuntimeError(f"generated registry is invalid TOML: {exc}")
+    os.makedirs(os.path.join(work, ".uni", "evidence"), exist_ok=True)
+    with open(os.path.join(work, ".uni", "config.toml"), "w") as f:
+        f.write(REGISTRY)
+
+
 def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_contract=False):
     tid = os.path.basename(task_dir.rstrip("/"))
     repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -137,27 +171,8 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
     sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "base"], work)
 
     # trusted registry for this workspace
-    os.makedirs(os.path.join(work, ".uni", "evidence"), exist_ok=True)
-    with open(os.path.join(work, ".uni", "config.toml"), "w") as f:
-        f.write("""[verifiers]
-"mini.tests" = "cargo test"
-"mini.t.add" = {"run" = "cargo test add_works -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.t.greeting" = {"run" = "cargo test greeting_works -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.t.cancel.ok" = {"run" = "cargo test cancel_ok -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.t.cancel.missing" = {"run" = "cargo test cancel_missing -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.layering" = {"run" = "! grep -n 'crate::store' src/service.rs", "expect_not" = "crate::store", "files" = ["src/service.rs"]}
-"mini.t.port.valid" = {"run" = "cargo test parse_valid -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.t.port.invalid" = {"run" = "cargo test parse_invalid -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.no.unwrap" = {"run" = "! grep -Rn 'unwrap()' src", "expect_not" = "unwrap()", "files" = ["src/config.rs", "src/lib.rs"]}
-"mini.t.clamp.lower" = {"run" = "cargo test clamp_lower_works -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.t.clamp.upper" = {"run" = "cargo test clamp_upper_works -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.t.sum.basic" = {"run" = "cargo test sum_three -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.t.sum.one" = {"run" = "cargo test sum_one -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.t.first.normal" = {"run" = "cargo test normal_sentence -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.t.first.empty" = {"run" = "cargo test empty_string -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.t.bump.basic" = {"run" = "cargo test bump_ten -- --exact", "expect" = "test result: ok. 1 passed"}
-"mini.t.bump.floor" = {"run" = "cargo test bump_floor -- --exact", "expect" = "test result: ok. 1 passed"}
-""")
+    write_registry(work)
+
 
     # PRE-FLIGHT: the base must NOT already satisfy the contract. A fixture
     # contaminated by a previous run (or a task that needs no work) would make
@@ -182,8 +197,11 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
     # realistic "handed an issue from a tracker" case, and the only arm that can
     # show UNI catching work that looks plausible but violates a declared rule.
     if hide_contract:
+        # Issue-only handoff: the agent sees the repository and the issue, not
+        # the contract and not the trusted registry (both are restored after).
+        shutil.rmtree(os.path.join(work, ".uni"), ignore_errors=True)
         os.remove(os.path.join(work, "contract.uni"))
-        print("    arm: contract hidden from the agent")
+        print("    arm: contract + registry hidden from the agent")
 
     # A/B arm: hand the agent the deterministic work order (uni brief), which
     # names the exact evidence each claim needs, including test selectors.
@@ -194,6 +212,8 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
 
     # agent implements; the self-report is data, not truth
     ok, self_report = AGENTS[agent_name](task_dir, work)
+    if hide_contract:
+        write_registry(work)
 
     # Human-review artifact: the agent's source/test diff, persisted durably.
     # Review must never depend on a temporary directory surviving.

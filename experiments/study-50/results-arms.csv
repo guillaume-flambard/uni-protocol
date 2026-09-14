@@ -1,0 +1,3 @@
+issue,agent_done,agent_self_report,uni_decision,human_review,claims_total,claims_verified,baseline_decision,brief_mode,contract_visible,agent_seconds,agent_cost_usd,diff_lines
+t08-port-contract,1,DONE,EvidenceRequired,1,4,2,EvidenceRequired,0,1,,,57
+t08-port-contract,1,DONE,EvidenceRequired,1,4,2,EvidenceRequired,0,0,,,70
