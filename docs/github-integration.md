@@ -76,6 +76,13 @@ All of the above ran for real on the published repository:
 Pushing the tag and `main` in the same breath races the smoke job against the
 release assets; push the tag first, or re-run the job.
 
+Published releases: `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.5.1`, `v0.5.2` (latest), five
+assets each. `v0.1.0` predates the release workflow, so it has no release, and
+its CI run is the only historical one that is green by construction. The CI
+runs for `v0.3.0` and `v0.4.0` fail: those tags predate the isolation and
+portability fixes below, which is the honest record of versions that were never
+CI-clean.
+
 ## Evidence lifecycle in CI
 
 Runners are ephemeral, so evidence regenerates per run; git and content bindings
