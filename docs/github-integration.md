@@ -51,14 +51,14 @@ A composite action that DOWNLOADS the release binary for the runner platform
 action repo root:
 
 ```yaml
-- uses: your-org/uni/adapters/github@v0.3.0
+- uses: your-org/uni/adapters/github@v0.4.0
   with:
     contract: uni/intents/feature.uni
-    version: v0.3.0
+    version: v0.4.0
     repository: your-org/uni
 ```
 
-Inputs: `contract` (required), `version` (default `v0.1.0`), `repository`
+Inputs: `contract` (required), `version` (default `v0.4.0`), `repository`
 (default `uni-protocol/uni`, replace with your fork), `report-to-summary`
 (default true). Unknown runner OS fails loudly instead of silently skipping.
 

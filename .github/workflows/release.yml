@@ -1,7 +1,7 @@
 name: release
 
 # Cross-compiled release binaries. Triggered by pushing a version tag
-# (git tag v0.3.0 && git push origin v0.3.0). The action in
+# (git tag v0.4.0 && git push origin v0.3.0). The action in
 # adapters/github/action.yml downloads these assets by target triple.
 on:
   push:
