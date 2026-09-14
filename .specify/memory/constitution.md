@@ -39,10 +39,10 @@ Evidence validity = Contract x Subject x Verifier x VerifierConfig x Environment
 A2 trusted verifier; A3-D independent actor with self-declared identity; A3 independent actor with externally verified identity; A4 signed provenance (reserved). Independence and identity assurance are distinct: a flag is a declaration, never a proof.
 
 ### XII. VerifierBinding
-A resolution requirement executes only under a human-authorized binding (claim x verifier x requirement text, hashed). AI may propose bindings; only `uni bind` authorizes. Re-authorization replaces; old proofs stale.
+A resolution requirement executes only under a human-authorized binding (claim x verifier x requirement text x selector, hashed). AI may propose bindings; only `uni bind` authorizes. Re-authorization replaces; old proofs stale. A template selector defers the test name to the worker and the authorization to the human.
 
 ## Governance
 
 Constitution supersedes all other practices. Amendments require documentation and a migration note. Inert syntax is a hard error, never a silent no-op.
 
-**Version**: 0.2.0 | **Ratified**: 2026-09-13 | **Last Amended**: 2026-09-14
+**Version**: 0.5.0 | **Ratified**: 2026-09-13 | **Last Amended**: 2026-09-14

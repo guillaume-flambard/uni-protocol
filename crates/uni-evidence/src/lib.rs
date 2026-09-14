@@ -96,12 +96,15 @@ pub fn git_info(workspace: &std::path::Path) -> (String, bool) {
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_else(|_| "no-git".into());
-    // Dirtiness excludes UNI's own runtime files: a verify must never
-    // invalidate its own (or a concurrent verify's) fresh evidence through
-    // the files it writes itself. Trust-relevant .uni changes (config.toml,
-    // policies) are covered by registry/policy hashes instead.
+    // Dirtiness means "someone changed tracked content since the recorded
+    // revision". Two exclusions matter:
+    //  - .uni/ is UNI's own runtime state; trust-relevant parts (registry,
+    //    policies) are covered by their own hashes.
+    //  - untracked files are build outputs and scratch, not code: a verifier
+    //    that compiles (target/, Cargo.lock, node_modules) must not stale its
+    //    own fresh evidence. Watched-file drift is caught by artifact_hash.
     let dirty = std::process::Command::new("git")
-        .args(["status", "--porcelain", "--", ".", ":!.uni"])
+        .args(["status", "--porcelain", "--untracked-files=no", "--", ".", ":!.uni"])
         .current_dir(workspace)
         .output()
         .map(|o| !o.stdout.is_empty())

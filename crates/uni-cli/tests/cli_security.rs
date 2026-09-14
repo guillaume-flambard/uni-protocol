@@ -456,3 +456,24 @@ fn requirement_needs_authorized_binding() {
     assert!(journal.contains("BindingAuthorized"), "bind must journalize the human act");
     assert!(journal.matches("EvidenceRun").count() >= 2, "re-authorization must force renewal");
 }
+
+/// A verifier that creates untracked build output (a compiler, a bundler)
+/// must not invalidate its own fresh evidence: dirtiness is about tracked
+/// content, not about scratch files.
+#[test]
+fn build_artifacts_do_not_stale_own_evidence() {
+    let dir = mk_repo("self-dirty");
+    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"build\" = \"mkdir -p target/debug && echo x > target/debug/out && true\"\n").unwrap();
+    std::fs::write(
+        dir.join("c.uni"),
+        "VERSION 0.1\nDOMAIN software\nINTENT selfdirty\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING build\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n",
+    )
+    .unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    let first = out(&["verify", "c.uni"], &dir);
+    assert!(first.contains("Accepted"), "untracked build output must not stale evidence: {first}");
+    let second = out(&["verify", "c.uni"], &dir);
+    assert!(second.contains("Accepted"), "{second}");
+}

@@ -44,8 +44,12 @@ enum Cmd {
         claim: String,
         #[arg(long)]
         verifier: String,
-        #[arg(long)]
+        /// Human-readable resolution requirement (optional for plain bindings).
+        #[arg(long, default_value = "")]
         requirement: String,
+        /// Concrete test selector for `{{selector}}` template verifiers.
+        #[arg(long)]
+        selector: Option<String>,
     },
     /// List authorized verifier bindings.
     Bindings,
@@ -98,8 +102,8 @@ fn main() -> Result<()> {
         Cmd::Lint { file } => cmd_lint(&file, cli.json),
         Cmd::Doctor => cmd_doctor(cli.json),
         Cmd::Pack(sub) => cmd_pack(sub, cli.json),
-        Cmd::Bind { claim, verifier, requirement } => {
-            cmd_bind(&claim, &verifier, &requirement, cli.json)
+        Cmd::Bind { claim, verifier, requirement, selector } => {
+            cmd_bind(&claim, &verifier, &requirement, selector.as_deref(), cli.json)
         }
         Cmd::Bindings => cmd_bindings(cli.json),
         Cmd::Bundle(sub) => cmd_bundle(sub, cli.json),
@@ -277,16 +281,23 @@ fn cmd_bundle(sub: BundleCmd, as_json: bool) -> Result<()> {
 }
 
 /// Human authorization act for VerifierBindings, journaled as such.
-fn cmd_bind(claim: &str, verifier: &str, requirement: &str, as_json: bool) -> Result<()> {
+fn cmd_bind(
+    claim: &str,
+    verifier: &str,
+    requirement: &str,
+    selector: Option<&str>,
+    as_json: bool,
+) -> Result<()> {
     let du = dot_uni();
     let by = uni_evidence::Actor::local().id;
-    let b = uni_evidence::binding::authorize(&du, claim, verifier, requirement, &by)?;
+    let b = uni_evidence::binding::authorize(&du, claim, verifier, requirement, selector, &by)?;
     events::append(&[events::Event {
         name: "BindingAuthorized",
         attrs: vec![
             ("uni.claim.id".into(), claim.to_string()),
             ("uni.verifier.id".into(), verifier.to_string()),
             ("uni.binding.hash".into(), b.binding_hash.clone()),
+            ("uni.binding.selector".into(), b.selector.clone().unwrap_or_default()),
             ("uni.binding.by".into(), by),
         ],
     }])?;
@@ -294,7 +305,12 @@ fn cmd_bind(claim: &str, verifier: &str, requirement: &str, as_json: bool) -> Re
         println!("{}", serde_json::to_string_pretty(&b)?);
     } else {
         println!("authorized: claim '{claim}' -> verifier '{verifier}'");
-        println!("requirement: {requirement}");
+        if !requirement.is_empty() {
+            println!("requirement: {requirement}");
+        }
+        if let Some(sel) = &b.selector {
+            println!("selector:    {sel}");
+        }
         println!("binding:     {}", b.binding_hash);
     }
     Ok(())
@@ -322,8 +338,9 @@ fn cmd_bindings(as_json: bool) -> Result<()> {
         println!("no authorized bindings (.uni/bindings/ is empty)");
     } else {
         for b in &out {
-            println!("{:<24} -> {:<24} [{}] by {} at {}",
-                b.claim_id, b.verifier_ref, b.binding_hash, b.authorized_by, b.authorized_at);
+            let sel = b.selector.as_deref().unwrap_or("-");
+            println!("{:<24} -> {:<24} selector {:<20} [{}] by {} at {}",
+                b.claim_id, b.verifier_ref, sel, b.binding_hash, b.authorized_by, b.authorized_at);
         }
     }
     Ok(())
@@ -425,7 +442,40 @@ fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
             }
         }
     }
+    // v0.4: a selector-template verifier needs an authorized selector binding,
+    // and the specific message beats the generic unbound-requirement warning.
+    for v in &ir.verification {
+        let Some(spec) = registry.get(&v.verifier_ref) else { continue };
+        if !uni_verify::is_selector_template(spec) {
+            continue;
+        }
+        let ok = match uni_evidence::binding::load_binding(&dot_uni(), &v.claim_id) {
+            Some(b) => {
+                b.verifier_ref == v.verifier_ref
+                    && b.requirement == v.requirement.clone().unwrap_or_default()
+                    && b.selector.as_deref().map(|s| !s.trim().is_empty()).unwrap_or(false)
+            }
+            None => false,
+        };
+        if !ok {
+            findings.push((1, "selector-template".into(), format!(
+                "claim '{}' uses selector template '{}' without an authorized selector binding (run: uni bind --claim {} --verifier {} --selector <test-name>)",
+                v.claim_id, v.verifier_ref, v.claim_id, v.verifier_ref
+            )));
+        }
+    }
+    let selector_flagged: Vec<String> = findings
+        .iter()
+        .filter(|(_, kind, _)| kind == "selector-template")
+        .filter_map(|(_, _, msg)| {
+            // the claim id is the token after the first quote
+            msg.split('\'').nth(1).map(|s| s.to_string())
+        })
+        .collect();
     for v in ir.verification.iter().filter(|v| v.requirement.is_some()) {
+        if selector_flagged.contains(&v.claim_id) {
+            continue; // the specific selector message already says what to do
+        }
         let req = v.requirement.as_deref().unwrap_or("");
         match uni_evidence::binding::load_binding(&dot_uni(), &v.claim_id) {
             Some(b) if b.verifier_ref == v.verifier_ref && b.requirement == req => {}
@@ -602,27 +652,48 @@ fn cmd_inspect(file: &Path, as_json: bool) -> Result<()> {
 /// v0.2 authorization gate for resolution requirements. Returns the binding
 /// hash the evidence must carry, or fails hard: a requirement without a
 /// matching authorized binding never executes. `None` requirement = no gate.
+/// Authorized resolution of a claim's verification (v0.4).
+#[derive(Default)]
+struct Resolution {
+    binding_hash: Option<String>,
+    selector: Option<String>,
+}
+
+/// Gate: a verification runs only under an authorized binding when it either
+/// declares a resolution REQUIRE (v0.2) or uses a `{{selector}}` template
+/// (v0.4). A template plus an authorization is what removes the study's
+/// evidence-name coupling: the worker names the test, the human authorizes it.
 fn require_binding(
     du: &Path,
     claim_id: &str,
     verifier_ref: &str,
     requirement: Option<&str>,
-) -> Result<Option<String>> {
-    let Some(req) = requirement else {
-        return Ok(None);
-    };
+    is_template: bool,
+) -> Result<Resolution> {
+    let req = requirement.unwrap_or("");
+    if !is_template && requirement.is_none() {
+        return Ok(Resolution::default());
+    }
     match uni_evidence::binding::load_binding(du, claim_id) {
         Some(b) if b.verifier_ref == verifier_ref && b.requirement == req => {
-            Ok(Some(b.binding_hash))
+            if is_template && b.selector.as_deref().unwrap_or("").trim().is_empty() {
+                return Err(anyhow!(
+                    "claim '{claim_id}' uses a selector-template verifier but its binding has no selector; authorize with: uni bind --claim {claim_id} --verifier {verifier_ref} --selector <test-name>"
+                ));
+            }
+            Ok(Resolution {
+                binding_hash: Some(b.binding_hash),
+                selector: b.selector,
+            })
         }
         Some(b) => Err(anyhow!(
-            "claim '{claim_id}' requirement changed or rebound (bound: '{}' expecting '{}', verifier '{}'; re-authorize with: uni bind --claim {claim_id} --verifier {verifier_ref} --requirement ...)",
+            "claim '{claim_id}' was rebound (bound: requirement '{}' verifier '{}' selector {:?}; contract expects requirement '{req}' on verifier '{verifier_ref}'); re-authorize with: uni bind --claim {claim_id} --verifier {verifier_ref} --selector <test-name>",
             b.requirement,
-            req,
             b.verifier_ref,
+            b.selector,
         )),
         None => Err(anyhow!(
-            "claim '{claim_id}' carries a resolution requirement ('{req}') but no authorized binding exists; authorize with: uni bind --claim {claim_id} --verifier {verifier_ref} --requirement ..."
+            "claim '{claim_id}' needs an authorized binding (requirement '{req}', template {is_template}) but none exists; authorize with: uni bind --claim {claim_id} --verifier {verifier_ref} --selector <test-name>"
         )),
     }
 }
@@ -732,17 +803,30 @@ fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, attest: bool
         // requirement executes ONLY under a matching authorized binding.
         // No binding, or a binding for different text/verifier -> hard error,
         // never a silent run. AI may propose; only `uni bind` authorizes.
-        let binding_hash = require_binding(
+        let base_spec = registry.get(&v.verifier_ref).cloned();
+        let is_template = base_spec
+            .as_ref()
+            .map(uni_verify::is_selector_template)
+            .unwrap_or(false);
+        let resolution = require_binding(
             &du,
             &v.claim_id,
             &v.verifier_ref,
             v.requirement.as_deref(),
+            is_template,
         )?;
+        // Resolve the selector into the command before anything is hashed or
+        // fingerprinted: two selectors on the same key are different proofs.
+        let resolved_spec = match &base_spec {
+            Some(spec) => Some(uni_verify::with_selector(spec, resolution.selector.as_deref())?),
+            None => None,
+        };
+        let binding_hash = resolution.binding_hash.clone();
         // content-bound evidence: hash computed from the verifier's watched files
-        let current_ah = registry
-            .get(&v.verifier_ref)
+        let current_ah = resolved_spec
+            .as_ref()
             .and_then(|spec| uni_verify::artifact_hash(spec, &ws));
-        let fingerprint = match registry.get(&v.verifier_ref) {
+        let fingerprint = match &resolved_spec {
             Some(spec) => uni_verify::spec_fingerprint(&v.verifier_ref, spec, &actor.id),
             None => format!("inline:{}:{}", &v.verifier_ref, actor.id),
         };
@@ -779,10 +863,10 @@ fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, attest: bool
                     ],
                 });
                 stale_ids.push(v.claim_id.clone());
-                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone(), binding_hash.clone()));
+                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone(), binding_hash.clone(), resolved_spec.clone()));
             }
             uni_evidence::CacheOutcome::Miss => {
-                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone(), binding_hash.clone()))
+                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone(), binding_hash.clone(), resolved_spec.clone()))
             }
         }
     }
@@ -808,8 +892,13 @@ fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, attest: bool
     // 2) Re-run only for missing/stale/invalid claims (unlocked: reruns are
     // idempotent and deterministic, so concurrent runs only duplicate work).
     let mut fresh: Vec<(uni_evidence::Evidence, String)> = vec![];
-    for (claim_id, ref_r, inline, binding) in need_run {
-        let spec = uni_verify::resolve_command(&ref_r, inline.as_deref(), &registry)?;
+    for (claim_id, ref_r, inline, binding, resolved) in need_run {
+        // A resolved template comes back pre-substituted; plain verifiers are
+        // still resolved through the trusted registry.
+        let spec = match resolved {
+            Some(spec) => spec,
+            None => uni_verify::resolve_command(&ref_r, inline.as_deref(), &registry)?,
+        };
         journal.push(events::Event {
             name: "EvidenceRun",
             attrs: vec![

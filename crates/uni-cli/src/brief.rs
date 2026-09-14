@@ -139,6 +139,11 @@ pub fn to_json(
                 "timeout_secs": s.timeout,
             })),
             "problem": b.problem,
+            "selector_template": b
+                .spec
+                .as_ref()
+                .map(|s| s.run.contains(uni_verify::SELECTOR_TOKEN))
+                .unwrap_or(false),
         })).collect::<Vec<_>>(),
         "registry_hash": registry_hash,
         "problems": problems,
@@ -185,6 +190,24 @@ pub fn to_markdown(ir: &Ir, claims: &[ClaimBrief], problems: &[String]) -> Strin
                         for (p, h) in &spec.expect_sha256 {
                             md.push_str(&format!("  - `{p}` = `{h}`\n"));
                         }
+                    }
+                } else if spec.run.contains(uni_verify::SELECTOR_TOKEN) {
+                    // Selector template: the worker names the test, a human
+                    // authorizes which name counts. Say exactly that.
+                    md.push_str(
+                        "- write the test; choose a clear name; a human then authorizes\n  that exact name, and only then does it count as evidence:\n",
+                    );
+                    md.push_str(&format!(
+                        "  `uni bind --claim {} --verifier {} --selector <your-test-name>`\n",
+                        b.claim.id,
+                        b.verifier_ref.as_deref().unwrap_or("?")
+                    ));
+                    md.push_str(&format!(
+                        "- it will run as: `{}`\n",
+                        spec.run.replace(uni_verify::SELECTOR_TOKEN, "<your-test-name>")
+                    ));
+                    if !spec.expect.is_empty() {
+                        md.push_str(&format!("- required in output: `{}`\n", spec.expect));
                     }
                 } else {
                     md.push_str(&format!("- command: `{}`\n", spec.run));

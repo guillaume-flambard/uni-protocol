@@ -20,6 +20,11 @@ and - when the command selects a test - the exact test name that must exist
 Unresolvable verifiers are reported instead of silently omitted, and the same
 `uni lint` problems surface here.
 
+For selector-template verifiers (`cargo test {{selector}}`), the brief says so
+in plain language: the worker writes the test and picks a name, and a human
+authorizes that name with `uni bind --selector`. The raw token never reaches
+the work order.
+
 ## What it is not
 
 This is guidance handed to a worker, never authority:

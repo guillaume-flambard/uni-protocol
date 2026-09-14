@@ -385,3 +385,25 @@ fn golden_speckit_import_emits_brief() {
     assert!(text.contains("Work order"), "{text}");
     assert!(text.contains("fr-001"), "{text}");
 }
+
+/// v0.5: a selector-template verifier is described in the work order as
+/// "you name the test, a human authorizes it", never as a raw token.
+#[test]
+fn golden_brief_explains_selector_templates() {
+    let dir = std::env::temp_dir().join(format!("uni-brief-tpl-{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
+    std::fs::write(dir.join(".uni/config.toml"),
+        "[verifiers]\n\"suite\" = {\"run\" = \"cargo test {{selector}} -- --exact\", \"expect\" = \"test result: ok. 1 passed\"}\n").unwrap();
+    std::fs::write(dir.join("c.uni"), "VERSION 0.1\nDOMAIN software\nINTENT tpl\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING suite\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n").unwrap();
+    let o = Command::new(bin()).args(["brief", "c.uni"]).current_dir(&dir).output().unwrap();
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    let md = String::from_utf8_lossy(&o.stdout).to_string();
+    assert!(md.contains("uni bind --claim x --verifier suite --selector"), "{md}");
+    assert!(md.contains("cargo test <your-test-name> -- --exact"), "{md}");
+    assert!(!md.contains("{{selector}}"), "the raw token must not leak into the work order: {md}");
+
+    let j = Command::new(bin()).args(["--json", "brief", "c.uni"]).current_dir(&dir).output().unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&j.stdout).unwrap();
+    assert_eq!(v["claims"][0]["selector_template"], true, "{v}");
+}

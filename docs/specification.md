@@ -16,6 +16,7 @@ INVARIANT  <id> [CRITICAL]
 ENSURE     <free text>
 FORBID     <expr> (same line) or bare FORBID + indented expression
 VERIFY     <claim-id> USING <registry-key> | shell "<cmd>"
+REQUIRE    <expr>            (attached to the preceding VERIFY; optional)
 ACCEPT WHEN  required_claims == VERIFIED [AND critical_failures == 0]
 
 Reserved for v0.2 (hard parse errors until then): REQUIRE, REJECT WHEN,
@@ -42,6 +43,11 @@ shape from `crates/uni-ir`:
 
 Evidence and DecisionResult shapes: see `docs/evidence.md` and the Rust types
 (`uni-evidence`, `uni-decision`); their serde output is the format.
+
+## Selector templates
+
+A registry entry may contain `{{selector}}`; the concrete name comes from an
+authorized `VerifierBinding`, never from the contract or the worker alone.
 
 ## Behavior contract
 

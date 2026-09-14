@@ -211,6 +211,33 @@ pub fn artifact_hash(spec: &VerifierSpec, workspace: &std::path::Path) -> Option
 /// as actor B (Evidence Completeness Principle). The executor is NOT part
 /// of the key: on a cache hit the caller refreshes it to the current
 /// executor, because independence is evaluated in the reusing context.
+/// Template token a registry command may use to defer the test selector to an
+/// authorized binding: the worker picks the test name, the human authorizes
+/// which test counts as evidence.
+pub const SELECTOR_TOKEN: &str = "{{selector}}";
+
+pub fn is_selector_template(spec: &VerifierSpec) -> bool {
+    spec.kind == "shell" && spec.run.contains(SELECTOR_TOKEN)
+}
+
+/// Substitute the authorized selector into a template verifier. Returns an
+/// error when the template has no selector to substitute: guessing one would
+/// put resolution back in the trust path.
+pub fn with_selector(spec: &VerifierSpec, selector: Option<&str>) -> Result<VerifierSpec> {
+    if !is_selector_template(spec) {
+        return Ok(spec.clone());
+    }
+    let Some(sel) = selector.filter(|s| !s.trim().is_empty()) else {
+        return Err(anyhow!(
+            "verifier '{}' is a selector template but no selector is authorized (uni bind --selector <test-name>)",
+            spec.run
+        ));
+    };
+    let mut out = spec.clone();
+    out.run = spec.run.replace(SELECTOR_TOKEN, sel);
+    Ok(out)
+}
+
 pub fn spec_fingerprint(verifier_ref: &str, spec: &VerifierSpec, actor_id: &str) -> String {
     let seed = format!(
         "{verifier_ref}|{}|{}|{}|{}|actor:{actor_id}",
@@ -696,5 +723,51 @@ mod registry_diff_tests {
         let other = "[verifiers.\"x\"]\nrun = \"a\"\nexpect = \"2\"\n";
         assert!(registry_diff(old, same).changed.is_empty());
         assert_eq!(registry_diff(old, other).changed, vec!["x".to_string()]);
+    }
+}
+
+#[cfg(test)]
+mod selector_tests {
+    use super::*;
+
+    fn tpl() -> VerifierSpec {
+        let mut s = VerifierSpec::shell("cargo test {{selector}} -- --exact");
+        s.expect = "test result: ok. 1 passed".into();
+        s
+    }
+
+    #[test]
+    fn template_detection_and_substitution() {
+        let t = tpl();
+        assert!(is_selector_template(&t));
+        assert!(!is_selector_template(&VerifierSpec::shell("cargo test")));
+        let resolved = with_selector(&t, Some("cancel_ok")).unwrap();
+        assert_eq!(resolved.run, "cargo test cancel_ok -- --exact");
+        assert!(!is_selector_template(&resolved));
+    }
+
+    #[test]
+    fn template_without_selector_is_a_hard_error() {
+        let t = tpl();
+        let err = match with_selector(&t, None) {
+            Ok(_) => panic!("must refuse"),
+            Err(e) => e.to_string(),
+        };
+        assert!(err.contains("selector template"), "{err}");
+        assert!(with_selector(&t, Some("  ")).is_err());
+        // non-template verifiers pass through untouched
+        let plain = VerifierSpec::shell("true");
+        assert!(with_selector(&plain, None).is_ok());
+    }
+
+    #[test]
+    fn selector_changes_the_cache_fingerprint() {
+        let a = with_selector(&tpl(), Some("test_a")).unwrap();
+        let b = with_selector(&tpl(), Some("test_b")).unwrap();
+        assert_ne!(
+            spec_fingerprint("k", &a, "alice"),
+            spec_fingerprint("k", &b, "alice"),
+            "two selectors on the same key must not share evidence"
+        );
     }
 }
