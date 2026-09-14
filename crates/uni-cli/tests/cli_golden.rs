@@ -301,11 +301,13 @@ fn golden_stack_independence() {
         if !has {
             continue;
         }
+        let o = Command::new(bin()).args(["verify", contract]).current_dir(&root).output().unwrap();
         assert_eq!(
-            run(&["verify", contract], &root),
-            0,
-            "{contract} must ACCEPT with {} available",
-            runtime
+            o.status.code(),
+            Some(0),
+            "{contract} must ACCEPT with {runtime} available\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&o.stdout),
+            String::from_utf8_lossy(&o.stderr)
         );
     }
 }

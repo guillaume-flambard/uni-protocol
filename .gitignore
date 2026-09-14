@@ -10,3 +10,5 @@
 
 experiments/study-50/tasks/**/Cargo.lock
 experiments/study-50/tasks/**/target/
+__pycache__/
+*.pyc

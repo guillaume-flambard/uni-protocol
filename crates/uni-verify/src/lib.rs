@@ -183,9 +183,12 @@ pub fn artifact_hash(spec: &VerifierSpec, workspace: &std::path::Path) -> Option
         if let Ok(rd) = std::fs::read_dir(&dir) {
             for e in rd.flatten() {
                 let path = e.path();
+                // Glob patterns are written with '/', so normalize: on Windows
+                // `to_string_lossy` yields backslashes and every multi-segment
+                // pattern would silently match nothing.
                 let rel = path
                     .strip_prefix(workspace)
-                    .map(|p| p.to_string_lossy().to_string())
+                    .map(|p| p.to_string_lossy().replace('\\', "/"))
                     .unwrap_or_default();
                 if path.is_dir() {
                     if !skip.contains(&path.file_name().and_then(|n| n.to_str()).unwrap_or("")) {
@@ -197,6 +200,11 @@ pub fn artifact_hash(spec: &VerifierSpec, workspace: &std::path::Path) -> Option
                 }
             }
         }
+    }
+    // A declared watch that matches nothing is not a content binding: returning
+    // the hash of an empty string would pretend the subject was covered.
+    if matched.is_empty() {
+        return None;
     }
     let acc: String = matched
         .iter()
