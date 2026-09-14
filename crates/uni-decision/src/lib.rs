@@ -410,6 +410,7 @@ mod tests {
             policy_hash: String::new(),
             contract_hash: String::new(),
             platform: String::new(),
+            binding_hash: String::new(),
             actor: uni_evidence::Actor::local(),
             executor: uni_evidence::Actor::local(),
         }
@@ -497,6 +498,7 @@ mod property_tests {
             policy_hash: String::new(),
             contract_hash: String::new(),
             platform: String::new(),
+            binding_hash: String::new(),
             actor: uni_evidence::Actor::local(),
             executor: uni_evidence::Actor::local(),
         }
@@ -565,6 +567,7 @@ mod decision_matrix {
             policy_hash: String::new(),
             contract_hash: String::new(),
             platform: String::new(),
+            binding_hash: String::new(),
             actor: uni_evidence::Actor::local(),
             executor: uni_evidence::Actor::local(),
         };
@@ -636,6 +639,7 @@ mod policy_tests {
             policy_hash: String::new(),
             contract_hash: String::new(),
             platform: String::new(),
+            binding_hash: String::new(),
             actor: uni_evidence::Actor::local(),
             executor: uni_evidence::Actor::local(),
         }
@@ -727,6 +731,7 @@ mod policy_property {
             policy_hash: String::new(),
             contract_hash: String::new(),
             platform: String::new(),
+            binding_hash: String::new(),
             actor: uni_evidence::Actor::local(),
             executor: uni_evidence::Actor::local(),
         }
@@ -811,6 +816,7 @@ mod independence_tests {
             policy_hash: String::new(),
             contract_hash: String::new(),
             platform: String::new(),
+            binding_hash: String::new(),
             actor: Actor { id: actor_id.into(), source: "cli".into(), assurance: assurance.into() },
             executor: Actor { id: executor_id.into(), source: "local".into(), assurance: "self-declared".into() },
         }

@@ -3,6 +3,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+pub mod binding;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EvidenceState {
     Valid,
@@ -50,6 +52,10 @@ pub struct Evidence {
     /// Who launched the verified work (defaults to the local user).
     #[serde(default)]
     pub executor: Actor,
+    /// sha256(claim|verifier|requirement) of the authorizing VerifierBinding
+    /// (empty when the verification carries no requirement).
+    #[serde(default)]
+    pub binding_hash: String,
 }
 
 /// Current verification context, computed fresh on every verify run.
@@ -62,6 +68,11 @@ pub struct EvidenceContext {
     pub registry_hash: String,
     pub contract_hash: String,
     pub platform: String,
+    /// Expected binding hash when the verification carries a requirement
+    /// (None = unconditional verification; a stored non-empty binding_hash
+    /// then means the contract dropped its REQUIRE -> stale via contract_hash
+    /// anyway, see cmd_verify).
+    pub binding_hash: Option<String>,
 }
 
 pub fn platform() -> String {
@@ -300,7 +311,9 @@ pub fn load_valid_for_claim(
             && ctx.artifact_hash.as_deref() != Some(ev.artifact_hash.as_str()))
         || (!ev.contract_hash.is_empty() && ev.contract_hash != ctx.contract_hash)
         || (!ev.registry_hash.is_empty() && ev.registry_hash != ctx.registry_hash)
-        || (!ev.platform.is_empty() && ev.platform != ctx.platform);
+        || (!ev.platform.is_empty() && ev.platform != ctx.platform)
+        || (!ev.binding_hash.is_empty()
+            && ctx.binding_hash.as_deref() != Some(ev.binding_hash.as_str()));
     if drifted {
         ev.state = EvidenceState::Stale;
         return CacheOutcome::Stale;
@@ -350,6 +363,7 @@ mod tests {
             platform: "linux-x86_64".into(),
             actor: Actor::local(),
             executor: Actor::local(),
+            binding_hash: String::new(),
         }
     }
 
@@ -362,6 +376,7 @@ mod tests {
             registry_hash: "reg1".into(),
             contract_hash: "con1".into(),
             platform: "linux-x86_64".into(),
+            binding_hash: None,
         }
     }
 

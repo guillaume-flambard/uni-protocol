@@ -34,6 +34,10 @@ pub struct Verification {
     pub verifier_ref: String,
     pub inline_shell: Option<String>,
     pub line: usize,
+    /// v0.2: optional resolution requirement, e.g. behavior("clamps above").
+    /// Must immediately follow the VERIFY/USING block; authorizes via `uni bind`.
+    #[serde(default)]
+    pub requirement: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -105,6 +109,7 @@ fn push_verification(
         verifier_ref,
         inline_shell,
         line: vline,
+        requirement: None,
     });
     Ok(())
 }
@@ -123,6 +128,9 @@ pub fn parse(source: &str) -> Result<Contract> {
 
     let mut pending_verify: Option<(String, usize)> = None;
     let mut pending_forbid: Option<usize> = None;
+    // Line of the last completed VERIFY/USING block; a REQUIRE line may only
+    // attach to it across blank/comment lines (v0.2 VerifierBinding).
+    let mut last_using_line: Option<usize> = None;
     // ACCEPT WHEN continuations are consumed by lookahead so no flag is needed.
     let raw_lines: Vec<&str> = source.lines().collect();
     let mut skip_until = 0usize;
@@ -143,6 +151,7 @@ pub fn parse(source: &str) -> Result<Contract> {
                 line_no,
                 &mut verifications,
             )?;
+            last_using_line = Some(line_no);
             continue;
         }
         if line.is_empty() || line.starts_with('#') {
@@ -271,6 +280,7 @@ pub fn parse(source: &str) -> Result<Contract> {
                     line_no,
                     &mut verifications,
                 )?;
+                last_using_line = Some(line_no);
             } else {
                 let claim_id = parts.to_string();
                 if claim_id.is_empty() {
@@ -314,9 +324,38 @@ pub fn parse(source: &str) -> Result<Contract> {
             ));
         }
         if line.starts_with("REQUIRE") {
-            return Err(anyhow!(
-                "line {line_no}: REQUIRE is reserved for v0.2 (VerifierBinding); remove it or see docs/specification.md"
-            ));
+            let expr = line.strip_prefix("REQUIRE").unwrap().trim().to_string();
+            if expr.is_empty() {
+                return Err(anyhow!("line {line_no}: REQUIRE needs an expression, e.g. REQUIRE behavior(\"...\")"));
+            }
+            if pending_verify.is_some() {
+                return Err(anyhow!(
+                    "line {line_no}: REQUIRE without completed VERIFY/USING block (expected USING first)"
+                ));
+            }
+            let vline = last_using_line.ok_or_else(|| {
+                anyhow!("line {line_no}: REQUIRE must immediately follow a VERIFY/USING block (standalone REQUIRE is reserved)")
+            })?;
+            // Only blank/comment lines may sit between USING and REQUIRE.
+            for k in vline..line_no - 1 {
+                let gap = raw_lines.get(k).map(|s| s.trim()).unwrap_or("");
+                if !(gap.is_empty() || gap.starts_with('#')) {
+                    return Err(anyhow!(
+                        "line {line_no}: REQUIRE must immediately follow a VERIFY/USING block (found {gap:?} in between)"
+                    ));
+                }
+            }
+            let target = verifications.last_mut().ok_or_else(|| {
+                anyhow!("line {line_no}: REQUIRE without preceding VERIFY")
+            })?;
+            if target.requirement.is_some() {
+                return Err(anyhow!(
+                    "line {line_no}: duplicate REQUIRE for claim '{}'",
+                    target.claim_id
+                ));
+            }
+            target.requirement = Some(expr);
+            continue;
         }
         return Err(anyhow!("line {line_no}: unknown directive: {line}"));
     }

@@ -35,6 +35,18 @@ enum Cmd {
     Doctor,
     #[command(subcommand)]
     Pack(PackCmd),
+    /// Authorize a claim's resolution requirement to a concrete verifier
+    /// (human act; AI may propose, only `uni bind` authorizes).
+    Bind {
+        #[arg(long)]
+        claim: String,
+        #[arg(long)]
+        verifier: String,
+        #[arg(long)]
+        requirement: String,
+    },
+    /// List authorized verifier bindings.
+    Bindings,
 }
 
 #[derive(Subcommand)]
@@ -63,6 +75,10 @@ fn main() -> Result<()> {
         Cmd::Lint { file } => cmd_lint(&file, cli.json),
         Cmd::Doctor => cmd_doctor(cli.json),
         Cmd::Pack(sub) => cmd_pack(sub, cli.json),
+        Cmd::Bind { claim, verifier, requirement } => {
+            cmd_bind(&claim, &verifier, &requirement, cli.json)
+        }
+        Cmd::Bindings => cmd_bindings(cli.json),
     }
 }
 
@@ -144,6 +160,59 @@ fn cmd_pack(sub: PackCmd, as_json: bool) -> Result<()> {
             } else {
                 println!("wrote {}\nedit claims + verifier refs, then: uni lint {}", dst.display(), dst.display());
             }
+        }
+    }
+    Ok(())
+}
+
+/// Human authorization act for VerifierBindings, journaled as such.
+fn cmd_bind(claim: &str, verifier: &str, requirement: &str, as_json: bool) -> Result<()> {
+    let du = dot_uni();
+    let by = uni_evidence::Actor::local().id;
+    let b = uni_evidence::binding::authorize(&du, claim, verifier, requirement, &by)?;
+    events::append(&[events::Event {
+        name: "BindingAuthorized",
+        attrs: vec![
+            ("uni.claim.id".into(), claim.to_string()),
+            ("uni.verifier.id".into(), verifier.to_string()),
+            ("uni.binding.hash".into(), b.binding_hash.clone()),
+            ("uni.binding.by".into(), by),
+        ],
+    }])?;
+    if as_json {
+        println!("{}", serde_json::to_string_pretty(&b)?);
+    } else {
+        println!("authorized: claim '{claim}' -> verifier '{verifier}'");
+        println!("requirement: {requirement}");
+        println!("binding:     {}", b.binding_hash);
+    }
+    Ok(())
+}
+
+fn cmd_bindings(as_json: bool) -> Result<()> {
+    let du = dot_uni();
+    let dir = uni_evidence::binding::bindings_dir(&du);
+    let mut out = vec![];
+    if let Ok(rd) = std::fs::read_dir(&dir) {
+        for e in rd.flatten() {
+            if e.path().extension().map(|x| x == "json").unwrap_or(false) {
+                if let Some(b) =
+                    uni_evidence::binding::load_binding(&du, e.path().file_stem().and_then(|s| s.to_str()).unwrap_or(""))
+                {
+                    out.push(b);
+                }
+            }
+        }
+    }
+    out.sort_by(|a, b| a.claim_id.cmp(&b.claim_id));
+    if as_json {
+        println!("{}", serde_json::to_string_pretty(&out)?);
+    } else if out.is_empty() {
+        println!("no authorized bindings (.uni/bindings/ is empty)");
+    } else {
+        for b in &out {
+            println!("{:<24} -> {:<24} [{}] by {} at {}",
+                b.claim_id, b.verifier_ref, b.binding_hash, b.authorized_by, b.authorized_at);
         }
     }
     Ok(())
@@ -243,6 +312,16 @@ fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
                     "VERIFY '{}' → '{}' declared twice", a.claim_id, a.verifier_ref
                 )));
             }
+        }
+    }
+    for v in ir.verification.iter().filter(|v| v.requirement.is_some()) {
+        let req = v.requirement.as_deref().unwrap_or("");
+        match uni_evidence::binding::load_binding(&dot_uni(), &v.claim_id) {
+            Some(b) if b.verifier_ref == v.verifier_ref && b.requirement == req => {}
+            _ => findings.push((1, "unbound-requirement".into(), format!(
+                "claim '{}' has a REQUIRE but no matching authorized binding (run: uni bind --claim {} --verifier {})",
+                v.claim_id, v.claim_id, v.verifier_ref
+            ))),
         }
     }
     let errors = findings.iter().filter(|(s, _, _)| *s == 2).count();
@@ -409,6 +488,34 @@ fn cmd_inspect(file: &Path, as_json: bool) -> Result<()> {
     cmd_compile(file, as_json)
 }
 
+/// v0.2 authorization gate for resolution requirements. Returns the binding
+/// hash the evidence must carry, or fails hard: a requirement without a
+/// matching authorized binding never executes. `None` requirement = no gate.
+fn require_binding(
+    du: &Path,
+    claim_id: &str,
+    verifier_ref: &str,
+    requirement: Option<&str>,
+) -> Result<Option<String>> {
+    let Some(req) = requirement else {
+        return Ok(None);
+    };
+    match uni_evidence::binding::load_binding(du, claim_id) {
+        Some(b) if b.verifier_ref == verifier_ref && b.requirement == req => {
+            Ok(Some(b.binding_hash))
+        }
+        Some(b) => Err(anyhow!(
+            "claim '{claim_id}' requirement changed or rebound (bound: '{}' expecting '{}', verifier '{}'; re-authorize with: uni bind --claim {claim_id} --verifier {verifier_ref} --requirement ...)",
+            b.requirement,
+            req,
+            b.verifier_ref,
+        )),
+        None => Err(anyhow!(
+            "claim '{claim_id}' carries a resolution requirement ('{req}') but no authorized binding exists; authorize with: uni bind --claim {claim_id} --verifier {verifier_ref} --requirement ..."
+        )),
+    }
+}
+
 fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, attest: bool) -> Result<()> {
     if attest {
         return Err(anyhow!(
@@ -510,6 +617,16 @@ fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, attest: bool
         });
     }
     for v in &ir.verification {
+        // v0.2 authorization gate: a verification carrying a resolution
+        // requirement executes ONLY under a matching authorized binding.
+        // No binding, or a binding for different text/verifier -> hard error,
+        // never a silent run. AI may propose; only `uni bind` authorizes.
+        let binding_hash = require_binding(
+            &du,
+            &v.claim_id,
+            &v.verifier_ref,
+            v.requirement.as_deref(),
+        )?;
         // content-bound evidence: hash computed from the verifier's watched files
         let current_ah = registry
             .get(&v.verifier_ref)
@@ -526,6 +643,7 @@ fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, attest: bool
             registry_hash: registry_hash.clone(),
             contract_hash: contract_hash.clone(),
             platform: platform.clone(),
+            binding_hash: binding_hash.clone(),
         };
         match uni_evidence::load_valid_for_claim(&du, &v.claim_id, &ctx) {
             uni_evidence::CacheOutcome::Hit(mut ev) => {
@@ -550,10 +668,10 @@ fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, attest: bool
                     ],
                 });
                 stale_ids.push(v.claim_id.clone());
-                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone()));
+                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone(), binding_hash.clone()));
             }
             uni_evidence::CacheOutcome::Miss => {
-                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone()))
+                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone(), binding_hash.clone()))
             }
         }
     }
@@ -579,7 +697,7 @@ fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, attest: bool
     // 2) Re-run only for missing/stale/invalid claims (unlocked: reruns are
     // idempotent and deterministic, so concurrent runs only duplicate work).
     let mut fresh: Vec<(uni_evidence::Evidence, String)> = vec![];
-    for (claim_id, ref_r, inline) in need_run {
+    for (claim_id, ref_r, inline, binding) in need_run {
         let spec = uni_verify::resolve_command(&ref_r, inline.as_deref(), &registry)?;
         journal.push(events::Event {
             name: "EvidenceRun",
@@ -595,6 +713,7 @@ fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, attest: bool
         ev.contract_hash = contract_hash.clone();
         ev.platform = platform.clone();
         ev.policy_hash = policy_hash.clone();
+        ev.binding_hash = binding.unwrap_or_default();
         if uni_evidence::is_stale(&ev, &cur_sha, cur_dirty) {
             ev.state = uni_evidence::EvidenceState::Stale;
         }

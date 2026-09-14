@@ -32,6 +32,9 @@ pub struct VerificationIr {
     pub claim_id: String,
     pub verifier_ref: String,
     pub inline_shell: Option<String>,
+    /// v0.2 resolution requirement; executable only via an authorized VerifierBinding.
+    #[serde(default)]
+    pub requirement: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +72,7 @@ pub fn compile(c: &Contract) -> Result<Ir> {
                 claim_id: v.claim_id.clone(),
                 verifier_ref: v.verifier_ref.clone(),
                 inline_shell: v.inline_shell.clone(),
+                requirement: v.requirement.clone(),
             })
             .collect(),
         acceptance: AcceptanceIr {

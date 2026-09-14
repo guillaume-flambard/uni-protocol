@@ -250,6 +250,8 @@ fn run_shell(
         // Identities are attached by run_spec (caller owns the actor view).
         actor: uni_evidence::Actor::default(),
         executor: uni_evidence::Actor::default(),
+        // Authorization is attached by cmd_verify from the loaded binding.
+        binding_hash: String::new(),
     };
     Ok((ev, full_output))
 }

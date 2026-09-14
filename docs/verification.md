@@ -52,3 +52,29 @@ VERIFY <claim-id>
 
 or one-line `VERIFY <claim-id> USING shell "cmd"`. `uni lint <contract>` checks
 coverage and unknown registry keys without executing anything.
+
+## Authorized resolution (VerifierBinding, v0.2)
+
+A verification may carry a resolution requirement:
+
+```
+VERIFY clamp-upper
+  USING test-suite
+  REQUIRE behavior("clamps values above upper bound")
+```
+
+Such a verification executes ONLY under a matching authorized binding
+(`.uni/bindings/<claim>.json` with identical claim, verifier, and requirement
+text). Authorize explicitly — this is the human act AI proposals cannot replace:
+
+```bash
+uni bind --claim clamp-upper --verifier test-suite --requirement 'behavior("clamps values above upper bound")'
+uni bindings   # list; every bind is journaled as BindingAuthorized
+```
+
+Rules: no binding (or a binding for different text/verifier) = hard error naming
+the exact `uni bind` command, never a silent run. Re-authorization replaces the
+binding; evidence gathered under the old `binding_hash` goes stale and renews.
+`uni lint` warns on requirements without matching bindings. Claim -> requirement
+-> binding -> evidence: AI proposes, trusted configuration authorizes, the
+verifier proves.

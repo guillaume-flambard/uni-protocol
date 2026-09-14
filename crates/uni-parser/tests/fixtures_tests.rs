@@ -44,9 +44,10 @@ VERIFY a
 }
 
 #[test]
-fn reserved_require_is_hard_error() {
+fn standalone_require_is_hard_error() {
+    // v0.2 implements REQUIRE only as a VERIFY-attached resolution requirement.
     let err = parse(&fixture("reserved_require.uni")).unwrap_err().to_string();
-    assert!(err.contains("reserved for v0.2"), "got: {err}");
+    assert!(err.contains("must immediately follow"), "got: {err}");
 }
 
 #[test]
@@ -80,4 +81,26 @@ ACCEPT WHEN
 ";
     let c = parse(src).unwrap();
     assert!(c.acceptance.require_verified);
+}
+
+#[test]
+fn require_attaches_to_preceding_verify() {
+    let src = "VERSION 0.1\nDOMAIN software\nINTENT x\nCLAIM a REQUIRED\n  ENSURE ok\nVERIFY a\n  USING project.check\n  REQUIRE behavior(\"checks\")\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n";
+    let c = parse(src).unwrap();
+    assert_eq!(c.verifications.len(), 1);
+    assert_eq!(c.verifications[0].requirement.as_deref(), Some("behavior(\"checks\")"));
+}
+
+#[test]
+fn require_without_verify_is_hard_error() {
+    let src = "VERSION 0.1\nDOMAIN software\nINTENT x\nCLAIM a REQUIRED\n  ENSURE ok\nREQUIRE behavior(\"x\")\nVERIFY a\n  USING project.check\n";
+    let err = parse(src).unwrap_err().to_string();
+    assert!(err.contains("must immediately follow"), "got: {err}");
+}
+
+#[test]
+fn require_after_other_block_is_hard_error() {
+    let src = "VERSION 0.1\nDOMAIN software\nINTENT x\nCLAIM a REQUIRED\n  ENSURE ok\nVERIFY a\n  USING project.check\nCLAIM b REQUIRED\n  ENSURE ok2\nREQUIRE behavior(\"x\")\nVERIFY b\n  USING project.check\n";
+    let err = parse(src).unwrap_err().to_string();
+    assert!(err.contains("must immediately follow"), "got: {err}");
 }

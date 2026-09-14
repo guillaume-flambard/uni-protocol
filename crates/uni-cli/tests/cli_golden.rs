@@ -5,15 +5,6 @@ fn git(cwd: &PathBuf, args: &[&str]) {
     assert!(Command::new("git").args(args).current_dir(cwd).status().unwrap().success());
 }
 
-fn out(cmd: &[&str], cwd: &PathBuf) -> String {
-    let o = Command::new(bin()).args(cmd).current_dir(cwd).output().unwrap();
-    format!(
-        "code={}\n{}",
-        o.status.code().unwrap_or(-1),
-        String::from_utf8_lossy(&o.stdout)
-    )
-}
-
 fn bin() -> &'static str {
     env!("CARGO_BIN_EXE_uni")
 }
@@ -61,7 +52,8 @@ fn golden_verify_exit_codes() {
     assert_eq!(run(&["verify", "examples/booking/booking.uni"], &root), 0);
 }
 
-fn _unused(p: &Path) {}
+#[allow(dead_code)]
+fn _unused(_p: &Path) {}
 
 /// Golden: speckit importer extracts markdown FR + scenarios into a candidate DSL file.
 #[test]
@@ -96,7 +88,7 @@ fn golden_import_speckit() {
     assert!(dsl.contains("CLAIM scenario-03"), "{dsl}");
     assert!(dsl.contains("CLAIM check-04"), "{dsl}");
     // the candidate must parse back with the same parser
-    let mut dsl_path: std::path::PathBuf = std::fs::read_dir(&contracts_dir)
+    let dsl_path: std::path::PathBuf = std::fs::read_dir(&contracts_dir)
         .unwrap()
         .filter_map(|e| e.ok().map(|ee| ee.path()))
         .find(|p| p.extension().map(|e| e == "uni").unwrap_or(false))

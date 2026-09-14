@@ -37,7 +37,8 @@
         "properties": {
           "claim_id": {"type": "string"},
           "verifier_ref": {"type": "string"},
-          "inline_shell": {"type": ["string", "null"]}
+          "inline_shell": {"type": ["string", "null"]},
+          "requirement": {"type": ["string", "null"]}
         }
       }
     },

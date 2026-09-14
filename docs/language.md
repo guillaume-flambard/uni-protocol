@@ -27,7 +27,10 @@ ACCEPT WHEN
 - CLAIM: verifiable statement of the outcome. REQUIRED (default) or OPTIONAL.
 - INVARIANT: claim that must never break; CRITICAL marks rejection (vs. evidence gap).
 - FORBID: prohibition compiled to a critical invariant claim; prove it with an `expect_not` verifier.
-- REQUIRE / REJECT WHEN / ESCALATE WHEN: reserved for v0.2, hard parse errors in v0.1.
+- REQUIRE / REJECT WHEN / ESCALATE WHEN: REQUIRE attaches a resolution
+  requirement to the preceding VERIFY (`REQUIRE behavior("...")`, blank lines
+  allowed, nothing else in between); REJECT WHEN / ESCALATE WHEN stay reserved
+  hard errors.
 - VERIFY <claim> USING <registry-key> | shell "cmd" - commands run ONLY from
   `.uni/config.toml [verifiers]` (trusted registry). Expect/expect_not/files/timeout fields per verifier.
 - ACCEPT WHEN is deterministic; LLMs may draft contracts (human approves candidates).

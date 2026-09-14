@@ -407,3 +407,52 @@ fn actor_model_caps_assurance_honestly() {
         String::from_utf8_lossy(&o4.stderr)
     );
 }
+
+/// B4: resolution requirements execute only under an authorized binding.
+/// Unbound -> hard error with the exact command; bound -> works; requirement
+/// text change -> old proof stales and renews under the new binding hash.
+#[test]
+fn requirement_needs_authorized_binding() {
+    let dir = mk_repo("binding-cycle");
+    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"suite\" = \"true\"\n").unwrap();
+    let contract = "VERSION 0.1\nDOMAIN software\nINTENT bd\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING suite\n  REQUIRE behavior(\"does x\")\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n";
+    std::fs::write(dir.join("c.uni"), contract).unwrap();
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+
+    // 1. Unbound requirement: hard error naming the exact command, no execution.
+    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    assert_ne!(o.status.code(), Some(0));
+    let err = String::from_utf8_lossy(&o.stderr).to_string();
+    assert!(err.contains("uni bind --claim x --verifier suite"), "{err}");
+
+    // 2. Authorize, then verify accepts.
+    let b = Command::new(bin())
+        .args(["bind", "--claim", "x", "--verifier", "suite", "--requirement", "behavior(\"does x\")"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_eq!(b.status.code(), Some(0), "{}", String::from_utf8_lossy(&b.stderr));
+    let r1 = out(&["verify", "c.uni"], &dir);
+    assert!(r1.contains("Accepted"), "{r1}");
+
+    // 3. New requirement text lives in the CONTRACT: rewrite it, re-authorize
+    // to the new text, commit. The old proof (bound to the old text) stales
+    // and renews under the new binding hash, still accepting.
+    let contract2 = "VERSION 0.1\nDOMAIN software\nINTENT bd\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING suite\n  REQUIRE behavior(\"does x, v2\")\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n";
+    std::fs::write(dir.join("c.uni"), contract2).unwrap();
+    let b2 = Command::new(bin())
+        .args(["bind", "--claim", "x", "--verifier", "suite", "--requirement", "behavior(\"does x, v2\")"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_eq!(b2.status.code(), Some(0));
+    git(&dir, &["add", "."]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "req-v2"]);
+    let r2 = out(&["verify", "c.uni"], &dir);
+    assert!(r2.contains("Accepted"), "{r2}");
+    let journal = std::fs::read_to_string(dir.join(".uni/events.jsonl")).unwrap();
+    assert!(journal.contains("BindingAuthorized"), "bind must journalize the human act");
+    assert!(journal.matches("EvidenceRun").count() >= 2, "re-authorization must force renewal");
+}
