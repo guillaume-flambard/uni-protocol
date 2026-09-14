@@ -327,11 +327,8 @@ fn cmd_report(as_json: bool) -> Result<()> {
     let s = &r["summary"];
     println!("Claims      {}/{} verified",
         s["claims_verified"], s["claims_total"]);
-    let a = assurance_level_x(&r);
-    println!("Assurance   A{a} ({})", match a {
-        0 => "DECLARED", 1 => "ARTIFACT", 2 => "VERIFIED",
-        3 => "INDEPENDENTLY_VERIFIED", 4 => "ATTESTED", _ => "?",
-    });
+    let a = uni_decision::assurance_of_json(&r["decision"]);
+    println!("Assurance   A{a} ({})", uni_decision::assurance_label(a));
     if let Some(claims) = r["claims"].as_array() {
         println!("\nClaims");
         for c in claims {
@@ -486,11 +483,7 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
         attrs: vec![
             ("uni.intent.id".into(), ir.intent.id.clone()),
             ("uni.decision.state".into(), format!("{:?}", decision.decision)),
-            ("uni.assurance.level".into(), format!("A{}", match decision.decision {
-                uni_decision::Decision::Accepted => 2,
-                uni_decision::Decision::Rejected => 1,
-                _ => 0,
-            })),
+            ("uni.assurance.level".into(), format!("A{}", uni_decision::assurance_of(&decision.decision))),
         ],
     });
     // 3) Persist phase, serialized: evidence files + journal + last.json are
@@ -552,14 +545,6 @@ fn cmd_verify(file: &Path, as_json: bool) -> Result<()> {
     }
 }
 
-fn assurance_level_x(v: &serde_json::Value) -> u8 {
-    match v["decision"].as_str() {
-        Some("Accepted") => 2,
-        Some("Rejected") => 1,
-        _ => 0,
-    }
-}
-
 fn cmd_explain(arg: Option<String>, as_json: bool) -> Result<()> {
     let path = dot_uni().join("decisions").join("last.json");
     let text = std::fs::read_to_string(&path).context("no decision yet (run uni verify first)")?;
@@ -587,10 +572,10 @@ fn cmd_explain(arg: Option<String>, as_json: bool) -> Result<()> {
         let tested = a.iter().filter(|c| c["state"] == "Valid").count();
         format!("{}/{} verified", tested, a.len())
     }).unwrap_or_default();
-    let a = assurance_level_x(&v);
+    let a = uni_decision::assurance_of_json(&v["decision"]);
     println!("\nSummary");
     println!("  Claims     {summary}");
-    println!("  Assurance  A{a} ({} )", match a { 0 => "DECLARED", 1 => "ARTIFACT", 2 => "VERIFIED", 3 => "INDEPENDENTLY_VERIFIED", 4 => "ATTESTED", _ => "?" });
+    println!("  Assurance  A{a} ({})", uni_decision::assurance_label(a));
     println!("\n{}", v["reason"].as_str().unwrap_or(""));
 
     if let Some(c) = v["claims"].as_array().and_then(|a| a.iter().find(|c| c["state"] != "Valid")) {

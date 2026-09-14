@@ -10,6 +10,36 @@ pub enum Decision {
     Escalated,
 }
 
+/// Single source of truth for decision -> assurance level (v0.1: derived
+/// from the decision only; v0.2 derives it from the evidence graph with
+/// actor separation). Every display site must call this, never re-match.
+pub fn assurance_of(decision: &Decision) -> u8 {
+    match decision {
+        Decision::Accepted => 2,
+        Decision::Rejected => 1,
+        _ => 0,
+    }
+}
+
+pub fn assurance_label(level: u8) -> &'static str {
+    match level {
+        0 => "DECLARED",
+        1 => "ARTIFACT",
+        2 => "VERIFIED",
+        3 => "INDEPENDENTLY_VERIFIED",
+        4 => "ATTESTED",
+        _ => "?",
+    }
+}
+
+/// assurance_of for decision values read back from JSON (report/explain).
+/// Unparseable values map to 0, never to a higher level.
+pub fn assurance_of_json(v: &serde_json::Value) -> u8 {
+    serde_json::from_value::<Decision>(v.clone())
+        .map(|d| assurance_of(&d))
+        .unwrap_or(0)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClaimResult {
     pub claim_id: String,
@@ -643,5 +673,27 @@ mod policy_property {
             let d2 = apply_policy(evaluate(&ir, &evs), &policy);
             assert_eq!((d1.decision, d1.reason, d1.claims), (d2.decision, d2.reason, d2.claims));
         }
+    }
+}
+
+#[cfg(test)]
+mod assurance_tests {
+    use super::*;
+
+    #[test]
+    fn assurance_mapping_is_total() {
+        assert_eq!(assurance_of(&Decision::Accepted), 2);
+        assert_eq!(assurance_of(&Decision::Rejected), 1);
+        assert_eq!(assurance_of(&Decision::EvidenceRequired), 0);
+        assert_eq!(assurance_of(&Decision::Escalated), 0);
+        assert_eq!(assurance_label(2), "VERIFIED");
+        assert_eq!(assurance_label(99), "?");
+    }
+
+    #[test]
+    fn assurance_of_json_never_upgrades_garbage() {
+        assert_eq!(assurance_of_json(&serde_json::json!("Accepted")), 2);
+        assert_eq!(assurance_of_json(&serde_json::json!("nonsense")), 0);
+        assert_eq!(assurance_of_json(&serde_json::json!(null)), 0);
     }
 }
