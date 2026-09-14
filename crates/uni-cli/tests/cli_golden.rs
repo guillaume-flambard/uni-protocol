@@ -359,3 +359,29 @@ fn golden_brief_reports_unresolvable_verifier() {
     assert!(md.contains("NOT RESOLVABLE"), "{md}");
     assert!(md.contains("ghost"), "{md}");
 }
+
+/// v0.8: importing a Spec Kit feature emits the work order next to the
+/// candidate contract, so the evidence requirement reaches the worker without
+/// the registry->test-name hop that caused the study's false rejections.
+#[test]
+fn golden_speckit_import_emits_brief() {
+    let dir = std::env::temp_dir().join(format!("sk-brief-{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/contracts")).unwrap();
+    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"project.tests\" = \"cargo test\"\n").unwrap();
+    std::fs::write(dir.join("spec.md"), "- **FR-001**: alpha works\n").unwrap();
+    std::fs::write(dir.join("constitution.md"), "# C\n").unwrap();
+    std::fs::write(dir.join("plan.md"), "# P\n").unwrap();
+    std::fs::write(dir.join("tasks.md"), "# T\n").unwrap();
+    let o = Command::new(bin()).args(["--json", "import-speckit", dir.to_str().unwrap()])
+        .current_dir(&dir).output().unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+    assert!(v["candidate_brief"].as_str().unwrap().ends_with(".brief.md"), "{v}");
+    assert_eq!(v["candidate_claims"].as_u64(), Some(1));
+    let brief_abs = dir.join(v["candidate_brief"].as_str().unwrap().trim_start_matches("./"));
+    assert!(brief_abs.exists(), "brief not written at {}", brief_abs.display());
+    let text = std::fs::read_to_string(&brief_abs).unwrap();
+    assert!(text.contains("Work order"), "{text}");
+    assert!(text.contains("fr-001"), "{text}");
+}

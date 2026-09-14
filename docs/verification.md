@@ -53,6 +53,10 @@ VERIFY <claim-id>
 or one-line `VERIFY <claim-id> USING shell "cmd"`. `uni lint <contract>` checks
 coverage and unknown registry keys without executing anything.
 
+Hand the worker the requirements explicitly with `uni brief` (see
+[brief.md](brief.md)): the study showed that leaving the registry-to-test-name
+hop implicit makes correct work fail verification.
+
 ## Authorized resolution (VerifierBinding, v0.2)
 
 A verification may carry a resolution requirement:

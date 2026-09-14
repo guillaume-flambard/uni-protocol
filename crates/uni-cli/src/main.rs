@@ -1097,6 +1097,24 @@ fn cmd_import_speckit(dir: &Path, as_json: bool) -> Result<()> {
     let out_dsl = dot_uni().join("contracts").join(format!("candidate-{intent_id}.uni"));
     std::fs::create_dir_all(dot_uni().join("contracts"))?;
     std::fs::write(&out_dsl, &dsl)?;
+
+    // Ship the work order next to the candidate: the study showed that leaving
+    // the registry->test-name hop implicit causes correct work to be rejected.
+    // Unresolvable verifiers surface here, before anyone starts implementing.
+    let out_brief = dot_uni()
+        .join("contracts")
+        .join(format!("candidate-{intent_id}.brief.md"));
+    let (brief_claims, brief_problems) = match uni_parser::parse(&dsl)
+        .and_then(|ast| uni_ir::compile(&ast))
+    {
+        Ok(ir) => {
+            let registry = uni_verify::load_registry(&dot_uni());
+            let (claims, problems) = brief::build(&ir, &registry);
+            std::fs::write(&out_brief, format!("{}\n", brief::to_markdown(&ir, &claims, &problems)))?;
+            (claims.len(), problems)
+        }
+        Err(e) => (0, vec![format!("candidate did not compile: {e}")]),
+    };
     let candidate = serde_json::json!({
         "uniVersion": "0.1",
         "intent": {"id": intent_id, "domain": "software"},
@@ -1105,6 +1123,9 @@ fn cmd_import_speckit(dir: &Path, as_json: bool) -> Result<()> {
         })).collect::<Vec<_>>(),
         "note": "CANDIDATE — review required. LLMs/heuristics propose, humans authorize.",
         "candidate_dsl": out_dsl.display().to_string(),
+        "candidate_brief": out_brief.display().to_string(),
+        "candidate_claims": brief_claims,
+        "candidate_problems": brief_problems,
         "sources": {"constitution_chars": constitution.len(), "spec_chars": spec.len(), "plan_chars": plan.len(), "tasks_chars": tasks.len()},
     });
     let out = serde_json::to_string_pretty(&candidate)?;
