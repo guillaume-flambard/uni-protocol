@@ -152,6 +152,9 @@ REGISTRY = """[verifiers]
 "mini.no.unwrap" = {"run" = '! grep -Rn "\\.unwrap()" src', "expect_not" = ".unwrap()", "files" = ["src/config.rs", "src/lib.rs"]}
 "mini.t.format.symbol" = {"run" = "cargo test format_symbol -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.api.freeze" = {"run" = "grep -n 'pub fn format_price(cents: u64) -> String' src/api.rs", "expect" = "pub fn format_price(cents: u64) -> String", "files" = ["src/api.rs"]}
+"mini.t.transfer.moves" = {"run" = "cargo test transfer_moves_money -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.ledger.conservation" = {"run" = "cargo test --test invariants", "expect" = "test result: ok. 2 passed", "files" = ["tests/invariants.rs"]}
+"mini.invariants.frozen" = {"type" = "file-hash", "files" = ["tests/invariants.rs"], "expect_sha256" = "94c606b701078abb8c7c74d9f694407f3805fead64d996ef30b9fda0c9cf8e06"}
 "mini.t.clamp.lower" = {"run" = "cargo test clamp_lower_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.clamp.upper" = {"run" = "cargo test clamp_upper_works -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.sum.basic" = {"run" = "cargo test sum_three -- --exact", "expect" = "test result: ok. 1 passed"}

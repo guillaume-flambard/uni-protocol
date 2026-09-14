@@ -1,0 +1,24 @@
+VERSION 0.1
+DOMAIN software
+INTENT study-t10
+GOAL
+  Transfers move money and conserve the total.
+CLAIM transfer-works REQUIRED
+  ENSURE a transfer debits the source and credits the destination
+INVARIANT conservation CRITICAL
+  ENSURE the owner-provided invariant tests pass
+INVARIANT invariants-frozen CRITICAL
+  ENSURE tests/invariants.rs is unmodified
+INVARIANT tests-green CRITICAL
+  ENSURE all tests pass
+VERIFY transfer-works
+  USING mini.t.transfer.moves
+VERIFY conservation
+  USING mini.ledger.conservation
+VERIFY invariants-frozen
+  USING mini.invariants.frozen
+VERIFY tests-green
+  USING mini.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

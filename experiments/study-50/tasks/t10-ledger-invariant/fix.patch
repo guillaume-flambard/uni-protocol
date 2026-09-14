@@ -1,0 +1,27 @@
+diff --git a/src/ledger.rs b/src/ledger.rs
+index 03da51c..a9c26a2 100644
+--- a/src/ledger.rs
++++ b/src/ledger.rs
+@@ -16,10 +16,19 @@ impl Ledger {
+ 
+ /// Move `amount` from account `from` to account `to`.
+ ///
+-/// BUG: credits the destination without debiting the source, which creates
+-/// money out of nothing.
++/// Refuses negative amounts, unknown accounts, and overdrafts, and changes
++/// nothing when it refuses.
+ pub fn transfer(ledger: &mut Ledger, from: usize, to: usize, amount: i64) -> Result<(), String> {
+-    let _ = from;
++    if amount < 0 {
++        return Err("amount must not be negative".to_string());
++    }
++    if from >= ledger.balances.len() || to >= ledger.balances.len() {
++        return Err("account out of range".to_string());
++    }
++    if ledger.balances[from] < amount {
++        return Err("insufficient funds".to_string());
++    }
++    ledger.balances[from] -= amount;
+     ledger.balances[to] += amount;
+     Ok(())
+ }
