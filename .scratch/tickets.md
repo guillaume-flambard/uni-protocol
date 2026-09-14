@@ -55,8 +55,10 @@ Ordered by value. Nothing here is started unless marked.
    exports them. An OTel exporter is a small, self-contained slice.
 6. **Evidence lifecycle gaps** — event journal has no rotation; evidence has no
    expiry (the Time dimension is recorded, not enforced).
-7. **`crates/uni-cli/src/main.rs`** — all commands plus helpers in one file
-   (~1000 lines). Split before the cloud phase.
+7. ~~Split `crates/uni-cli/src/main.rs`~~ — DONE (v0.7.0): main.rs is 127 lines
+   (CLI types, dispatch, `dot_uni`); the commands live in `src/cmd/`, grouped by
+   what they act on (contract, verify, report, journal, authorize, handoff,
+   pack, speckit).
 8. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
    Deliberately after the single-user story is convincing.
 9. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
