@@ -22,7 +22,7 @@ expect = "OK"
 
 [verifiers."node.tests"]
 run = "node --test examples/nodejs/*.test.mjs"
-expect = "ℹ fail 0"
+expect = "fail 0"
 
 [verifiers."node.t.dash"]
 run = 'node --test --test-name-pattern "spaces become dashes" examples/nodejs/slug.test.mjs'

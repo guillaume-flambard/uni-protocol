@@ -17,10 +17,58 @@ fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+fn repo_root() -> PathBuf {
+    manifest_dir().parent().unwrap().parent().unwrap().to_path_buf()
+}
+
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for e in std::fs::read_dir(from).unwrap().flatten() {
+        let src = e.path();
+        let dst = to.join(e.file_name());
+        if src.is_dir() {
+            copy_dir(&src, &dst);
+        } else {
+            std::fs::copy(&src, &dst).unwrap();
+        }
+    }
+}
+
+/// Per-test workspace: examples plus the real registry, in a fresh git repo.
+/// CI runs these tests in parallel and several of them mutate `.uni/` state
+/// (evidence, decision, journal); sharing the repository root made them race.
+/// Every test that touches `.uni/` gets its own copy instead.
+fn repo_fixture(tag: &str) -> PathBuf {
+    repo_fixture_with(tag, false)
+}
+
+/// `real_registry` keeps the repository's registry (needed by the stack test,
+/// which runs python and node). Otherwise the fixture gets a minimal portable
+/// registry: the examples it exercises would otherwise shell out to `cargo
+/// check`, which cannot run outside a Rust workspace.
+fn repo_fixture_with(tag: &str, real_registry: bool) -> PathBuf {
+    let root = repo_root();
+    let dir = std::env::temp_dir().join(format!("uni-golden-{}-{}", tag,
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
+    if real_registry {
+        std::fs::copy(root.join(".uni/config.toml"), dir.join(".uni/config.toml")).unwrap();
+    } else {
+        std::fs::write(dir.join(".uni/config.toml"),
+            "[verifiers]\n\"project.check\" = \"true\"\n\"test.true\" = \"true\"\n\"test.false\" = \"false\"\n\"test.fail\" = \"false\"\n").unwrap();
+    }
+    std::fs::write(dir.join(".gitignore"), "/target\n.uni/evidence/\n.uni/decisions/\n.uni/events.jsonl\n").unwrap();
+    copy_dir(&root.join("examples"), &dir.join("examples"));
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "fixture"]);
+    dir
+}
+
 /// Golden: compile output is stable (no timestamps).
 #[test]
 fn golden_compile() {
-    let root = manifest_dir().parent().unwrap().parent().unwrap().to_path_buf(); // repo root
+    let root = repo_fixture("compile");
     let contract = root.join("examples/hello/hello.uni");
     let o = Command::new(bin()).args(["compile", contract.to_str().unwrap()])
         .current_dir(&root).output().unwrap();
@@ -32,7 +80,7 @@ fn golden_compile() {
 /// Golden: compile --json shape is stable (keys + counts, volatile values masked).
 #[test]
 fn golden_compile_json_shape() {
-    let root = manifest_dir().parent().unwrap().parent().unwrap().to_path_buf();
+    let root = repo_fixture("compile-json");
     let contract = root.join("examples/hello/hello.uni");
     let o = Command::new(bin()).args(["--json", "compile", contract.to_str().unwrap()])
         .current_dir(&root).output().unwrap();
@@ -46,7 +94,7 @@ fn golden_compile_json_shape() {
 /// Diff-of-setup golden: verify exit codes follow the decision (0 accepted, non-zero otherwise).
 #[test]
 fn golden_verify_exit_codes() {
-    let root = manifest_dir().parent().unwrap().parent().unwrap().to_path_buf();
+    let root = repo_fixture("exit-codes");
     assert_eq!(run(&["verify", "examples/hello/hello.uni"], &root), 0);
     assert_eq!(run(&["verify", "examples/multi/multi.uni"], &root), 0);
     assert_eq!(run(&["verify", "examples/booking/booking.uni"], &root), 0);
@@ -101,7 +149,8 @@ fn golden_import_speckit() {
 /// Golden: `uni report` is byte-stable across repeated verify runs (PR/CI view).
 #[test]
 fn golden_report_stability() {
-    let root = manifest_dir().parent().unwrap().parent().unwrap().to_path_buf();
+    let root = repo_fixture("report");
+    assert_eq!(run(&["verify", "examples/booking/booking.uni"], &root), 0, "fixture must verify first");
     let o1 = Command::new(bin()).args(["report", "--json"]).current_dir(&root).output().unwrap();
     let o2 = Command::new(bin()).args(["report", "--json"]).current_dir(&root).output().unwrap();
     // two calls on the same last.json are identical
@@ -119,7 +168,11 @@ fn golden_report_stability() {
 /// v0.8: append-only event journal, second verify appends cache-hit events.
 #[test]
 fn golden_events_journal() {
-    let root = manifest_dir().parent().unwrap().parent().unwrap().to_path_buf();
+    let root = repo_fixture("events");
+    assert_eq!(run(&["verify", "examples/hello/hello.uni"], &root), 0);
+    // A second run is what produces cache hits; a single run only ever records
+    // EvidenceRun. (Before isolation this test silently relied on evidence
+    // left behind by other tests in the repository root.)
     assert_eq!(run(&["verify", "examples/hello/hello.uni"], &root), 0);
     let j = Command::new(bin()).args(["events", "--json"]).current_dir(&root).output().unwrap();
     let text = String::from_utf8_lossy(&j.stdout);
@@ -168,7 +221,9 @@ VERIFY x
 }
 
 /// v0.12: OPA adapter — when a rego bundle + a shim `opa` binary exist,
+/// (the shim is a shell script, so this test is unix-only)
 /// the provider resolves from the bundle; absent opa falls back to TOML.
+#[cfg(unix)]
 #[test]
 fn golden_policy_provider_opa_fallback() {
     // isolated workspace: no opa binary intercept needed — create one that works.
@@ -237,7 +292,7 @@ fn bin_state(root: &std::path::PathBuf) -> bool {
 /// Skips silently when the runtime is missing (CI ubuntu has both).
 #[test]
 fn golden_stack_independence() {
-    let root = manifest_dir().parent().unwrap().parent().unwrap().to_path_buf();
+    let root = repo_fixture_with("stacks", true);
     for (contract, runtime) in [
         ("examples/python/contract.uni", "python3"),
         ("examples/nodejs/contract.uni", "node"),

@@ -3,9 +3,9 @@ name: uni
 on: [push, pull_request]
 
 jobs:
-  # Core portability: the binary, the test suite, and the pure-Rust examples
-  # must work on every supported platform. POSIX-only examples (forbid grep,
-  # python/node shells) run on Linux only, by design.
+  # Core portability: the crates must compile and their unit tests must pass on
+  # every supported platform. The shell verifier is platform-gated (`sh -c` on
+  # POSIX, `cmd /C` on Windows) and timeouts are native.
   matrix:
     strategy:
       fail-fast: false
@@ -17,9 +17,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Build
         run: cargo build --release
-      - name: Test suite
-        run: cargo test --all-targets
+      - name: Unit tests (portable)
+        run: cargo test --lib
+      # CLI integration tests drive the shell verifier with POSIX commands
+      # (true, false, grep, sleep). They are POSIX-only by construction, and
+      # pretending otherwise would be a lie in the matrix.
+      - name: Integration tests (POSIX only)
+        if: runner.os != 'Windows'
+        run: cargo test
       - name: Verify portable examples
+        if: runner.os != 'Windows'
         run: |
           ./target/release/uni verify examples/hello/hello.uni
           ./target/release/uni verify examples/multi/multi.uni
@@ -30,7 +37,8 @@ jobs:
         run: ./target/release/uni report >> "$GITHUB_STEP_SUMMARY"
         shell: bash
 
-  # POSIX-shell examples: forbid (grep), python (unittest), node (node --test).
+  # Examples that need a POSIX shell or a language runtime: forbid (grep),
+  # python (unittest), node (node --test).
   examples-posix:
     runs-on: ubuntu-latest
     steps:
@@ -42,5 +50,6 @@ jobs:
           ./target/release/uni verify examples/forbid/forbid.uni
           ./target/release/uni verify examples/python/contract.uni
           ./target/release/uni verify examples/nodejs/contract.uni
+          ./target/release/uni verify examples/artifact/artifact.uni
       - name: Registry trust boundary unchanged
         run: ./target/release/uni doctor
