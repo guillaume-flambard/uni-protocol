@@ -1,16 +1,46 @@
 name: uni
+
 on: [push, pull_request]
+
 jobs:
-  assurance:
+  # Core portability: the binary, the test suite, and the pure-Rust examples
+  # must work on every supported platform. POSIX-only examples (forbid grep,
+  # python/node shells) run on Linux only, by design.
+  matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --release
+      - name: Test suite
+        run: cargo test --all-targets
+      - name: Verify portable examples
+        run: |
+          ./target/release/uni verify examples/hello/hello.uni
+          ./target/release/uni verify examples/multi/multi.uni
+          ./target/release/uni verify examples/booking/booking.uni
+        shell: bash
+      - name: UNI Assurance (PR check view)
+        if: matrix.os == 'ubuntu-latest'
+        run: ./target/release/uni report >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+
+  # POSIX-shell examples: forbid (grep), python (unittest), node (node --test).
+  examples-posix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release
-      - name: Verify outcomes
+      - name: Verify POSIX-shell examples
         run: |
-          ./target/release/uni verify examples/hello/hello.uni
-          ./target/release/uni verify examples/multi/multi.uni
-          ./target/release/uni verify examples/booking/booking.uni
-      - name: UNI Assurance (PR check view)
-        run: ./target/release/uni report >> "$GITHUB_STEP_SUMMARY"
+          ./target/release/uni verify examples/forbid/forbid.uni
+          ./target/release/uni verify examples/python/contract.uni
+          ./target/release/uni verify examples/nodejs/contract.uni
+      - name: Registry trust boundary unchanged
+        run: ./target/release/uni doctor

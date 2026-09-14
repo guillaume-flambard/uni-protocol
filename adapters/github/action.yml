@@ -1,14 +1,51 @@
 name: "UNI Verify"
-description: "Verify UNI outcome contracts (Outcome Assurance)"
+description: "Verify UNI outcome contracts (Outcome Assurance). Downloads the release binary for the runner platform; builds nothing."
+author: "UNI contributors"
+
 inputs:
   contract:
-    description: "Path to .uni contract"
+    description: "Path to the .uni contract to verify"
     required: true
+  version:
+    description: "UNI release tag to download"
+    required: false
+    default: "v0.1.0"
+  repository:
+    description: "owner/repo hosting UNI releases (replace when publishing your own fork)"
+    required: false
+    default: "uni-protocol/uni"
+  report-to-summary:
+    description: "Append the stable UNI Assurance view to the job summary"
+    required: false
+    default: "true"
+
 runs:
   using: "composite"
   steps:
-    - run: ${{ github.action_path }}/../../target/release/uni verify ${{ inputs.contract }}
+    - name: Install uni
       shell: bash
+      run: |
+        set -euo pipefail
+        case "$RUNNER_OS" in
+          Linux)   target=x86_64-unknown-linux-gnu ;;
+          macOS)   if [ "$RUNNER_ARCH" = "arm64" ]; then target=aarch64-apple-darwin; else target=x86_64-apple-darwin; fi ;;
+          Windows) target=x86_64-pc-windows-msvc ;;
+          *) echo "unsupported runner OS: $RUNNER_OS" >&2; exit 1 ;;
+        esac
+        bin_dir="$RUNNER_TEMP/uni-bin"
+        mkdir -p "$bin_dir"
+        url="https://github.com/${{ inputs.repository }}/releases/download/${{ inputs.version }}/uni-${target}.tar.gz"
+        echo "downloading $url"
+        curl -fsSL "$url" | tar -xz -C "$bin_dir"
+        echo "$bin_dir" >> "$GITHUB_PATH"
+    - name: Verify
+      shell: bash
+      run: uni verify "${{ inputs.contract }}"
+    - name: Assurance summary
+      if: ${{ inputs.report-to-summary == 'true' }}
+      shell: bash
+      run: uni report >> "$GITHUB_STEP_SUMMARY"
+
 branding:
   icon: "check-circle"
   color: "green"

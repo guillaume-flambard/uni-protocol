@@ -27,3 +27,5 @@
 - [x] v0.17 — Real-agent study run (n=7, headless opencode free tier): DONE 7/7 vs human-rejected 7/7 vs UNI blocks 7/7, 0 false accepts. Caught: no-op "DONE" pattern, fixture tampering (run.py guard added), PATH overwrite (recovered via git), headless opencode invocation recipe. Honest limitations documented (weak implementer, test-name coupling). RESULTS-2026-09-13.md. DONE
 - [x] A5 done (assurance_of single source). Track A complete, ready for v0.1.0 tag gate.
 - [x] B5 — constitution v0.2 (rules X-XII: Verification Context, assurance scale, VerifierBinding) + mirror, spec 003 (spec/plan/tasks). Gate Track B: 73 tests x3, 0 warnings, dogfood 5 stacks, report stable, no LLM in verify path, actor matrix green. DONE
+- [x] v0.3.1 — release workflow (5 targets tar.gz on tag), public composite action (downloads release binary for runner OS/arch, no build), docs. DONE
+- [x] v0.3.2 — CI matrix ubuntu/macos/windows (build+test+portable examples), POSIX examples gated to Linux explicitly. Native timeout + cmd/sh cfg-gate. DONE

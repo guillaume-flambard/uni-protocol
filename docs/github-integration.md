@@ -26,11 +26,41 @@ Exit codes map 1:1 to review gates:
 | 1 + "UNI EVIDENCE_REQUIRED" | missing/stale proof | failure, actionable ("Run: uni verify <claim>") |
 | 1 + "UNI ESCALATED" | policy wants a human | action required |
 
+## Supported platforms (v0.3)
+
+`cargo test` and the pure-Rust examples (`hello`, `multi`, `booking`) run on
+ubuntu, macos, and windows in CI. The shell verifier is platform-gated
+(`sh -c` on POSIX, `cmd /C` on Windows) and timeouts are enforced natively, so
+a hanging verifier is killed and recorded Invalid on every platform.
+
+POSIX-only examples (`forbid` uses `grep`, `python`/`node` examples use POSIX
+paths and reporter formats) run on Linux only, by design: platform portability
+is claimed for the core, not for POSIX shell recipes.
+
+## Release workflow
+
+`.github/workflows/release.yml` builds five targets on tag push:
+`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`,
+`aarch64-apple-darwin`, `x86_64-pc-windows-msvc`, each as
+`uni-<target>.tar.gz` attached to the GitHub release.
+
 ## `adapters/github/action.yml`
 
-A composite action template pinned to the embedded binary pattern (no runtime
-`npm install`, same stance as spec-guard's action). For public consumption the
-action must ship with a release download URL; that packaging is v1 work.
+A composite action that DOWNLOADS the release binary for the runner platform
+(no build, no npm). Use it as a subdirectory action, or copy the file to an
+action repo root:
+
+```yaml
+- uses: your-org/uni/adapters/github@v0.3.0
+  with:
+    contract: uni/intents/feature.uni
+    version: v0.3.0
+    repository: your-org/uni
+```
+
+Inputs: `contract` (required), `version` (default `v0.1.0`), `repository`
+(default `uni-protocol/uni`, replace with your fork), `report-to-summary`
+(default true). Unknown runner OS fails loudly instead of silently skipping.
 
 ## Evidence lifecycle in CI
 
