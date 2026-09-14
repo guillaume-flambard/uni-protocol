@@ -5,6 +5,16 @@ public repo `github.com/guillaume-flambard/uni-protocol` · CI green on
 ubuntu/macOS/Windows + POSIX examples + a smoke job that runs the published
 action.
 
+## Done — CI on the lab runner (2026-09-14)
+
+`push` runs on a repo-scoped self-hosted runner on the VPS
+(`self-hosted, Linux, X64, uni-protocol`, user `github-runner-uni-protocol`),
+declared in `lab-infra` (playbook + `make register-uni-runner`, PR #68 merged).
+`pull_request` stays on GitHub-hosted runners on purpose: the repository is
+public, so a fork's code must never execute on the VPS. macOS and Windows remain
+hosted. Measured 84 s warm / 136 s cold for the full Linux job; actionlint
+validates the workflows (`.github/actionlint.yaml` declares the custom label).
+
 ## Open
 
 Ordered by value. Nothing here is started unless marked.
