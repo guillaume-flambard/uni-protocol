@@ -47,13 +47,6 @@ jobs:
           echo "=== the same commands run again ==="
           "$UNI" verify c.uni || true
 
-      - name: Fail the check
-        run: |
-          # A proof that no longer applies must turn the check red. The
-          # annotations above say which file moved and what to do; the exit
-          # code says "do not merge this until it is proved again".
-          exit 1
-
       - name: Annotate the files that moved
         run: |
           set -euo pipefail
@@ -66,3 +59,10 @@ jobs:
             "$UNI" explain || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail the check
+        run: |
+          # A proof that no longer applies must turn the check red. The
+          # annotations above say which file moved and what to do; the exit
+          # code says "do not merge this until it is proved again".
+          exit 1
