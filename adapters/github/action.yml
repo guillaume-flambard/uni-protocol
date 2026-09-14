@@ -9,7 +9,7 @@ inputs:
   version:
     description: "UNI release tag to download"
     required: false
-    default: "v0.7.0"
+    default: "v0.8.0"
   repository:
     description: "owner/repo hosting UNI releases (replace when publishing your own fork)"
     required: false
@@ -39,8 +39,31 @@ runs:
         curl -fsSL "$url" | tar -xz -C "$bin_dir"
         echo "$bin_dir" >> "$GITHUB_PATH"
     - name: Verify
+      id: verify
       shell: bash
-      run: uni verify "${{ inputs.contract }}"
+      continue-on-error: true
+      run: |
+        set -euo pipefail
+        uni verify "${{ inputs.contract }}"
+        echo "exit=0" >> "$GITHUB_OUTPUT"
+    - name: Explain the drift
+      if: ${{ steps.verify.outcome == 'failure' }}
+      shell: bash
+      run: |
+        # A claim that stopped applying lands as an inline annotation on the
+        # file that moved, so the pull request shows why, not just that.
+        uni explain --annotations || true
+        {
+          echo "### Why the proof stopped applying"
+          echo ""
+          echo '```'
+          uni explain || true
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+    - name: Fail the check
+      if: ${{ steps.verify.outcome == 'failure' }}
+      shell: bash
+      run: exit 1
     - name: Assurance summary
       if: ${{ inputs.report-to-summary == 'true' }}
       shell: bash
