@@ -1,25 +1,9 @@
 # UNI — tickets
 
-Current: **v0.7.0** (latest release, `uni 0.5.2`) · 97 tests, 0 warnings ·
-public repo `github.com/guillaume-flambard/uni-protocol` · CI green on
-ubuntu/macOS/Windows + POSIX examples + a smoke job that runs the published
-action.
-
-## Done — evidence lifecycle completed (v0.6.0)
-
-The two gaps left in the Verification Context are closed:
-
-- **Time is real.** A verifier may declare `max_age_hours`; the expiry is stamped
-  on the evidence so it travels with the proof and a registry change cannot
-  extend it. An expired proof is stale, the verifier re-runs, a fresh window is
-  stamped. This is the one clock-reading predicate, and it decides availability,
-  not the decision (documented in `docs/decisions.md`, constitution rule 10).
-- **The journal rotates.** Past 1 MiB the current journal is archived as
-  `events.<timestamp>.jsonl`, keeping the three newest; `uni events --all` reads
-  the history and `uni doctor` reports size and cap. The retention predicate
-  excludes the live journal: a test caught a version that would have pruned it.
-
-104 tests. Remaining gap in this area: none known.
+Current: **v0.8.1** · 114 tests, 0 warnings · public repo
+`github.com/guillaume-flambard/uni-protocol` · CI green on ubuntu/macOS/Windows +
+POSIX examples + a smoke job that runs the published action · release `v0.8.1`
+with five binaries.
 
 ## Done — CI hosting decision (2026-09-14)
 
@@ -31,6 +15,32 @@ service and user deleted). Hosted is the choice for public repos; self-hosting
 stays right for the private ones, where minutes are billed and images must be
 built beside the local registry.
 
+## Done — the check earns its keep (v0.8.0 / v0.8.1)
+
+The proof is now something a reviewer sees in the pull request, and its failure
+is measured.
+
+- **Stale reasons as data.** A stale verdict carries the dimension
+  (`uncommitted_changes`, `subject_changed`, `commit_changed`,
+  `contract_changed`, `verifier_config_changed`, `authorization_changed`,
+  `expired`, ...) and the named files that moved. The drift is recorded durably,
+  and `uni explain` narrates what changed instead of a generic "stale".
+- **GitHub annotations.** `uni explain --annotations` emits one `::error`
+  (CRITICAL claim) or `::warning` per moved file, with `file=` set, so the
+  drifted claim lands inline on the diff. A reason that names no path gets no
+  duplicate note on the workflow file.
+- **The published action reports.** `adapters/github/action.yml` verifies, and on
+  failure annotates the drift and appends the plain-word narration to the job
+  summary. Default bumped to `v0.8.1`.
+- **The Stale Evidence Benchmark.** `experiments/stale-bench/` builds 100
+  manufactured drift scenarios and asks three oracles. 70 lose the proof; UNI
+  detects 100% of those it can (86% overall; the missing item is a weakened
+  trusted registry, which it names in 100% and leaves to a human). A plain
+  exit-code CI missed 71% of the 70, a result cache missed all 70. Full table in
+  `experiments/stale-bench/RESULTS-2026-09-14.md`.
+- **Flagship page.** `docs/flagship-check.md`, with screenshots of the red check
+  and the step order (prove, drift, annotate, fail).
+
 ## Open
 
 Ordered by value. Nothing here is started unless marked.
@@ -40,30 +50,13 @@ Ordered by value. Nothing here is started unless marked.
    no-ops (they print the session header and exit). The harness is ready:
    `UNI_AGENT_MODEL=<model> python3 run.py --agent opencode --only <task>`.
    Needs: one working implementer, then the same 15-task protocol.
-2. ~~Contract-level test binding without a registry hop~~ — DONE (v0.7.0):
-   `.uni/bindings.toml` holds every binding in one reviewed file, `uni bind
-   --from <file>` authorizes the whole review in one act (stamped per entry),
-   legacy per-claim files still load.
-3. **A3 real** — the assurance scale reaches A3-D (independent actor,
+2. **A3 real** — the assurance scale reaches A3-D (independent actor,
    self-declared identity). A3 needs identity adapters (spiffe/entra/oidc);
    they are stubs today, so A3 is unreachable outside unit tests. A4 stays
    refused by design (`--attest` names the missing signer).
-4. ~~Execution~~ — DONE (v0.7.0): `uni run <contract> -- <command>` executes your
-   executor (any agent, any tool), reports its output and exit code, then
-   verifies. The command comes from the command line, so no trust surface is
-   added, and the executor's exit code never decides.
-5. ~~Observability export~~ — DONE (v0.7.0): `uni events --otlp` emits an
-   OTLP/JSON document (one span per event, `uni.*` attributes, deterministic
-   trace and span ids derived from content).
-6. ~~Evidence lifecycle gaps~~ — DONE (v0.6.0): journal rotation and evidence
-   expiry (`max_age_hours`).
-7. ~~Split `crates/uni-cli/src/main.rs`~~ — DONE (v0.7.0): main.rs is 127 lines
-   (CLI types, dispatch, `dot_uni`); the commands live in `src/cmd/`, grouped by
-   what they act on (contract, verify, report, journal, authorize, handoff,
-   pack, speckit).
-8. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
+3. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
    Deliberately after the single-user story is convincing.
-9. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
+4. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
    present. Low value until the project has a broader audience.
 
 ## Done
@@ -101,10 +94,28 @@ Condensed by milestone; the detailed history is in git.
   it, selector included in the binding hash); tracked-only dirtiness (a
   verifier that compiles no longer stales its own evidence); Windows path
   separator fix; a declared watch that observes nothing is Invalid.
+- **v0.6 — evidence lifecycle completed.** Time is real: a verifier may declare
+  `max_age_hours`, the expiry is stamped on the proof so a registry change
+  cannot extend it, and an expired proof is stale (the one clock-reading
+  predicate, constitution rule 10). The journal rotates past 1 MiB keeping the
+  three newest archives, `uni events --all` reads the history, `uni doctor`
+  reports size and cap.
+- **v0.7 — execution, export, one bindings file.** `uni run <contract> --
+  <command>` executes your executor then verifies (its exit code is data, the
+  decision drives the exit). `uni events --otlp` emits an OTLP/JSON document
+  with deterministic trace/span ids. `.uni/bindings.toml` holds every binding in
+  one reviewed file, `uni bind --from <file>` authorizes the whole review in one
+  act (legacy per-claim files still load). `main.rs` split into `src/cmd/`
+  (1404 -> 127 lines).
+- **v0.8 — the check earns its keep.** Stale reasons as data (dimension + named
+  files, durable drift record, `uni explain` narration), GitHub annotations per
+  moved file, the published action annotates and writes the job summary, and the
+  Stale Evidence Benchmark (100 scenarios; UNI detects 100% of what it can, a
+  plain exit-code CI misses 71% of the lost proofs, a cache misses all 70).
 - **Review + deploy.** Two-axis review applied (spec honesty, remediation
   branching, finding ids as data, JSON token leak, unobservable subject).
-  All tags pushed; releases `v0.3.0` through `v0.5.2` with five assets each,
-  `v0.5.2` marked latest. `v0.3.0`/`v0.4.0` tag CI stays red on purpose: those
+  All tags pushed; releases `v0.3.0` through `v0.8.1` with five assets each,
+  `v0.8.1` marked latest. `v0.3.0`/`v0.4.0` tag CI stays red on purpose: those
   versions predate the fixes, which is the honest record.
 
 ## Test debt
