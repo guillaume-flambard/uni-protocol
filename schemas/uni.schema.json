@@ -44,13 +44,8 @@
     "acceptance": {
       "type": "object",
       "properties": {
-        "require_verified": {"type": "boolean"},
-        "allow_critical_failures": {"type": "integer", "minimum": 0}
+        "require_verified": {"type": "boolean", "const": true}
       }
-    },
-    "constraints": {
-      "type": "array",
-      "items": {"type": "string"}
     }
   }
 }

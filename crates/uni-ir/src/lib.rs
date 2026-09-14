@@ -9,9 +9,6 @@ pub struct Ir {
     pub claims: Vec<ClaimIr>,
     pub verification: Vec<VerificationIr>,
     pub acceptance: AcceptanceIr,
-    /// DSL REQUIRE rules (v0.1: carried through, engine enforces later)
-    #[serde(default)]
-    pub constraints: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,8 +36,8 @@ pub struct VerificationIr {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AcceptanceIr {
+    /// v0.1: always true; the grammar enforces the only supported semantics.
     pub require_verified: bool,
-    pub allow_critical_failures: u32,
 }
 
 pub fn compile(c: &Contract) -> Result<Ir> {
@@ -76,9 +73,7 @@ pub fn compile(c: &Contract) -> Result<Ir> {
             .collect(),
         acceptance: AcceptanceIr {
             require_verified: c.acceptance.require_verified,
-            allow_critical_failures: c.acceptance.allow_critical_failures,
         },
-        constraints: c.constraints.clone(),
     })
 }
 

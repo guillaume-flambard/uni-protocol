@@ -1,0 +1,11 @@
+VERSION 0.1
+DOMAIN software
+INTENT x
+CLAIM a REQUIRED
+  ENSURE ok
+REQUIRE executor != verifier
+VERIFY a
+  USING project.check
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

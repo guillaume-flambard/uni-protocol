@@ -14,8 +14,7 @@ acceptance until every required claim is backed by valid evidence.
 - `FORBID <expr>` - compiled to a critical invariant claim
   (`forbid-N`, ensure `FORBID <expr>`). Prove it with an `expect_not` verifier
   (see `verification.md` and `examples/forbid/`).
-- `REQUIRE <expr>` - carried into the IR `constraints` array (v0.1: recorded,
-  not yet enforced by the engine).
+- `REQUIRE <expr>` - reserved for v0.2 (VerifierBinding); hard parse error in v0.1.
 
 ## Example
 

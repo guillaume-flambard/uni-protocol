@@ -16,8 +16,6 @@ INVARIANT ledger-consistency CRITICAL
   ENSURE ledger.balance == expected.balance
 FORBID
   direct_write("ledger")
-REQUIRE
-  executor != verifier
 
 VERIFY booking-state
   USING mini.t.booking
@@ -29,7 +27,7 @@ ACCEPT WHEN
 - CLAIM: verifiable statement of the outcome. REQUIRED (default) or OPTIONAL.
 - INVARIANT: claim that must never break; CRITICAL marks rejection (vs. evidence gap).
 - FORBID: prohibition compiled to a critical invariant claim; prove it with an `expect_not` verifier.
-- REQUIRE: constraints carried in the IR (v0.1: recorded, engine enforces later).
+- REQUIRE / REJECT WHEN / ESCALATE WHEN: reserved for v0.2, hard parse errors in v0.1.
 - VERIFY <claim> USING <registry-key> | shell "cmd" - commands run ONLY from
   `.uni/config.toml [verifiers]` (trusted registry). Expect/expect_not/files/timeout fields per verifier.
 - ACCEPT WHEN is deterministic; LLMs may draft contracts (human approves candidates).

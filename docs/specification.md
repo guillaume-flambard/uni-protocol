@@ -14,11 +14,12 @@ GOAL     <free text lines>
 CLAIM      <id> [REQUIRED|OPTIONAL]
 INVARIANT  <id> [CRITICAL]
 ENSURE     <free text>
-FORBID     <expr>
-REQUIRE    <expr>
+FORBID     <expr> (same line) or bare FORBID + indented expression
 VERIFY     <claim-id> USING <registry-key> | shell "<cmd>"
-ACCEPT WHEN  required_claims == VERIFIED | critical_failures == 0 (AND-joined)
-REJECT WHEN  / ESCALATE WHEN   parsed, v0.1 no-op (policy files carry semantics)
+ACCEPT WHEN  required_claims == VERIFIED [AND critical_failures == 0]
+
+Reserved for v0.2 (hard parse errors until then): REQUIRE, REJECT WHEN,
+ESCALATE WHEN. A spec must never promise inert semantics (constitution rule 5).
 ```
 
 Multi-line form: `VERIFY <id>` followed by an indented `USING ...`. `#` comments.
@@ -35,8 +36,7 @@ shape from `crates/uni-ir`:
   "intent": { "id": "...", "domain": "software", "goal": "..." },
   "claims": [{ "id", "kind": "claim|invariant", "required", "critical", "ensure" }],
   "verification": [{ "claim_id", "verifier_ref", "inline_shell" }],
-  "acceptance": { "require_verified": true, "allow_critical_failures": 0 },
-  "constraints": ["executor != verifier"]
+  "acceptance": { "require_verified": true },
 }
 ```
 

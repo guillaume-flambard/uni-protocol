@@ -42,3 +42,42 @@ VERIFY a
     assert_eq!(c.claims.len(), 1);
     assert!(c.acceptance.require_verified); // default per v0.1
 }
+
+#[test]
+fn reserved_require_is_hard_error() {
+    let err = parse(&fixture("reserved_require.uni")).unwrap_err().to_string();
+    assert!(err.contains("reserved for v0.2"), "got: {err}");
+}
+
+#[test]
+fn reserved_reject_when_is_hard_error() {
+    let err = parse(&fixture("reserved_reject_when.uni"))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("reserved for v0.2"), "got: {err}");
+}
+
+#[test]
+fn accept_when_variant_is_hard_error() {
+    let err = parse(&fixture("accept_variant_rejected.uni"))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("unsupported ACCEPT WHEN clause"), "got: {err}");
+}
+
+#[test]
+fn canonical_accept_when_parses() {
+    let src = "VERSION 0.1
+DOMAIN software
+INTENT x
+CLAIM a REQUIRED
+  ENSURE ok
+VERIFY a
+  USING project.check
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0
+";
+    let c = parse(src).unwrap();
+    assert!(c.acceptance.require_verified);
+}

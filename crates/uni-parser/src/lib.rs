@@ -10,8 +10,6 @@ pub struct Contract {
     pub claims: Vec<Claim>,
     pub verifications: Vec<Verification>,
     pub acceptance: Acceptance,
-    /// REQUIRE rules collected from the DSL (e.g. "executor != verifier")
-    pub constraints: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -40,8 +38,47 @@ pub struct Verification {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Acceptance {
+    /// v0.1: always true. The grammar enforces the only supported acceptance
+    /// semantics (`required_claims == VERIFIED`); there is no configurable value.
     pub require_verified: bool,
-    pub allow_critical_failures: u32,
+}
+
+/// Clauses the v0.1 grammar accepts inside ACCEPT WHEN. Anything else is a
+/// hard error: the spec must never promise inert semantics.
+fn validate_accept_condition(text: &str, line_no: usize) -> Result<()> {
+    let parts: Vec<&str> = text
+        .split("AND")
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .collect();
+    if parts.is_empty() {
+        return Err(anyhow!(
+            "line {line_no}: ACCEPT WHEN needs a condition (v0.1 supports only 'required_claims == VERIFIED AND critical_failures == 0')"
+        ));
+    }
+    let mut seen_required = false;
+    for part in &parts {
+        match *part {
+            "required_claims == VERIFIED" => {
+                if seen_required {
+                    return Err(anyhow!("line {line_no}: duplicate clause 'required_claims == VERIFIED'"));
+                }
+                seen_required = true;
+            }
+            "critical_failures == 0" => {}
+            other => {
+                return Err(anyhow!(
+                    "line {line_no}: unsupported ACCEPT WHEN clause '{other}' (v0.1 supports only 'required_claims == VERIFIED AND critical_failures == 0')"
+                ));
+            }
+        }
+    }
+    if !seen_required {
+        return Err(anyhow!(
+            "line {line_no}: ACCEPT WHEN must include 'required_claims == VERIFIED'"
+        ));
+    }
+    Ok(())
 }
 
 fn push_verification(
@@ -80,15 +117,19 @@ pub fn parse(source: &str) -> Result<Contract> {
     let mut in_goal = false;
     let mut claims: Vec<Claim> = vec![];
     let mut verifications: Vec<Verification> = vec![];
-    let mut acceptance = Acceptance {
+    let acceptance = Acceptance {
         require_verified: true,
-        allow_critical_failures: 0,
     };
-    let mut constraints: Vec<String> = vec![];
 
     let mut pending_verify: Option<(String, usize)> = None;
     let mut pending_forbid: Option<usize> = None;
-    for (idx, raw) in source.lines().enumerate() {
+    // ACCEPT WHEN continuations are consumed by lookahead so no flag is needed.
+    let raw_lines: Vec<&str> = source.lines().collect();
+    let mut skip_until = 0usize;
+    for (idx, raw) in raw_lines.iter().enumerate() {
+        if idx < skip_until {
+            continue;
+        }
         let line_no = idx + 1;
         let line = raw.trim();
         if line.starts_with("USING") {
@@ -240,35 +281,42 @@ pub fn parse(source: &str) -> Result<Contract> {
             continue;
         }
         if line.starts_with("ACCEPT WHEN") {
-            let rest = line.strip_prefix("ACCEPT WHEN").unwrap();
-            if rest.contains("required_claims == VERIFIED") {
-                acceptance.require_verified = true;
+            let mut text = line.strip_prefix("ACCEPT WHEN").unwrap().trim().to_string();
+            let mut j = idx + 1;
+            while j < raw_lines.len() {
+                let nx = raw_lines[j].trim();
+                if nx.starts_with("required_claims")
+                    || nx.starts_with("critical_failures")
+                    || nx.starts_with("AND ")
+                    || nx == "AND"
+                {
+                    if !text.is_empty() {
+                        text.push(' ');
+                    }
+                    text.push_str(nx);
+                    j += 1;
+                } else {
+                    break;
+                }
             }
-            if rest.contains("critical_failures == 0") {
-                acceptance.allow_critical_failures = 0;
-            }
+            skip_until = j;
+            validate_accept_condition(&text, line_no)?;
             continue;
         }
-        if line.starts_with("required_claims")
-            || line.starts_with("critical_failures")
-            || line.starts_with("AND ")
-            || line == "AND"
-        {
-            if line.contains("required_claims == VERIFIED") {
-                acceptance.require_verified = true;
-            }
-            continue;
+        if line.starts_with("REJECT WHEN") {
+            return Err(anyhow!(
+                "line {line_no}: REJECT WHEN is reserved for v0.2 (Verification Context); remove it or see docs/specification.md"
+            ));
         }
-        if line.starts_with("REJECT WHEN") || line.starts_with("ESCALATE WHEN") {
-            continue;
+        if line.starts_with("ESCALATE WHEN") {
+            return Err(anyhow!(
+                "line {line_no}: ESCALATE WHEN is reserved for v0.2 (Verification Context); remove it or see docs/specification.md"
+            ));
         }
         if line.starts_with("REQUIRE") {
-            let expr = line.strip_prefix("REQUIRE").unwrap().trim().to_string();
-            if expr.is_empty() {
-                return Err(anyhow!("line {line_no}: REQUIRE needs an expression"));
-            }
-            constraints.push(expr);
-            continue;
+            return Err(anyhow!(
+                "line {line_no}: REQUIRE is reserved for v0.2 (VerifierBinding); remove it or see docs/specification.md"
+            ));
         }
         return Err(anyhow!("line {line_no}: unknown directive: {line}"));
     }
@@ -297,7 +345,6 @@ pub fn parse(source: &str) -> Result<Contract> {
         claims,
         verifications,
         acceptance,
-        constraints,
     })
 }
 
