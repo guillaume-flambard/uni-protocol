@@ -67,14 +67,14 @@ A composite action that DOWNLOADS the release binary for the runner platform
 action repo root:
 
 ```yaml
-- uses: your-org/uni/adapters/github@v0.6.0
+- uses: your-org/uni/adapters/github@v0.7.0
   with:
     contract: uni/intents/feature.uni
-    version: v0.6.0
+    version: v0.7.0
     repository: your-org/uni
 ```
 
-Inputs: `contract` (required), `version` (default `v0.6.0`), `repository`
+Inputs: `contract` (required), `version` (default `v0.7.0`), `repository`
 (default `guillaume-flambard/uni-protocol`, replace with your fork), `report-to-summary`
 (default true). Unknown runner OS fails loudly instead of silently skipping.
 
@@ -85,14 +85,14 @@ All of the above ran for real on the published repository:
 - `uni` workflow: matrix ubuntu / macos / windows (build, portable unit tests,
   POSIX integration tests outside Windows) plus a POSIX-examples job, all green.
 - `release` workflow: five targets built and attached on tag push
-  (`uni-<target>.tar.gz`), for `v0.5.0` and `v0.6.0`.
+  (`uni-<target>.tar.gz`), for `v0.5.0` and `v0.7.0`.
 - the composite action itself: an `action-smoke` job downloads the released
   binary and verifies a runtime-free contract (`examples/artifact`).
 
 Pushing the tag and `main` in the same breath races the smoke job against the
 release assets; push the tag first, or re-run the job.
 
-Published releases: `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.5.1`, `v0.6.0` (latest), five
+Published releases: `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.5.1`, `v0.7.0` (latest), five
 assets each. `v0.1.0` predates the release workflow, so it has no release, and
 its CI run is the only historical one that is green by construction. The CI
 runs for `v0.3.0` and `v0.4.0` fail: those tags predate the isolation and

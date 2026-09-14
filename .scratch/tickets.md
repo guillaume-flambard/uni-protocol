@@ -1,6 +1,6 @@
 # UNI — tickets
 
-Current: **v0.6.0** (latest release, `uni 0.5.2`) · 97 tests, 0 warnings ·
+Current: **v0.7.0** (latest release, `uni 0.5.2`) · 97 tests, 0 warnings ·
 public repo `github.com/guillaume-flambard/uni-protocol` · CI green on
 ubuntu/macOS/Windows + POSIX examples + a smoke job that runs the published
 action.
@@ -48,13 +48,15 @@ Ordered by value. Nothing here is started unless marked.
    self-declared identity). A3 needs identity adapters (spiffe/entra/oidc);
    they are stubs today, so A3 is unreachable outside unit tests. A4 stays
    refused by design (`--attest` names the missing signer).
-4. **Execution** — no `uni run`, no execution provider. The blueprint's
-   Codex/Claude/Temporal adapters are unbuilt; UNI only verifies what is
-   already on disk.
-5. **Observability export** — events carry `uni.*` attributes but nothing
-   exports them. An OTel exporter is a small, self-contained slice.
-6. **Evidence lifecycle gaps** — event journal has no rotation; evidence has no
-   expiry (the Time dimension is recorded, not enforced).
+4. ~~Execution~~ — DONE (v0.7.0): `uni run <contract> -- <command>` executes your
+   executor (any agent, any tool), reports its output and exit code, then
+   verifies. The command comes from the command line, so no trust surface is
+   added, and the executor's exit code never decides.
+5. ~~Observability export~~ — DONE (v0.7.0): `uni events --otlp` emits an
+   OTLP/JSON document (one span per event, `uni.*` attributes, deterministic
+   trace and span ids derived from content).
+6. ~~Evidence lifecycle gaps~~ — DONE (v0.6.0): journal rotation and evidence
+   expiry (`max_age_hours`).
 7. ~~Split `crates/uni-cli/src/main.rs`~~ — DONE (v0.7.0): main.rs is 127 lines
    (CLI types, dispatch, `dot_uni`); the commands live in `src/cmd/`, grouped by
    what they act on (contract, verify, report, journal, authorize, handoff,
