@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use std::time::Instant;
 use uni_evidence::{git_info, sha256_hex, Evidence, EvidenceState};
 use uni_ir::Ir;
+use wait_timeout::ChildExt;
 
 /// Trusted verifier registry lives in `.uni/config.toml` (never inline untrusted commands).
 /// Two forms:
@@ -202,26 +203,46 @@ fn run_shell(
 ) -> Result<(Evidence, String)> {
     let start = Instant::now();
     let (commit_sha, workspace_dirty) = git_info(workspace);
-    // Minimal timeout: run via `timeout` when available, else direct.
-    let output = if which_timeout() {
-        std::process::Command::new("timeout")
-            .arg(timeout_secs.to_string())
-            .arg("sh")
-            .arg("-c")
-            .arg(command)
-            .current_dir(workspace)
-            .output()?
-    } else {
-        std::process::Command::new("sh")
-            .arg("-c")
-            .arg(command)
-            .current_dir(workspace)
-            .output()?
+    // Shell selection is platform-gated (sh on POSIX, cmd on Windows) and the
+    // timeout is always enforced natively: the old `timeout`-binary hack is
+    // gone, along with its two silent failure modes (binary missing on macOS,
+    // wrong `timeout` semantics on Windows cmd).
+    #[cfg(windows)]
+    let mut cmd = {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", command]).current_dir(workspace);
+        c.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        c
     };
-    let combined = [output.stdout.clone(), output.stderr.clone()].concat();
+    #[cfg(not(windows))]
+    let mut cmd = {
+        let mut c = std::process::Command::new("sh");
+        c.args(["-c", command]).current_dir(workspace);
+        c.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        c
+    };
+    let mut child = cmd.spawn()?;
+    let timeout = std::time::Duration::from_secs(timeout_secs.max(1));
+    let (code, combined) = match child.wait_timeout(timeout)? {
+        Some(_status) => {
+            let out = child.wait_with_output()?;
+            (out.status.code().unwrap_or(-1), [out.stdout, out.stderr].concat())
+        }
+        None => {
+            // Timeout: kill, reap, and record the kill as failure, never as pass.
+            let _ = child.kill();
+            let out = child.wait_with_output()?;
+            let mut combined = [out.stdout, out.stderr].concat();
+            combined.extend_from_slice(
+                format!("\n[uni] verifier killed after {timeout_secs}s timeout").as_bytes(),
+            );
+            (-1, combined)
+        }
+    };
     let full_output = String::from_utf8_lossy(&combined).to_string();
     let excerpt: String = full_output.chars().take(2000).collect();
-    let code = output.status.code().unwrap_or(-1);
     let ev = Evidence {
         id: format!("{claim_id}-{}", &sha256_hex(command.as_bytes())[..8]),
         claim_id: claim_id.to_string(),
@@ -254,14 +275,6 @@ fn run_shell(
         binding_hash: String::new(),
     };
     Ok((ev, full_output))
-}
-
-fn which_timeout() -> bool {
-    std::process::Command::new("which")
-        .arg("timeout")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
 }
 
 /// High seam: assure a full contract in one call (used by CLI + tests).
@@ -308,8 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn registry_parses_simple_and_table_forms() {
-        let d = tmp("reg");
+    fn registry_parses_simple_and_table_forms() {        let d = tmp("reg");
         std::fs::write(
             d.join(".uni/config.toml"),
             "[verifiers]\n\"a\" = \"cargo test\"\n\n[verifiers.\"b\"]\nrun = \"npm test\"\nexpect = \"1 passed\"\nfiles = [\"src/**\"]\ntimeout = 12\n",
@@ -381,6 +393,27 @@ mod tests {
         let ev3 = run_spec("c", "k", &s3, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
         assert_eq!(ev3.state, uni_evidence::EvidenceState::Invalid);
         assert!(!ev3.fingerprint.is_empty());
+    }
+
+    /// Timeout is enforced natively on every platform: a hanging verifier is
+    /// killed and recorded Invalid, never silently awaited forever.
+    #[cfg(not(windows))]
+    #[test]
+    fn hanging_verifier_is_killed_and_invalid() {
+        let d = tmp("timeout");
+        let (ev, full) = run_shell("c", "sleep 30", &d, 1).unwrap();
+        assert_eq!(ev.state, EvidenceState::Invalid);
+        assert_eq!(ev.exit_code, -1);
+        assert!(full.contains("killed after 1s timeout"), "{full}");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn fast_verifier_passes_with_exit_zero() {
+        let d = tmp("fast");
+        let (ev, _) = run_shell("c", "true", &d, 30).unwrap();
+        assert_eq!(ev.state, EvidenceState::Valid);
+        assert_eq!(ev.exit_code, 0);
     }
 }
 
