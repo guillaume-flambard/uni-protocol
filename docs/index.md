@@ -22,3 +22,8 @@ Everything here describes the shipped binary (`cargo build --release`,
 `./target/release/uni`). When in doubt, run it: what executes beats what a doc
 describes. Constitution: `../constitution.md`. Spec source:
 `../specs/001-uni-software-v01/spec.md`.
+
+## Stale evidence
+
+- [Why a proof stopped applying](decisions.md#why-a-proof-stopped-applying)
+- [Stale Evidence Benchmark, 2026-09-14](../experiments/stale-bench/RESULTS-2026-09-14.md)

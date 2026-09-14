@@ -28,6 +28,54 @@ fn stable_report() -> Result<serde_json::Value> {
     }))
 }
 
+/// GitHub Actions workflow commands. A drifted claim becomes an inline
+/// annotation on the file that moved, so the pull request shows why the proof
+/// stopped applying without anyone opening the log.
+fn github_annotations(v: &serde_json::Value) -> Vec<String> {
+    let mut out = Vec::new();
+    let claims = v["claims"].as_array().cloned().unwrap_or_default();
+    for c in claims.iter().filter(|c| c["state"] != "Valid") {
+        let claim = c["claim_id"].as_str().unwrap_or("claim");
+        let drifted = v["stale"]
+            .get(claim)
+            .and_then(|r| r.as_array())
+            .cloned()
+            .unwrap_or_default();
+        if drifted.is_empty() {
+            out.push(format!(
+                "::error title=claim {claim}::no valid evidence for this revision; run `uni verify {claim}`"
+            ));
+            continue;
+        }
+        for r in drifted {
+            let detail = r["detail"].as_str().unwrap_or("context changed");
+            let dimension = r["dimension"].as_str().unwrap_or("stale");
+            let file = file_from_detail(detail)
+                .map(|f| format!("file={f},"))
+                .unwrap_or_default();
+            out.push(format!(
+                "::{level} {file}title=claim {claim}::{detail} ({dimension}); run `uni verify {claim}`",
+                level = if c["critical"].as_bool().unwrap_or(false) { "error" } else { "warning" }
+            ));
+        }
+    }
+    out
+}
+
+/// The first path named in a `changed: a, b` / `added: a` detail, if any.
+fn file_from_detail(detail: &str) -> Option<String> {
+    for (marker, rest) in [("changed: ", 9), ("added: ", 7), ("removed: ", 9)] {
+        if let Some(i) = detail.find(marker) {
+            let list = &detail[i + rest..];
+            let first = list.split([',', ')']).next().unwrap_or("").trim();
+            if !first.is_empty() {
+                return Some(first.to_string());
+            }
+        }
+    }
+    None
+}
+
 pub(crate) fn cmd_report(as_json: bool) -> Result<()> {
     let r = stable_report()?;
     if as_json {
@@ -62,10 +110,16 @@ pub(crate) fn cmd_report(as_json: bool) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn cmd_explain(arg: Option<String>, as_json: bool) -> Result<()> {
+pub(crate) fn cmd_explain(arg: Option<String>, as_json: bool, annotations: bool) -> Result<()> {
     let path = dot_uni().join("decisions").join("last.json");
     let text = std::fs::read_to_string(&path).context("no decision yet (run uni verify first)")?;
     let v: serde_json::Value = serde_json::from_str(&text)?;
+    if annotations {
+        for line in github_annotations(&v) {
+            println!("{line}");
+        }
+        return Ok(());
+    }
     if as_json {
         println!("{text}");
         return Ok(());

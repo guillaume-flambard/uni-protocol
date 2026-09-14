@@ -28,7 +28,12 @@ enum Cmd {
         #[arg(long, default_value_t = false)]
         attest: bool,
     },
-    Explain { claim_or_intent: Option<String> },
+    Explain {
+        claim_or_intent: Option<String>,
+        /// Emit GitHub Actions annotations for the drifted claims.
+        #[arg(long, default_value_t = false)]
+        annotations: bool,
+    },
     Inspect { file: PathBuf },
     ImportSpeckit { dir: PathBuf },
     Report,
@@ -99,7 +104,9 @@ fn main() -> Result<()> {
         Cmd::Init => cmd::contract::cmd_init(),
         Cmd::Compile { file } => cmd::contract::cmd_compile(&file, cli.json),
         Cmd::Verify { file, actor, attest } => cmd::verify::cmd_verify(&file, cli.json, actor.as_deref(), attest),
-        Cmd::Explain { claim_or_intent } => cmd::report::cmd_explain(claim_or_intent, cli.json),
+        Cmd::Explain { claim_or_intent, annotations } => {
+            cmd::report::cmd_explain(claim_or_intent, cli.json, annotations)
+        }
         Cmd::Inspect { file } => cmd::contract::cmd_inspect(&file, cli.json),
         Cmd::ImportSpeckit { dir } => cmd::speckit::cmd_import_speckit(&dir, cli.json),
         Cmd::Report => cmd::report::cmd_report(cli.json),

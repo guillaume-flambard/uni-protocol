@@ -110,3 +110,21 @@ fn explain_names_a_verifier_config_change() {
     assert!(journal.contains("verifier_config_changed"), "{journal}");
     assert!(journal.contains("trusted verifier registry changed"), "{journal}");
 }
+
+#[test]
+fn annotations_point_at_the_file_that_moved() {
+    let dir = mk_repo("ann");
+    setup(&dir);
+    let _ = run(&["verify", "c.uni"], &dir);
+    std::fs::write(dir.join("src/ledger.rs"), "const A: u32 = 2;\n").unwrap();
+    let _ = run(&["verify", "c.uni"], &dir);
+
+    let out = run(&["explain", "--annotations"], &dir);
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(
+        text.contains("::warning file=src/ledger.rs,title=claim ledger-integrity"),
+        "{text}"
+    );
+    assert!(text.contains("watched subject moved"), "{text}");
+    assert!(text.contains("uni verify ledger-integrity"), "{text}");
+}
