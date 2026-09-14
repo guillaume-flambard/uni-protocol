@@ -28,17 +28,19 @@ Exit codes map 1:1 to review gates:
 
 ## Where the jobs run
 
-`push` runs on the lab's self-hosted runner (`self-hosted,Linux,X64,uni-protocol`,
-installed by the `github-runner` role in `lab-infra`, deployed via
-`make register-uni-runner` and merged as lab-infra PR #68): 8 native cores, no
-per-minute billing, the release binary proven on the same architecture the Linux
-artifacts target. Measured: 84 s warm for the full Linux job (build, unit and
-integration tests, seven examples, `doctor`, report), 136 s cold, and the
-runner's whole footprint is under 800 MB. `pull_request` stays on GitHub-hosted `ubuntu-latest`
-on purpose: the repository is public, and a fork's code must never execute on
-the VPS. macOS and Windows cannot be self-hosted here, so they remain on GitHub
-images. The runner is repo-scoped and labelled, so it cannot be picked up by
-another repository's workflow.
+All jobs run on GitHub-hosted runners. The repository is public, so those are
+free and unlimited, and they are disposable: every `build.rs` and every test from
+every dependency runs in a throwaway VM, never on the lab VPS.
+
+A self-hosted runner on the lab was tried on 2026-09-14 and removed the same day
+(lab-infra PR #68 added it, PR #69 took it out). It worked: 84 s warm for the
+full Linux job against ~2 min hosted, and the runner user was properly confined
+(non-root, not in the `docker` group, no access to the stacks' `.env`). The
+trade was still bad for a public repository: ~40 s per push, paid for by running
+supply-chain code on the machine that hosts production. GitHub's own guidance
+says the same. Self-hosting is the right call for **private** repositories,
+where minutes are billed and images must be built next to a local registry, which
+is exactly where the lab's other runners live.
 
 ## Supported platforms (v0.3)
 

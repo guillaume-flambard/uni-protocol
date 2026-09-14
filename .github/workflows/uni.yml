@@ -1,8 +1,10 @@
 name: uni
 
-# Self-hosted on push, hosted on pull_request. The runner lives on the lab VPS;
-# a pull request from a fork must never execute code there, so PRs (and the
-# macOS/Windows legs, which cannot be self-hosted) stay on GitHub images.
+# All jobs run on GitHub-hosted runners. The repository is public, so those are
+# free and unlimited, and they are disposable: every build script and test from
+# every dependency executes in a throwaway VM rather than on the lab VPS. A
+# self-hosted runner was tried and removed on 2026-09-14: it saved ~40 s per
+# push and put that code on the production host.
 on: [push, pull_request]
 
 concurrency:
@@ -10,11 +12,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The lab runner: 8 native cores, no per-runner minutes, same architecture as
-  # the Linux artifacts the release publishes.
-  linux-push:
-    if: github.event_name == 'push'
-    runs-on: [self-hosted, Linux, X64, uni-protocol]
+  # Core portability: the crates must compile and their unit tests must pass on
+  # every supported platform. The shell verifier is platform-gated (`sh -c` on
+  # POSIX, `cmd /C` on Windows) and timeouts are native.
+  matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -25,125 +31,51 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: linux-push-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: linux-push-cargo-
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ matrix.os }}-cargo-
       - name: Build
         run: cargo build --release
-      - name: Unit tests
+      - name: Unit tests (portable)
         run: cargo test --lib
-      - name: Integration tests
+      # CLI integration tests drive the shell verifier with POSIX commands
+      # (true, false, grep, sleep). They are POSIX-only by construction, and
+      # pretending otherwise would be a lie in the matrix.
+      - name: Integration tests (POSIX only)
+        if: runner.os != 'Windows'
         run: cargo test
-      - name: Verify examples (portable and POSIX)
+      - name: Verify portable examples
+        if: runner.os != 'Windows'
         run: |
           ./target/release/uni verify examples/hello/hello.uni
           ./target/release/uni verify examples/multi/multi.uni
           ./target/release/uni verify examples/booking/booking.uni
-          ./target/release/uni verify examples/forbid/forbid.uni
-          ./target/release/uni verify examples/python/contract.uni
-          ./target/release/uni verify examples/nodejs/contract.uni
-          ./target/release/uni verify examples/artifact/artifact.uni
-      - name: Trust boundary unchanged
-        run: ./target/release/uni doctor
+        shell: bash
       - name: UNI Assurance (PR check view)
+        if: matrix.os == 'ubuntu-latest'
         run: ./target/release/uni report >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
 
-  # Same body on a GitHub image, for pull requests only.
-  linux-pull-request:
-    if: github.event_name == 'pull_request'
+  # Examples that need a POSIX shell or a language runtime: forbid (grep),
+  # python (unittest), node (node --test).
+  examples-posix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: linux-pr-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: linux-pr-cargo-
-      - name: Build
-        run: cargo build --release
-      - name: Unit tests
-        run: cargo test --lib
-      - name: Integration tests
-        run: cargo test
-      - name: Verify examples (portable and POSIX)
+      - run: cargo build --release
+      - name: Verify POSIX-shell examples
         run: |
-          ./target/release/uni verify examples/hello/hello.uni
-          ./target/release/uni verify examples/multi/multi.uni
-          ./target/release/uni verify examples/booking/booking.uni
           ./target/release/uni verify examples/forbid/forbid.uni
           ./target/release/uni verify examples/python/contract.uni
           ./target/release/uni verify examples/nodejs/contract.uni
           ./target/release/uni verify examples/artifact/artifact.uni
-      - name: UNI Assurance (PR check view)
-        run: ./target/release/uni report >> "$GITHUB_STEP_SUMMARY"
-
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: macos-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: macos-cargo-
-      - name: Build
-        run: cargo build --release
-      - name: Unit tests
-        run: cargo test --lib
-      - name: Integration tests
-        run: cargo test
-      - name: Verify portable examples
-        run: |
-          ./target/release/uni verify examples/hello/hello.uni
-          ./target/release/uni verify examples/multi/multi.uni
-          ./target/release/uni verify examples/booking/booking.uni
-
-  # The shell verifier drives POSIX commands (true, false, grep, sleep), so the
-  # integration suite is excluded on Windows by construction, not by pretence.
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: windows-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: windows-cargo-
-      - name: Build
-        run: cargo build --release
-      - name: Unit tests
-        run: cargo test --lib
+      - name: Registry trust boundary unchanged
+        run: ./target/release/uni doctor
 
   # The published action, exercised for real: it downloads the release binary
   # for the runner platform. The artifact example runs no runtime at all
   # (file-hash), so this isolates the download-and-run path.
-  action-smoke-push:
-    if: github.event_name == 'push'
-    runs-on: [self-hosted, Linux, X64, uni-protocol]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Verify with the published action
-        uses: ./adapters/github
-        with:
-          contract: examples/artifact/artifact.uni
-          version: v0.5.2
-
-  action-smoke-pull-request:
-    if: github.event_name == 'pull_request'
+  action-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -151,4 +83,4 @@ jobs:
         uses: ./adapters/github
         with:
           contract: examples/artifact/artifact.uni
-          version: v0.5.2
+          version: v0.5.1
