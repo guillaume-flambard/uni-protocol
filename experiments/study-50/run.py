@@ -91,6 +91,27 @@ def agent_opencode(task, work):
     return code == 0, "DONE"
 
 
+def agent_plausible(task, work):
+    """Scripted plausible-but-wrong delivery, not a model behaviour: a
+    floating-point fee rounded to nearest. It conserves the ledger total and it
+    is idempotent, so every test the worker writes about behaviour is green,
+    and the worker's own `cargo test` passes. The owner's invariant is the only
+    place floor and round part ways. This is the "looks done, is wrong" case
+    the product exists for, and it is a scripted flow for the same reason as
+    `careless`: no model on hand lies convincingly, so the failure mode is
+    staged rather than waited for."""
+    path = os.path.abspath(os.path.join(task, "wrong.patch"))
+    code, out, err = sh(["git", "apply", "--whitespace=nowarn", path], work)
+    if code != 0:
+        print(f"  [plausible] wrong.patch failed: {out}{err}", file=sys.stderr)
+        return False, "FAILED"
+    tcode, _, _ = sh(["cargo", "test"], work)
+    print(f"    plausible: worker's own cargo test exit={tcode} (green; it never saw the owner's invariant)")
+    sh(["git", "add", "-A"], work)
+    sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "plausible-fix"], work)
+    return code == 0, "DONE"
+
+
 def agent_careless(task, work):
     """Scripted failure mode, not a model: the agent fixes the task, runs the
     tests (green), verifies with UNI (ACCEPTED), then edits the code again
@@ -124,8 +145,8 @@ def agent_careless(task, work):
     sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "late-edit"], work)
     return True, "DONE"
 
-AGENTS = {"careless": agent_careless, "fixture": agent_fixture, "codex": agent_codex, "claude": agent_claude,
-          "opencode": agent_opencode}
+AGENTS = {"careless": agent_careless, "plausible": agent_plausible, "fixture": agent_fixture,
+          "codex": agent_codex, "claude": agent_claude, "opencode": agent_opencode}
 
 def fixture_reset(repo, tasks_rel):
     """Restore tracked fixture files, and report untracked drift loudly.

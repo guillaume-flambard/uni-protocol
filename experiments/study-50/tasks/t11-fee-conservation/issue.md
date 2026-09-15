@@ -8,8 +8,7 @@ The fee comes out of what the destination was credited, so the ledger total
 does not move. Settling the same hold twice is refused, and must not charge the
 fee twice.
 
-Fees are charged in whole cents: 250 basis points on 100 cents is 2 cents, not
-2.5.
+Fees are charged in whole cents: 333 basis points on 100 cents is 3 cents.
 
 Add your own tests in `tests/it.rs` and run `cargo test`. Name the test that
 proves the fee is exact `fee_is_exact` so it can be found.
