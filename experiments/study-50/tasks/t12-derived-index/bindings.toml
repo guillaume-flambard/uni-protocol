@@ -1,0 +1,8 @@
+# The harness plays the authorizer: the required test name is stated in
+# issue.md (the handoff), and this file is the human's standing decision to
+# accept exactly that selector. ADR-002: the worker names the test, the
+# authorization is explicit, neither is inferred.
+[bindings."apply-atomic"]
+verifier = "mini.t.sel"
+selector = "apply_atomic_works"
+requirement = "behavior(\"apply_atomic applies a valid batch in full and refuses an impossible one\")"

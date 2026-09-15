@@ -1,0 +1,25 @@
+VERSION 0.1
+DOMAIN software
+INTENT study-t12
+GOAL
+  A batch applies in full or changes nothing, and the derived index keeps up.
+CLAIM apply-atomic REQUIRED
+  ENSURE apply_atomic applies every entry or none, and returns how many
+INVARIANT index-coherent CRITICAL
+  ENSURE the per-owner index agrees with the accounts it is derived from
+INVARIANT invariants-frozen CRITICAL
+  ENSURE tests/invariants.rs is unmodified
+INVARIANT tests-green CRITICAL
+  ENSURE all tests pass
+VERIFY apply-atomic
+  USING mini.t.sel
+  REQUIRE behavior("apply_atomic applies a valid batch in full and refuses an impossible one")
+VERIFY index-coherent
+  USING mini.ledger.index
+VERIFY invariants-frozen
+  USING mini.t12.invariants.frozen
+VERIFY tests-green
+  USING mini.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

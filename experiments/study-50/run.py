@@ -199,6 +199,10 @@ REGISTRY = """[verifiers]
 "mini.t.sel" = {"run" = "cargo test {{selector}} -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.settlement.invariants" = {"run" = "cargo test --test invariants", "expect" = "test result: ok. 3 passed", "files" = ["tests/invariants.rs"]}
 "mini.t11.invariants.frozen" = {"type" = "file-hash", "files" = ["tests/invariants.rs"], "expect_sha256" = "3a5b846f8f598ac7c0924dc772b4cf322a8c83004927be00e579bcfb73b25659"}
+# t12: a derived index that a plausible batch path forgets to update, and an
+# atomicity rule that a per-entry check against starting balances gets wrong.
+"mini.ledger.index" = {"run" = "cargo test --test invariants", "expect" = "test result: ok. 4 passed", "files" = ["tests/invariants.rs"]}
+"mini.t12.invariants.frozen" = {"type" = "file-hash", "files" = ["tests/invariants.rs"], "expect_sha256" = "4a57b1e09da36234dcfbaa9a9ed0395628aa091d8fbd33b87d27631bcdc111ec"}
 """
 
 
