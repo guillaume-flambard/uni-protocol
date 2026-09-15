@@ -29,10 +29,22 @@ UNI = os.environ.get(
 )
 
 
-def sh(args, cwd, capture=True):
-    p = subprocess.run(args, cwd=cwd, text=True,
-                       stdout=subprocess.PIPE if capture else None,
-                       stderr=subprocess.PIPE if capture else None)
+def sh(args, cwd, capture=True, timeout=None):
+    """Run a command. `timeout` bounds it in seconds and is a data point, not a
+    stall: a hung implementer used to block the harness indefinitely, which cost
+    40 minutes before it was noticed."""
+    try:
+        p = subprocess.run(args, cwd=cwd, text=True, timeout=timeout,
+                           stdout=subprocess.PIPE if capture else None,
+                           stderr=subprocess.PIPE if capture else None)
+    except subprocess.TimeoutExpired as exc:
+        out = exc.stdout or ""
+        err = (exc.stderr or "") + f"\n[harness] killed after {timeout}s"
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", "replace")
+        if isinstance(err, bytes):
+            err = err.decode("utf-8", "replace")
+        return -9, out, err
     return p.returncode, (p.stdout or ""), (p.stderr or "")
 
 def agent_fixture(task, work):
@@ -82,14 +94,31 @@ def agent_opencode(task, work):
         "--dir", work,
         "-m", os.environ.get("UNI_AGENT_MODEL", "bai/qwen3.8-flash"),
         prompt,
-    ], work)
+    ], work, timeout=int(os.environ.get("UNI_AGENT_TIMEOUT", "900")))
     tail = (out or "").strip().splitlines()
     print(f"    agent tail: {tail[-1][:80] if tail else '(none)'}")
     if code != 0:
         print(f"  [agent] opencode failed: {err[:300]}", file=sys.stderr)
     sh(["git", "add", "-A"], work)
     sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "agent-fix"], work)
-    return code == 0, "DONE"
+    return code == 0, parse_self_report(out)
+
+
+def parse_self_report(output):
+    """Read the worker's own claim from its output, and never invent one.
+
+    This returned a hardcoded "DONE" for the whole of the opencode arm, which
+    made `agent_self_report` and the `agent_done` baseline meaningless for real
+    models: the harness was asserting the claim, not observing it, and the one
+    FAILED row in the published results had been entered by hand. The prompt
+    asks for exactly DONE or FAILED as the last line, so that is what is read;
+    anything else is UNPARSED, which is a result rather than a guess."""
+    import re
+    for line in reversed((output or "").splitlines()):
+        token = line.strip().strip("`*_ .!:\"'")
+        if re.fullmatch(r"(?i)(done|failed)", token):
+            return token.upper()
+    return "UNPARSED"
 
 
 def agent_plausible(task, work):
