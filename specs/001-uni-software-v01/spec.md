@@ -6,8 +6,9 @@ Single source of truth. Matt `to-tickets` slices this; no second spec.
 - `uni init` creates `.uni/{config.toml,contracts/,evidence/,decisions/,artifacts/}` + `uni/intents/`.
 - Parser `.uni` with precise line diagnostics; closed vocabulary.
 - `uni compile` emits canonical JSON IR. `schemas/uni.schema.json` is the
-  normative definition of that shape; `compile` does not yet validate the output
-  against it (the shape matches, the check is pending).
+  normative definition of that shape, and `crates/uni-ir/tests/schema.rs`
+  asserts both directions between them: every emitted field is declared, and
+  every declared/required field is emitted.
 
 ## Capability B - Evidence (FR-005..013)
 - `uni verify` runs trusted-registry verifiers: shell, generic test runners (npm/pnpm/bun/cargo/pytest), Playwright.

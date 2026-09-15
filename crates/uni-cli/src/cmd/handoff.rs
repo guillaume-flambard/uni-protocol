@@ -15,7 +15,10 @@ pub enum BundleCmd {
     Verify { file: PathBuf },
 }
 
-pub(crate) fn cmd_brief(file: &Path, out: Option<&Path>, as_json: bool) -> Result<()> {
+/// Render the work order for a contract. Shared by `uni brief` (which prints or
+/// writes it) and `uni run --brief` (which writes it and hands its path to the
+/// executor), so the two can never drift.
+pub(crate) fn render_brief(file: &Path, as_json: bool) -> Result<String> {
     let (ir, _) = crate::cmd::contract::load_contract(file)?;
     let du = dot_uni();
     let registry = uni_verify::load_registry(&du);
@@ -31,14 +34,26 @@ pub(crate) fn cmd_brief(file: &Path, out: Option<&Path>, as_json: bool) -> Resul
     } else {
         crate::brief::to_markdown(&ir, &claims, &problems)
     };
+    Ok(body)
+}
+
+/// Write a rendered artifact atomically: a partially written brief is worse
+/// than no brief, because the executor would read it.
+pub(crate) fn write_atomic(path: &Path, body: &str) -> Result<()> {
+    if let Some(p) = path.parent() {
+        std::fs::create_dir_all(p)?;
+    }
+    let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
+    std::fs::write(&tmp, body)?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
+}
+
+pub(crate) fn cmd_brief(file: &Path, out: Option<&Path>, as_json: bool) -> Result<()> {
+    let body = render_brief(file, as_json)?;
     match out {
         Some(path) => {
-            if let Some(p) = path.parent() {
-                std::fs::create_dir_all(p)?;
-            }
-            let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
-            std::fs::write(&tmp, format!("{body}\n"))?;
-            std::fs::rename(&tmp, path)?;
+            write_atomic(path, &format!("{body}\n"))?;
             if !as_json {
                 eprintln!("brief written: {}", path.display());
             }

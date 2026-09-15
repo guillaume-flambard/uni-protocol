@@ -684,6 +684,133 @@ mod decision_matrix {
     }
 }
 
+/// The rows of the truth table that the matrix above reaches but does not name,
+/// and the ones it does not reach at all. One test per row, so a change to the
+/// table fails on the row it changed instead of on "the matrix".
+#[cfg(test)]
+mod decision_rows {
+    use super::*;
+
+    fn ir(required: bool, critical: bool) -> Ir {
+        Ir {
+            uni_version: "0.1".into(),
+            intent: uni_ir::IntentIr {
+                id: "x".into(),
+                domain: "s".into(),
+                goal: "g".into(),
+            },
+            claims: vec![uni_ir::ClaimIr {
+                id: "a".into(),
+                kind: if critical { "invariant" } else { "claim" }.into(),
+                required,
+                critical,
+                ensure: "e".into(),
+            }],
+            verification: vec![],
+            acceptance: uni_ir::AcceptanceIr {
+                require_verified: true,
+            },
+        }
+    }
+
+    fn ev(state: EvidenceState, exit_code: i32) -> Evidence {
+        Evidence {
+            id: "a-e".into(),
+            claim_id: "a".into(),
+            producer: "t".into(),
+            command: "c".into(),
+            exit_code,
+            output_hash: "h".into(),
+            output_excerpt: "".into(),
+            commit_sha: "s".into(),
+            workspace_dirty: false,
+            state,
+            created_at: chrono::Utc::now(),
+            duration_ms: 1,
+            artifact_hash: String::new(),
+            artifact_files: Default::default(),
+            fingerprint: String::new(),
+            expires_at: None,
+            registry_hash: String::new(),
+            policy_hash: String::new(),
+            contract_hash: String::new(),
+            platform: String::new(),
+            binding_hash: String::new(),
+            actor: uni_evidence::Actor::local(),
+            executor: uni_evidence::Actor::local(),
+        }
+    }
+
+    #[test]
+    fn optional_with_no_evidence_is_accepted() {
+        assert_eq!(
+            evaluate(&ir(false, false), &[]).decision,
+            Decision::Accepted
+        );
+    }
+
+    #[test]
+    fn optional_with_disproving_evidence_is_still_accepted() {
+        // OPTIONAL means "does not block acceptance", not "not checked": the
+        // claim is reported Invalid, and the decision is unaffected.
+        let r = evaluate(&ir(false, false), &[ev(EvidenceState::Invalid, 1)]);
+        assert_eq!(r.decision, Decision::Accepted);
+        assert_eq!(r.claims[0].state, EvidenceState::Invalid);
+    }
+
+    #[test]
+    fn a_critical_claim_with_stale_evidence_needs_revalidation_not_rejection() {
+        // Expired is unknown, not disproven. Rejecting would claim more than the
+        // evidence says; asking for a re-run is honest.
+        assert_eq!(
+            evaluate(&ir(true, true), &[ev(EvidenceState::Stale, 0)]).decision,
+            Decision::EvidenceRequired
+        );
+    }
+
+    #[test]
+    fn a_critical_claim_with_no_evidence_at_all_needs_revalidation() {
+        assert_eq!(
+            evaluate(&ir(true, true), &[]).decision,
+            Decision::EvidenceRequired
+        );
+    }
+
+    /// The `expect_not` case, and the reason it is worth its own row: the
+    /// verifier command SUCCEEDS (exit 0) while its observation makes the claim
+    /// false, so the evidence is Invalid with a zero exit code. Reading only the
+    /// exit code would accept it.
+    #[test]
+    fn a_disproved_critical_claim_rejects_even_with_a_zero_exit_code() {
+        assert_eq!(
+            evaluate(&ir(true, true), &[ev(EvidenceState::Invalid, 0)]).decision,
+            Decision::Rejected
+        );
+    }
+
+    #[test]
+    fn a_non_critical_claim_disproved_with_a_zero_exit_code_asks_for_evidence() {
+        assert_eq!(
+            evaluate(&ir(true, false), &[ev(EvidenceState::Invalid, 0)]).decision,
+            Decision::EvidenceRequired
+        );
+    }
+
+    #[test]
+    fn the_valid_proof_wins_whichever_order_it_arrives_in() {
+        let good = ev(EvidenceState::Valid, 0);
+        let bad = ev(EvidenceState::Invalid, 1);
+        assert_eq!(
+            evaluate(&ir(true, false), &[good.clone(), bad.clone()]).decision,
+            Decision::Accepted
+        );
+        assert_eq!(
+            evaluate(&ir(true, false), &[bad, good]).decision,
+            Decision::Accepted
+        );
+    }
+}
+
 #[cfg(test)]
 mod policy_tests {
     use super::*;

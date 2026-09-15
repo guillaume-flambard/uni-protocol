@@ -10,6 +10,8 @@
 # Both are generated output for review, never a source: nothing in the tree
 # should ship one.
 **/.uni/contracts/candidate-*
+# `uni run --brief` writes the work order here for the executor to read.
+**/.uni/brief.md
 **/.uni/events.jsonl
 **/.uni/.registry.hash
 **/.uni/.registry.snapshot.toml

@@ -91,6 +91,10 @@ enum Cmd {
         /// Milliseconds to wait for the command before killing it.
         #[arg(long, default_value_t = 900_000)]
         timeout_ms: u64,
+        /// Write the work order to .uni/brief.md and export UNI_BRIEF to the
+        /// executor, so a command that was never told about it can still read it.
+        #[arg(long)]
+        brief: bool,
     },
     /// Emit the deterministic work order for an implementing agent
     /// (claims + the exact evidence each one requires). Guidance, not authority.
@@ -150,11 +154,13 @@ fn main() -> Result<()> {
             command,
             actor,
             timeout_ms,
+            brief,
         } => cmd::verify::cmd_run(
             &file,
             &command.join(" "),
             actor.as_deref(),
             timeout_ms,
+            brief,
             cli.json,
         ),
     }

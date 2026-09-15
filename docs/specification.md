@@ -61,7 +61,10 @@ authorized `VerifierBinding`, never from the contract or the worker alone.
 
 ## Behavior contract
 
-1. `compile` validates (claim ids unique, VERIFY references known claims).
+1. `compile` validates (claim ids unique, VERIFY references known claims) and
+   refuses a duplicate claim id with both lines named. Its output is checked
+   against `schemas/uni.schema.json` by `crates/uni-ir/tests/schema.rs`, in both
+   directions, so the schema cannot silently stop describing the compiler.
 2. `lint` never executes; errors = claim without VERIFY (plus malformed contract);
    warnings = unknown registry key, duplicate verification, a `{{selector}}`
    template with no authorized selector, a `REQUIRE` with no matching binding,

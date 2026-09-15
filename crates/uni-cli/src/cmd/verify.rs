@@ -12,19 +12,42 @@ pub(crate) fn cmd_run(
     command: &str,
     actor: Option<&str>,
     timeout_ms: u64,
+    brief: bool,
     as_json: bool,
 ) -> Result<()> {
     use std::process::Stdio;
     let ws = std::env::current_dir()?;
     let started = std::time::Instant::now();
 
-    let mut child = std::process::Command::new("sh")
-        .arg("-c")
+    // `--brief` writes the work order and points the executor at it, because
+    // the study showed that a brief nobody is told to read is decoration. It is
+    // opt-in: `uni run` keeps doing exactly what it did before by default, and
+    // the executor still receives the command line untouched.
+    let mut brief_env: Option<(String, std::path::PathBuf)> = None;
+    if brief {
+        let body = crate::cmd::handoff::render_brief(file, false)?;
+        let path = dot_uni().join("brief.md");
+        crate::cmd::handoff::write_atomic(&path, &format!("{body}\n"))?;
+        let abs = ws.join(&path);
+        if !as_json {
+            eprintln!(
+                "[uni] work order written to {}; UNI_BRIEF points the executor at it",
+                abs.display()
+            );
+        }
+        brief_env = Some(("UNI_BRIEF".into(), abs));
+    }
+
+    let mut cmd = std::process::Command::new("sh");
+    cmd.arg("-c")
         .arg(command)
         .current_dir(&ws)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+        .stderr(Stdio::piped());
+    if let Some((key, value)) = &brief_env {
+        cmd.env(key, value);
+    }
+    let mut child = cmd.spawn()?;
     let timeout = std::time::Duration::from_millis(timeout_ms.max(1));
     let (executor_code, executor_output) = match child.wait_timeout(timeout)? {
         Some(_) => {

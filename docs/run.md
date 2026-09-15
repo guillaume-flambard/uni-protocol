@@ -26,3 +26,24 @@ proved.
 Use `uni brief` to produce the work order the executor should follow, and
 `--timeout-ms` to bound a runaway agent (default 900000, i.e. 15 minutes; the
 executor is killed and the verification still runs).
+
+## Handing the work order over (`--brief`)
+
+```bash
+uni run conv.uni --brief -- 'opencode run "read $UNI_BRIEF and implement it"'
+```
+
+The study measured the same defect twice: a contract pins a test name, the
+worker picks a different one, and correct work is rejected. `uni brief` fixes
+the handoff, but only if somebody reads it. The arms were blunt about it: a
+`brief.md` sitting in the workspace was ignored 3 times out of 3, and the same
+brief accepted 3 times out of 3 once the prompt named it.
+
+`--brief` closes that gap without guessing at prompts. It writes the work order
+to `.uni/brief.md` and exports `UNI_BRIEF` with its absolute path to the
+executor. Your command line is passed through unchanged: whether the executor
+reads the file is still your call, and the variable is the whole contract
+between `uni run` and whatever you are running.
+
+It is opt-in, so a plain `uni run` behaves exactly as it did before and writes
+nothing.

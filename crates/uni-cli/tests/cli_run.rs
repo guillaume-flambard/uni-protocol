@@ -139,3 +139,72 @@ fn executor_run_is_journaled() {
     assert!(journal.contains("uni.execution.exit_code"), "{journal}");
     assert!(journal.contains("uni.execution.command"), "{journal}");
 }
+
+/// `uni run --brief` writes the work order into the workspace and exports its
+/// absolute path as UNI_BRIEF, so an executor that was never told about the
+/// brief can still read it. The study's finding is why this exists: a brief that
+/// is merely present is ignored.
+#[test]
+fn brief_flag_hands_the_work_order_to_the_executor() {
+    let dir = mk_repo("brief");
+    setup(&dir);
+
+    // The executor's job: prove it saw a readable work order by dumping it and
+    // its own path to a file we can inspect.
+    let o = run(
+        &[
+            "run",
+            "c.uni",
+            "--brief",
+            "--",
+            "printf '%s\\n' \"$UNI_BRIEF\" > seen.txt && cat \"$UNI_BRIEF\" >> seen.txt && printf 'ready\\n' > marker.txt",
+        ],
+        &dir,
+    );
+    let out = format!(
+        "{}{}",
+        String::from_utf8_lossy(&o.stdout),
+        String::from_utf8_lossy(&o.stderr)
+    );
+    assert_eq!(o.status.code(), Some(0), "{out}");
+
+    let seen = std::fs::read_to_string(dir.join("seen.txt")).unwrap();
+    let mut lines = seen.lines();
+    let path = lines.next().unwrap();
+    assert!(
+        path.ends_with(".uni/brief.md") && path.starts_with('/'),
+        "UNI_BRIEF must be an absolute path to the brief, got: {path}"
+    );
+    let body: String = lines.collect::<Vec<_>>().join("\n");
+    assert!(
+        body.contains("x"),
+        "the brief must describe the claim: {body}"
+    );
+    assert!(
+        body.to_lowercase().contains("ready"),
+        "the brief must name the evidence the claim needs: {body}"
+    );
+
+    // And without the flag, nothing is written and no variable is set.
+    let dir2 = mk_repo("nobrief");
+    setup(&dir2);
+    let o2 = run(
+        &[
+            "run",
+            "c.uni",
+            "--",
+            "printf '%s' \"${UNI_BRIEF:-unset}\" > seen2.txt && printf 'ready\\n' > marker.txt",
+        ],
+        &dir2,
+    );
+    assert_eq!(o2.status.code(), Some(0));
+    assert_eq!(
+        std::fs::read_to_string(dir2.join("seen2.txt")).unwrap(),
+        "unset",
+        "without --brief, the executor must not be given a brief path"
+    );
+    assert!(
+        !dir2.join(".uni/brief.md").exists(),
+        "without --brief, no work order is written"
+    );
+}
