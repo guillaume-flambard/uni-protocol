@@ -73,10 +73,8 @@ impl Settlement {
     }
 
     /// Settle a hold and collect a fee, in basis points of the held amount,
-    /// into `FEES_ACCOUNT`. The fee is taken out of what `to` was credited.
-    ///
-    /// The fee is `floor(amount * fee_bps / 10_000)`, exactly, in integer
-    /// arithmetic: no floating point, no rounding to nearest.
+    /// into `FEES_ACCOUNT`. The fee is taken out of what `to` was credited,
+    /// and is charged in whole cents.
     ///
     /// Returns the fee that was collected.
     pub fn settle_with_fee(

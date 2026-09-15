@@ -242,6 +242,18 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
     # trusted registry for this workspace
     write_registry(work, task_dir)
 
+    # THE OWNER'S INVARIANT IS NOT THE WORKER'S TO READ. When a task ships
+    # `invariants.rs` at its root (instead of inside base/), that file is the
+    # specification the work must satisfy, and it is applied only after the
+    # agent has finished: a worker who can read the invariant is not being
+    # tested against it, it is being handed the answer. This is the whole claim
+    # under test, so the file is never tracked in the agent's git history
+    # either (no `git show HEAD~1` leak): it is written, measured, and removed.
+    owner_invariants = os.path.join(task_dir, "invariants.rs")
+    has_owner_invariants = os.path.exists(owner_invariants)
+    if has_owner_invariants:
+        os.makedirs(os.path.join(work, "tests"), exist_ok=True)
+        shutil.copy(owner_invariants, os.path.join(work, "tests", "invariants.rs"))
 
     # PRE-FLIGHT: the base must NOT already satisfy the contract. A fixture
     # contaminated by a previous run (or a task that needs no work) would make
@@ -261,6 +273,13 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
     # Reset evidence so the agent's result is measured from a clean slate.
     shutil.rmtree(os.path.join(work, ".uni", "evidence"), ignore_errors=True)
     os.makedirs(os.path.join(work, ".uni", "evidence"), exist_ok=True)
+
+    # Take the owner's invariant away again before the agent starts. The agent
+    # may still write its own tests/invariants.rs; the owner's file replaces it
+    # at delivery, which is what "the owner's invariant wins" means in practice.
+    if has_owner_invariants:
+        os.remove(os.path.join(work, "tests", "invariants.rs"))
+        print("    arm: the owner's invariant is hidden from the agent")
 
     # Arm: the agent gets the issue only, no contract, no brief. This is the
     # realistic "handed an issue from a tracker" case, and the only arm that can
@@ -296,6 +315,13 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
     os.makedirs(diffs_dir, exist_ok=True)
     with open(os.path.join(diffs_dir, f"{tid}.patch"), "w") as f:
         f.write(agent_diff)
+
+    # Deliver the owner's invariant now that the agent cannot see it: this is
+    # the revision that gets verified, and the only one that ever contained it.
+    if has_owner_invariants:
+        shutil.copy(owner_invariants, os.path.join(work, "tests", "invariants.rs"))
+        sh(["git", "add", "-A"], work)
+        sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "owner-invariants"], work)
 
     # UNI verify
     shutil.copy(contract, os.path.join(work, "contract.uni"))

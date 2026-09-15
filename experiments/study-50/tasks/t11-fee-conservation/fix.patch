@@ -1,8 +1,8 @@
 diff --git a/src/settlement.rs b/src/settlement.rs
-index 8781231..1eb24ac 100644
+index 880f793..7cdd7b5 100644
 --- a/src/settlement.rs
 +++ b/src/settlement.rs
-@@ -81,10 +81,23 @@ impl Settlement {
+@@ -79,10 +79,23 @@ impl Settlement {
      /// Returns the fee that was collected.
      pub fn settle_with_fee(
          &mut self,
