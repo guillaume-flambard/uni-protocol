@@ -184,6 +184,79 @@ fn claim_and_invariant_need_an_id() {
     assert!(e.contains("INVARIANT needs an id"), "got: {e}");
 }
 
+/// The closed vocabulary extends to modifiers. `CLAIM x BANANA` used to
+/// compile, and `CLAIM x CRITICAL` was accepted and discarded, which turned a
+/// critically-failing verifier into EVIDENCE_REQUIRED instead of REJECTED.
+#[test]
+fn claim_and_invariant_modifiers_are_validated() {
+    let e = parse(&head(
+        "CLAIM x CRITICAL\n  ENSURE ok\nVERIFY x\n  USING k\n",
+    ))
+    .unwrap_err()
+    .to_string();
+    assert!(e.contains("unknown CLAIM modifier 'CRITICAL'"), "got: {e}");
+    assert!(
+        e.contains("INVARIANT"),
+        "the hint must name the right keyword: {e}"
+    );
+    assert!(e.contains("line 6"), "the error must name its line: {e}");
+
+    let e = parse(&head("CLAIM x BANANA\n  ENSURE ok\nVERIFY x\n  USING k\n"))
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("unknown CLAIM modifier 'BANANA'"), "got: {e}");
+
+    let e = parse(&head(
+        "INVARIANT x REQUIRED\n  ENSURE ok\nVERIFY x\n  USING k\n",
+    ))
+    .unwrap_err()
+    .to_string();
+    assert!(
+        e.contains("unknown INVARIANT modifier 'REQUIRED'"),
+        "got: {e}"
+    );
+
+    // The legal spellings, including the bare form, still parse.
+    for body in [
+        "CLAIM x REQUIRED\n  ENSURE ok\nVERIFY x\n  USING k\n",
+        "CLAIM x OPTIONAL\n  ENSURE ok\nVERIFY x\n  USING k\n",
+        "CLAIM x\n  ENSURE ok\nVERIFY x\n  USING k\n",
+    ] {
+        assert!(parse(&head(body)).is_ok(), "should parse: {body}");
+    }
+    let c = parse(&head(
+        "INVARIANT x CRITICAL\n  ENSURE ok\nVERIFY x\n  USING k\n",
+    ))
+    .unwrap();
+    assert!(c.claims[0].critical, "CRITICAL on an INVARIANT must stick");
+}
+
+/// A FORBID claim's id is numbered on FORBID alone. Numbering it from
+/// `claims.len()` moved the id when an unrelated CLAIM was inserted above it,
+/// which silently invalidated that claim's binding and evidence.
+#[test]
+fn forbid_ids_do_not_move_when_other_claims_are_inserted() {
+    let first = parse(&head(
+        "FORBID\n  direct_write(\"ledger\")\nVERIFY forbid-1\n  USING k\n",
+    ))
+    .unwrap();
+    assert_eq!(first.claims[0].id, "forbid-1");
+
+    let after_a_claim = parse(&head(
+        "CLAIM a REQUIRED\n  ENSURE a\nFORBID\n  direct_write(\"ledger\")\nVERIFY a\n  USING k\nVERIFY forbid-1\n  USING k\n",
+    ))
+    .unwrap();
+    assert_eq!(
+        after_a_claim
+            .claims
+            .iter()
+            .map(|c| c.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["a", "forbid-1"],
+        "inserting a claim must not renumber the forbid claim"
+    );
+}
+
 /// The other three ways an ACCEPT WHEN can be something v0.1 cannot honour:
 /// a repeated clause, no required clause at all, and an empty condition.
 #[test]

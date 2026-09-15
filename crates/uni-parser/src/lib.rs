@@ -72,6 +72,41 @@ fn starts_with_directive(line: &str) -> bool {
     })
 }
 
+/// The closed vocabulary extends to a directive's modifiers: a token in that
+/// position is grammar, not free text. `CLAIM x BANANA` used to compile, and
+/// `CLAIM x CRITICAL` used to be accepted and thrown away, which silently
+/// downgraded a claim its author had called critical: a failing verifier then
+/// returned EVIDENCE_REQUIRED where the author expected REJECTED.
+fn validate_modifiers(
+    directive: &str,
+    id: &str,
+    modifiers: &[&str],
+    allowed: &[&str],
+    line_no: usize,
+) -> Result<()> {
+    for m in modifiers {
+        if allowed.contains(m) {
+            continue;
+        }
+        // The most likely mistake is the other directive's modifier, so it is
+        // named rather than left as "unknown token".
+        let hint = match (*m, directive) {
+            ("CRITICAL", "CLAIM") => {
+                " (CRITICAL belongs to INVARIANT: a claim becomes critical by being declared an INVARIANT)"
+            }
+            ("REQUIRED", "INVARIANT") | ("OPTIONAL", "INVARIANT") => {
+                " (an INVARIANT is always required)"
+            }
+            _ => "",
+        };
+        return Err(anyhow!(
+            "line {line_no}: unknown {directive} modifier '{m}' for claim '{id}'{hint}; accepts {}",
+            allowed.join(" | ")
+        ));
+    }
+    Ok(())
+}
+
 /// Clauses the v0.1 grammar accepts inside ACCEPT WHEN. Anything else is a
 /// hard error: the spec must never promise inert semantics.
 fn validate_accept_condition(text: &str, line_no: usize) -> Result<()> {
@@ -164,6 +199,11 @@ pub fn parse(source: &str) -> Result<Contract> {
 
     let mut pending_verify: Option<(String, usize)> = None;
     let mut pending_forbid: Option<usize> = None;
+    // Counted on FORBID alone, not on every claim: numbering from
+    // `claims.len()` made a forbid claim's id move when an unrelated CLAIM
+    // was inserted above it, which silently invalidates its bindings and
+    // evidence.
+    let mut forbid_count: usize = 0;
     // Line of the last completed VERIFY/USING block; a REQUIRE line may only
     // attach to it across blank/comment lines (v0.2 VerifierBinding).
     let mut last_using_line: Option<usize> = None;
@@ -238,9 +278,14 @@ pub fn parse(source: &str) -> Result<Contract> {
                 return Err(anyhow!("line {line_no}: CLAIM needs an id"));
             }
             let id = parts[0].to_string();
+            validate_modifiers(
+                "CLAIM",
+                &id,
+                &parts[1..],
+                &["REQUIRED", "OPTIONAL"],
+                line_no,
+            )?;
             let required = !parts.contains(&"OPTIONAL");
-            // next line(s) ENSURE ... — handled in second pass? read inline: ENSURE may be same line after?
-            let _ = required;
             claims.push(Claim {
                 id,
                 kind: ClaimKind::Claim,
@@ -257,6 +302,7 @@ pub fn parse(source: &str) -> Result<Contract> {
                 return Err(anyhow!("line {line_no}: INVARIANT needs an id"));
             }
             let id = parts[0].to_string();
+            validate_modifiers("INVARIANT", &id, &parts[1..], &["CRITICAL"], line_no)?;
             let critical = parts.contains(&"CRITICAL");
             claims.push(Claim {
                 id,
@@ -282,8 +328,9 @@ pub fn parse(source: &str) -> Result<Contract> {
         }
         if line.starts_with("FORBID") && line.trim() != "FORBID" {
             let expr = line.strip_prefix("FORBID").unwrap().trim().to_string();
+            forbid_count += 1;
             claims.push(Claim {
-                id: format!("forbid-{}", claims.len() + 1),
+                id: format!("forbid-{forbid_count}"),
                 kind: ClaimKind::Invariant,
                 required: true,
                 critical: true,
@@ -298,8 +345,9 @@ pub fn parse(source: &str) -> Result<Contract> {
         }
         if pending_forbid.is_some() {
             let vline = pending_forbid.take().unwrap();
+            forbid_count += 1;
             claims.push(Claim {
-                id: format!("forbid-{}", claims.len() + 1),
+                id: format!("forbid-{forbid_count}"),
                 kind: ClaimKind::Invariant,
                 required: true,
                 critical: true,

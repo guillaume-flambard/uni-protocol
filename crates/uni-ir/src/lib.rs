@@ -44,6 +44,21 @@ pub struct AcceptanceIr {
 }
 
 pub fn compile(c: &Contract) -> Result<Ir> {
+    // Claim ids must be unique. Without this, two blocks sharing an id compile,
+    // pass `lint`, and are satisfied by a single VERIFY: the second obligation
+    // is silently covered by the first one's evidence, which is a false accept
+    // (the one outcome the project exists to prevent). `docs/specification.md`
+    // already promised this check; now it happens.
+    for (i, claim) in c.claims.iter().enumerate() {
+        if let Some(first) = c.claims[..i].iter().find(|k| k.id == claim.id) {
+            return Err(anyhow::anyhow!(
+                "line {}: duplicate claim id '{}' (already declared on line {})",
+                claim.line,
+                claim.id,
+                first.line
+            ));
+        }
+    }
     Ok(Ir {
         uni_version: c.version.clone(),
         intent: IntentIr {
@@ -108,6 +123,36 @@ mod tests {
         assert!(ir.claims[1].critical);
         assert_eq!(ir.verification.len(), 2);
         assert!(ir.acceptance.require_verified);
+    }
+
+    /// The false-accept regression. Two claims sharing an id, one VERIFY: the
+    /// second obligation used to be silently satisfied by the first one's
+    /// evidence, and the decision said Accepted.
+    #[test]
+    fn duplicate_claim_ids_are_refused_with_both_lines() {
+        let c = uni_parser::parse(
+            "VERSION 0.1\nDOMAIN software\nINTENT dup\nGOAL\n  n\nCLAIM a REQUIRED\n  ENSURE one\nCLAIM a REQUIRED\n  ENSURE two\nVERIFY a\n  USING k\nACCEPT WHEN\n  required_claims == VERIFIED\n",
+        )
+        .unwrap();
+        let err = compile(&c).unwrap_err().to_string();
+        assert!(err.contains("duplicate claim id 'a'"), "got: {err}");
+        assert!(err.contains("line 8"), "must name the duplicate: {err}");
+        assert!(err.contains("line 6"), "must name the original: {err}");
+    }
+
+    #[test]
+    fn an_invariant_and_a_claim_may_not_share_an_id() {
+        let c = uni_parser::parse(
+            "VERSION 0.1\nDOMAIN software\nINTENT dup\nGOAL\n  n\nCLAIM a REQUIRED\n  ENSURE one\nINVARIANT a CRITICAL\n  ENSURE two\nVERIFY a\n  USING k\nACCEPT WHEN\n  required_claims == VERIFIED\n",
+        )
+        .unwrap();
+        assert!(compile(&c).is_err(), "the id is what must be unique");
+    }
+
+    #[test]
+    fn distinct_ids_still_compile() {
+        let ir = compile(&sample()).unwrap();
+        assert_eq!(ir.claims.len(), 2);
     }
 
     #[test]
