@@ -10,6 +10,15 @@ smell, `uni lint` warns), the live A3 workflow against GitHub's real OIDC
 issuer, the Google example, the second-model study arm on a free implementer,
 and t11 with the hidden-owner-invariant harness.
 
+## Done — release v0.9.2 (2026-09-15)
+
+Tagged, pushed, published by the release workflow with five assets
+(`uni-{x86_64,aarch64}-{linux,apple-darwin}, windows`). The published action's
+default and the live A3 workflow both move to `v0.9.2`. Re-verified after the
+release: `identity-live.yml` run `34941549189` reached `assurance A3` against
+GitHub's real OIDC issuer using the **released** binary, and refused the same
+token when the issuer is undeclared. `uni 0.9.2` built and green locally.
+
 ## Done — the owner's invariant is not the worker's to read (t11)
 
 Every earlier task shipped its invariant inside `base/`, so the worker could
