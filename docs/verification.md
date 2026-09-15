@@ -114,7 +114,11 @@ hop implicit makes correct work fail verification.
 ## Selector templates (v0.5): the worker names the test, the human authorizes it
 
 The study measured the dominant defect: a contract pins a test name, the worker
-picks a different one, and correct work is rejected. A registry command may
+picks a different one, and correct work is rejected (all 6 false rejections
+across 25 reviewed runs: 3/15 then 3/10 on a second model). Per ADR-002 a
+literal test name in `run` is a contract smell: `uni
+lint` warns (`pinned-test-selector`), the blessed default is the template
+below, and `uni brief` is the default handoff. A registry command may
 therefore defer the selector:
 
 ```toml

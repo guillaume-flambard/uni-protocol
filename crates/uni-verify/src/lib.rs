@@ -308,6 +308,43 @@ pub fn is_selector_template(spec: &VerifierSpec) -> bool {
     spec.kind == "shell" && spec.run.contains(SELECTOR_TOKEN)
 }
 
+/// A verifier with a test name baked into the command (ADR-002). The study
+/// measured this as the cause of every false rejection (3/3): the contract
+/// demands a name the worker was never told, correct work is refused. The
+/// blessed pattern is a `{{selector}}` template (worker names the test, human
+/// authorizes it with `uni bind --selector`) plus `uni brief` as the handoff.
+pub fn pinned_test_selector(spec: &VerifierSpec) -> bool {
+    if spec.kind != "shell" || is_selector_template(spec) {
+        return false;
+    }
+    let run = spec.run.as_str();
+    // `cargo test <name> -- --exact`: single-test selection with a literal.
+    // Bare `cargo test`, target flags (`--test …`), and option-first
+    // invocations select suites, not names, and are not pinned. Tokens are
+    // matched whole, so `mycargo test` is not cargo.
+    let toks: Vec<&str> = run.split_whitespace().collect();
+    for w in toks.windows(3) {
+        if w[0] == "cargo" && w[1] == "test" && !w[2].starts_with('-') && !w[2].contains("{{") {
+            return true;
+        }
+    }
+    // `node --test --test-name-pattern "literal"` (without a template hole).
+    if run.contains("--test-name-pattern") && !run.contains("{{") {
+        return true;
+    }
+    // `python -m unittest dotted.path` (but not `unittest discover …`).
+    if run.contains("unittest") && !run.contains("discover") && !run.contains("{{") {
+        let mut prev = "";
+        for tok in run.split_whitespace() {
+            if prev == "unittest" && !tok.starts_with('-') {
+                return true;
+            }
+            prev = tok;
+        }
+    }
+    false
+}
+
 /// Substitute the authorized selector into a template verifier. Returns an
 /// error when the template has no selector to substitute: guessing one would
 /// put resolution back in the trust path.
@@ -918,6 +955,30 @@ mod selector_tests {
         let resolved = with_selector(&t, Some("cancel_ok")).unwrap();
         assert_eq!(resolved.run, "cargo test cancel_ok -- --exact");
         assert!(!is_selector_template(&resolved));
+    }
+
+    #[test]
+    fn pinned_names_detected_suites_not() {
+        // The study's false-rejection class: a literal test name in the run.
+        assert!(pinned_test_selector(&VerifierSpec::shell(
+            "cargo test add_works -- --exact"
+        )));
+        assert!(pinned_test_selector(&VerifierSpec::shell(
+            "node --test --test-name-pattern \"spaces become dashes\" x.test.mjs"
+        )));
+        assert!(pinned_test_selector(&VerifierSpec::shell(
+            "python3 -m unittest test_pricing.Pricing.test_floor"
+        )));
+        // Suites, targets, templates, and non-shell verifiers are not pinned.
+        assert!(!pinned_test_selector(&VerifierSpec::shell("cargo test")));
+        assert!(!pinned_test_selector(&VerifierSpec::shell(
+            "cargo test --test invariants"
+        )));
+        assert!(!pinned_test_selector(&VerifierSpec::shell(
+            "python3 -m unittest discover -p 'test_*.py'"
+        )));
+        assert!(!pinned_test_selector(&tpl()));
+        assert!(!pinned_test_selector(&VerifierSpec::shell("true")));
     }
 
     #[test]

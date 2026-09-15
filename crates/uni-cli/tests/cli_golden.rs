@@ -220,6 +220,39 @@ VERIFY x
     assert_eq!(o2.status.code(), Some(0), "{o2:?}");
 }
 
+/// ADR-002: lint names a pinned test name as a contract smell (warning only,
+/// the decision is untouched), and stays silent on suites and templates.
+#[test]
+fn golden_lint_pinned_test_selector() {
+    let dir = std::env::temp_dir().join(format!("uni-lint-pin-{}",
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
+    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"pinned\" = \"cargo test add_works -- --exact\"\n\"suite\" = \"cargo test\"\n\"tpl\" = \"cargo test {{selector}} -- --exact\"\n").unwrap();
+    std::fs::write(dir.join("c.uni"), "VERSION 0.1
+DOMAIN software
+INTENT lint-pin
+GOAL
+  n
+CLAIM a REQUIRED
+  ENSURE n
+VERIFY a
+  USING pinned
+CLAIM b REQUIRED
+  ENSURE n
+VERIFY b
+  USING suite
+CLAIM c REQUIRED
+  ENSURE n
+VERIFY c
+  USING tpl
+").unwrap();
+    let o = Command::new(bin()).args(["lint", "c.uni"]).current_dir(&dir).output().unwrap();
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    let stdout = String::from_utf8_lossy(&o.stdout);
+    assert!(stdout.contains("pinned-test-selector") && stdout.contains("claim 'a'"), "{stdout}");
+    assert_eq!(stdout.matches("pinned-test-selector").count(), 1, "{stdout}");
+}
+
 /// v0.12: OPA adapter — when a rego bundle + a shim `opa` binary exist,
 /// (the shim is a shell script, so this test is unix-only)
 /// the provider resolves from the bundle; absent opa falls back to TOML.

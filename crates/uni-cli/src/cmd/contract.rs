@@ -77,6 +77,20 @@ pub(crate) fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
         .filter(|f| f.kind == "selector-template")
         .map(|f| f.claim_id.clone())
         .collect();
+    // ADR-002: a test name baked into the registry command is a contract
+    // smell (the study's whole false-rejection class). Warning only: the
+    // decision engine is untouched, but new contracts get nudged toward a
+    // {{selector}} template plus `uni brief` as the handoff.
+    for v in &ir.verification {
+        let Some(spec) = registry.get(&v.verifier_ref) else { continue };
+        if !uni_verify::pinned_test_selector(spec) {
+            continue;
+        }
+        push!(1, "pinned-test-selector", &v.claim_id, format!(
+            "claim '{}' pins a test name in verifier '{}'; prefer a {{{{selector}}}} template with 'uni bind --selector <test-name>' and hand the worker 'uni brief' (ADR-002)",
+            v.claim_id, v.verifier_ref
+        ));
+    }
     for v in ir.verification.iter().filter(|v| v.requirement.is_some()) {
         if selector_flagged.contains(&v.claim_id) {
             continue; // the specific selector message already says what to do
