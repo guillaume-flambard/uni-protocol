@@ -1,11 +1,14 @@
 # UNI — tickets
 
-Current: **v0.9.1 + 2026-09-15 work (committed, pushed, unreleased)** · 134
-tests, 0 warnings · public repo `github.com/guillaume-flambard/uni-protocol` ·
-CI green on ubuntu/macOS/Windows + POSIX examples + a smoke job that runs the
-published action · release `v0.9.1` with five binaries. Since `v0.9.1`:
-ADR-002 + lint warning, the live A3 workflow, the Google example, the
-second-model study arm. Those want a `v0.9.2` tag.
+Current: **v0.9.2** · 134 tests, 0 warnings · public repo
+`github.com/guillaume-flambard/uni-protocol` · CI green on ubuntu/macOS/Windows +
+POSIX examples + a smoke job that runs the published action · release `v0.9.2`
+with five binaries, action default bumped to it.
+
+What `v0.9.2` adds over `v0.9.1`: ADR-002 (pinned test names are a contract
+smell, `uni lint` warns), the live A3 workflow against GitHub's real OIDC
+issuer, the Google example, the second-model study arm on a free implementer,
+and t11 with the hidden-owner-invariant harness.
 
 ## Done — the owner's invariant is not the worker's to read (t11)
 
@@ -149,16 +152,12 @@ Ordered by value. Nothing here is started unless marked.
 3. **Migrate to selector templates** — study and dogfood registries still pin
    literal test names, so they now lint with `pinned-test-selector` warnings.
    Mechanical, do it as each file is touched.
-4. **Release `v0.9.2`** — ADR-002 + lint warning, live A3 workflow, Google
-   example, second-model results. Tag + five assets; bump the published
-   action's default from `v0.9.1` if the binary changed behaviour (it did:
-   lint warns).
-5. **A3 workforce example, live** — the Google example still needs a
+4. **A3 workforce example, live** — the Google example still needs a
    human-minted token (`gcloud` is not installed). Low value now that GitHub
    OIDC proves the path live.
-6. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
+5. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
    Deliberately after the single-user story is convincing.
-7. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
+6. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
    present. Low value until the project has a broader audience.
 
 ## Done
