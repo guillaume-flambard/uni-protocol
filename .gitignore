@@ -1,12 +1,16 @@
 /target
-.uni/evidence/
-.uni/decisions/
-.uni/artifacts/
-.uni/contracts/candidate-*.uni
-.uni/events.jsonl
-.uni/.registry.hash
-.uni/.registry.snapshot.toml
-.uni/.lock
+
+# Runtime state of a workspace. `**/` because an example may carry its own
+# `.uni/` beside its registry (examples/identity-github-actions), and a
+# root-anchored pattern would leave that state tracked.
+**/.uni/evidence/
+**/.uni/decisions/
+**/.uni/artifacts/
+**/.uni/contracts/candidate-*.uni
+**/.uni/events.jsonl
+**/.uni/.registry.hash
+**/.uni/.registry.snapshot.toml
+**/.uni/.lock
 
 experiments/study-50/tasks/**/Cargo.lock
 experiments/study-50/tasks/**/target/

@@ -1,8 +1,0 @@
-[verifiers]
-"pass" = "true"
-
-[identities."https://token.actions.githubusercontent.com"]
-source = "oidc"
-jwks_file = "github.jwks.json"
-audiences = ["uni-cli"]
-algorithms = ["RS256"]

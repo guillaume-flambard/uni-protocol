@@ -1,3 +1,0 @@
-{"attributes":{"uni.contract.version":"0.1","uni.intent.id":"identity-github-actions"},"event":"IntentVerified","timestamp":"2026-09-15T06:57:38.346157+00:00"}
-{"attributes":{"uni.claim.id":"x","uni.intent.id":"identity-github-actions","uni.verifier.id":"pass"},"event":"EvidenceRun","timestamp":"2026-09-15T06:57:38.346157+00:00"}
-{"attributes":{"uni.actor.identity_assurance":"SELF-DECLARED","uni.actor.independent":"false","uni.assurance.level":"A2","uni.decision.state":"Accepted","uni.intent.id":"identity-github-actions"},"event":"DecisionIssued","timestamp":"2026-09-15T06:57:38.346157+00:00"}
