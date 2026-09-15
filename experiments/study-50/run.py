@@ -62,9 +62,17 @@ def agent_claude(task, work):
 
 def agent_opencode(task, work):
     issue = open(os.path.join(task, "issue.md")).read()
+    brief_note = ""
+    if os.environ.get("UNI_BRIEF") == "1":
+        # 2026-09-15: brief.md was generated but never referenced, and the
+        # model ignored it (3/3 naming rejects repeated). The handoff must
+        # name the work order, or it is decoration.
+        brief_note = (" A file brief.md in this repository is your work order: it names "
+                      "the exact evidence each claim needs, including test names. "
+                      "Read it first and follow it exactly.\n\n")
     prompt = ("Read issue.md in this repository and implement the requested change.\n\n"
-              + issue
-              + "\n\nOnly modify source and test files. Run the full test suite before finishing. "
+              + issue + "\n" + brief_note
+              + "\nOnly modify source and test files. Run the full test suite before finishing. "
                 "Reply with exactly DONE or FAILED at the end.")
     code, out, err = sh([
         "opencode", "run", "--pure", "--auto",
@@ -250,7 +258,12 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
             raise RuntimeError(f"{tid}: could not generate brief.md: {err[:200]}")
 
     # agent implements; the self-report is data, not truth
-    ok, self_report = AGENTS[agent_name](task_dir, work)
+    if brief_mode:
+        os.environ["UNI_BRIEF"] = "1"
+    try:
+        ok, self_report = AGENTS[agent_name](task_dir, work)
+    finally:
+        os.environ.pop("UNI_BRIEF", None)
     if hide_contract:
         write_registry(work)
 

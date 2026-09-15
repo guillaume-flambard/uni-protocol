@@ -1,44 +1,54 @@
+diff --git a/src/repo.rs b/src/repo.rs
+index e750b83..b77f99c 100644
+--- a/src/repo.rs
++++ b/src/repo.rs
+@@ -8,3 +8,13 @@ pub fn get(store: &Store, id: u32) -> Option<&crate::domain::Booking> {
+ pub fn get_mut(store: &mut Store, id: u32) -> Option<&mut crate::domain::Booking> {
+     store.rows.iter_mut().find(|b| b.id == id)
+ }
++
++pub fn cancel(store: &mut Store, id: u32) -> Result<(), String> {
++    match get_mut(store, id) {
++        Some(booking) => {
++            booking.cancelled = true;
++            Ok(())
++        }
++        None => Err("Booking not found".to_string()),
++    }
++}
 diff --git a/src/service.rs b/src/service.rs
-index 01f8590..29eb76a 100644
+index 01f8590..e03fba6 100644
 --- a/src/service.rs
 +++ b/src/service.rs
-@@ -1,15 +1,16 @@
+@@ -1,15 +1,15 @@
 -use crate::store::Store;
-+use crate::repo::{self, Store};
++use crate::repo::{Store, get_mut};
  
  /// Cancel a booking by id.
  ///
 -/// BUG 1 (behaviour): returns Ok even when the booking does not exist.
 -/// BUG 2 (architecture): reaches into the storage module directly instead of
 -/// going through `crate::repo`, which is the only layer allowed to touch it.
-+/// Returns `Ok(())` and marks the booking cancelled when `id` exists, or
-+/// `Err(...)` when the booking is unknown. Storage is reached only through
-+/// `crate::repo`, the single layer allowed to touch the store internals.
++/// Returns `Ok(())` when the booking exists and sets `cancelled = true`.
++/// Returns `Err("Booking not found")` when the booking does not exist.
  pub fn cancel(store: &mut Store, id: u32) -> Result<(), String> {
 -    for row in store.rows.iter_mut() {
 -        if row.id == id {
 -            row.cancelled = true;
-+    match repo::get_mut(store, id) {
++    match get_mut(store, id) {
 +        Some(booking) => {
 +            booking.cancelled = true;
 +            Ok(())
          }
-+        None => Err(format!("booking {id} not found")),
++        None => Err("Booking not found".to_string()),
      }
 -    Ok(())
  }
 diff --git a/tests/it.rs b/tests/it.rs
-index 08ded73..8f8fe33 100644
+index 08ded73..07da9b8 100644
 --- a/tests/it.rs
 +++ b/tests/it.rs
-@@ -1,6 +1,5 @@
- use mini_app::domain::Booking;
- use mini_app::store::Store;
--
- fn store_with(seats: u32, cancelled: bool) -> Store {
-     Store {
-         rows: vec![Booking {
-@@ -16,3 +15,22 @@ fn store_holds_rows() {
+@@ -16,3 +16,19 @@ fn store_holds_rows() {
      let store = store_with(2, false);
      assert_eq!(store.rows.len(), 1);
  }
@@ -46,18 +56,15 @@ index 08ded73..8f8fe33 100644
 +#[test]
 +fn cancel_ok() {
 +    let mut store = store_with(2, false);
-+    let result = mini_app::cancel(&mut store, 1);
-+    assert!(result.is_ok(), "cancelling an existing booking must return Ok");
-+    assert!(store.rows[0].cancelled, "cancelling must set cancelled = true");
++    assert!(!store.rows[0].cancelled);
++    let result = mini_app::service::cancel(&mut store, 1);
++    assert!(result.is_ok());
++    assert!(store.rows[0].cancelled);
 +}
 +
 +#[test]
 +fn cancel_missing() {
 +    let mut store = store_with(2, false);
-+    let result = mini_app::cancel(&mut store, 999);
-+    assert!(result.is_err(), "cancelling an unknown id must return Err");
-+    assert!(
-+        !store.rows[0].cancelled,
-+        "an unknown id must not mutate the existing booking"
-+    );
++    let result = mini_app::service::cancel(&mut store, 999);
++    assert!(result.is_err());
 +}

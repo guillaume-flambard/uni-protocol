@@ -1,11 +1,39 @@
 diff --git a/src/api.rs b/src/api.rs
-index cbb7e38..cc75916 100644
+index 770113e..16aa2a7 100644
 --- a/src/api.rs
 +++ b/src/api.rs
-@@ -7,5 +7,5 @@ pub fn format_price(cents: u64) -> String {
- 
- /// Format a price given in cents with a currency symbol, e.g. "$1.50".
- pub fn format_price_with(cents: u64, symbol: &str) -> String {
--    format!("{symbol}{}.{:02}", cents / 100, cents % 100)
-+    format!("{symbol}{}", cents / 100)
+@@ -4,3 +4,12 @@
+ pub fn format_price(cents: u64) -> String {
+     cents.to_string()
  }
++
++/// Format a price given in cents with a currency symbol and decimals.
++///
++/// The price is formatted with the given symbol, converted from cents to dollars
++/// with 2 decimal places.
++pub fn format_price_with_symbol(cents: u64, symbol: &str) -> String {
++    let dollars = cents as f64 / 100.0;
++    format!("{}{:.2}", symbol, dollars)
++}
+diff --git a/src/lib.rs b/src/lib.rs
+index c51b178..34ea683 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub mod api;
+ 
+ pub use api::format_price;
++pub use api::format_price_with_symbol;
+diff --git a/tests/it.rs b/tests/it.rs
+index 3629ebe..1d91ac2 100644
+--- a/tests/it.rs
++++ b/tests/it.rs
+@@ -2,3 +2,8 @@
+ fn formats() {
+     assert_eq!(mini_app::format_price(150), "150");
+ }
++
++#[test]
++fn format_symbol() {
++    assert_eq!(mini_app::format_price_with_symbol(150, "$"), "$1.50");
++}

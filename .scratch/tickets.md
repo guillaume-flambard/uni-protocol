@@ -1,9 +1,36 @@
 # UNI — tickets
 
-Current: **v0.9.1** · 130 tests, 0 warnings · public repo
+Current: **v0.9.1 + solo session 2026-09-15** · 134 tests, 0 warnings · public repo
 `github.com/guillaume-flambard/uni-protocol` · CI green on ubuntu/macOS/Windows +
 POSIX examples + a smoke job that runs the published action · release `v0.9.1`
-with five binaries.
+with five binaries · workspace changes below are **uncommitted** (review, then
+commit).
+
+## Done — solo session 2026-09-15 (uncommitted)
+
+- **Base re-verified.** `cargo test` 134/134 green with
+  `DEVELOPER_DIR=/Library/Developer/CommandLineTools` (plain `git`/`cargo`
+  fail: Xcode license not accepted, `sudo xcodebuild -license` still pending).
+  Release binary rebuilt (`uni 0.9.1`); `verify` + `explain` on
+  `examples/hello` green.
+- **Second-model arm re-checked, still blocked.** `opencode run` with
+  `opencode/gemini-3-flash` returns `CreditsError Insufficient balance`.
+  No credit spent; harness unchanged, one working model away.
+- **A3 against a real issuer, advanced.** `examples/identity-google/` pins a
+  real JWKS snapshot (`googleapis.com/oauth2/v3/certs`, 2 RS256 keys,
+  2026-09-15) with a live-token procedure (`gcloud auth
+  print-identity-token` + registry entry + expected A3). Two new tests in
+  `cli_identity.rs`: the snapshot parses into usable keys, and a token from
+  UNI's throwaway test key is refused against the Google entry. Positive
+  verification still needs one human-minted token.
+- **Test-name tension DECIDED (ADR-002).** Pinned test names are a contract
+  smell; `{{selector}}` templates + `uni bind --selector` + `uni brief` as
+  default handoff are the blessed pattern. Enforced as a `uni lint` warning
+  (`pinned-test-selector`, cargo/node/unittest shapes, warning-only so the
+  decision engine is untouched): `pinned_test_selector()` + unit test in
+  `uni-verify`, lint wiring in `cmd/contract.rs`, golden test in
+  `cli_golden.rs`. Explicitly NOT done: auto-emitting `brief.md` in `uni run`
+  (behaviour change, needs review).
 
 ## Done — CI hosting decision (2026-09-14)
 
@@ -73,19 +100,25 @@ A proof's actor identity is verified, not merely named.
 
 Ordered by value. Nothing here is started unless marked.
 
-1. **Second-model study arm** — BLOCKED externally. Every `bai/*` model is
-   refused (credit/deposit), and the `opencode/*` "free" models are headless
-   no-ops (they print the session header and exit). The harness is ready:
-   `UNI_AGENT_MODEL=<model> python3 run.py --agent opencode --only <task>`.
-   Needs: one working implementer, then the same 15-task protocol.
-2. **A3 against a real issuer** — the mechanism ships and is tested against a
-   locally generated keypair pinned as JWKS. Nothing has been verified against a
-   live Google, Entra or SPIFFE issuer. Needs: one real token, one worked example
-   under `examples/`, and the report row upgraded from "demontre en test".
-3. **Contracts still pin test names** — the measured cause of the study's 23%
-   false-rejection rate. `uni brief` fixes the handoff and `uni bind --selector`
-   makes the authorization readable, but a contract that demands a name still
-   demands a name. Unresolved by design so far; needs a decision, not a patch.
+1. **Second-model study arm** — UNBLOCKED 2026-09-15 via OpenRouter free tier
+   (`openrouter/cohere/north-mini-code:free`, $0, real headless tool use).
+   n=10 no-brief runs: FAR 0%, FRR 30%, all 3 false rejects are test-name
+   coupling (second confirmation of ADR-002). Brief arm on t03/t07/t08:
+   silent `brief.md` ignored 3/3, brief **named in the prompt** accepted 3/3
+   (substance reviewed) — the handoff must invoke the work order, not just
+   emit it. Artifacts: `RESULTS-2026-09-15-openrouter-free.md` (both arms) +
+   `results-openrouter-free.csv` + `results-openrouter-brief.csv` (reviewed).
+   Harness fix committed in working tree: `UNI_BRIEF` prompt note in `run.py`.
+   Next: real-repo tasks.
+2. **A3 against a real issuer** — advanced 2026-09-15, not closed. Real Google
+   JWKS pinned under `examples/identity-google/`, refusal against real keys
+   tested, live procedure documented. Needs: one human-minted token
+   (`gcloud auth print-identity-token`), one `uni verify` run reaching A3,
+   and the report row upgraded from "demontre en test".
+3. **Contracts still pin test names** — DECIDED 2026-09-15 (ADR-002), enforced
+   as a lint warning. Remaining: migrate study/dogfood registries to selector
+   templates over time; decide (with review) whether `uni run` auto-emits
+   `brief.md`.
 4. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
    Deliberately after the single-user story is convincing.
 5. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is

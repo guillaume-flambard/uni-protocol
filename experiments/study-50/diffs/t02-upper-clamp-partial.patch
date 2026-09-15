@@ -15,7 +15,7 @@ index 296143e..22bfe7e 100644
          x
      }
 diff --git a/tests/it.rs b/tests/it.rs
-index d3d6038..1b44f3d 100644
+index d3d6038..4117440 100644
 --- a/tests/it.rs
 +++ b/tests/it.rs
 @@ -9,3 +9,8 @@ fn add_works() {
@@ -25,5 +25,5 @@ index d3d6038..1b44f3d 100644
 +
 +#[test]
 +fn clamp_upper_works() {
-+    assert_eq!(clamp(11, 5, 10), 10);
++    assert_eq!(clamp(20, 5, 10), 10);
 +}

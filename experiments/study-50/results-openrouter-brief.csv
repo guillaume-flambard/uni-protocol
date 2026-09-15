@@ -1,0 +1,4 @@
+issue,agent_done,agent_self_report,uni_decision,human_review,claims_total,claims_verified,baseline_decision,brief_mode,contract_visible,agent_seconds,agent_cost_usd,diff_lines
+t03-int-sum-offbyone,1,DONE,Accepted,1,3,3,EvidenceRequired,1,1,,,29
+t07-layered-cancel,1,DONE,Accepted,1,4,4,Rejected,1,1,,,70
+t08-port-contract,1,DONE,Accepted,1,4,4,EvidenceRequired,1,1,,,48
