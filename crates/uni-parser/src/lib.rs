@@ -47,6 +47,31 @@ pub struct Acceptance {
     pub require_verified: bool,
 }
 
+/// The closed vocabulary, as words rather than prefixes: `CLAIMANT` is not a
+/// `CLAIM`. Used to decide where free-form prose ends.
+const DIRECTIVES: [&str; 13] = [
+    "VERSION",
+    "DOMAIN",
+    "INTENT",
+    "GOAL",
+    "CLAIM",
+    "REQUIRE",
+    "ENSURE",
+    "INVARIANT",
+    "FORBID",
+    "VERIFY",
+    "ACCEPT",
+    "REJECT",
+    "ESCALATE",
+];
+
+fn starts_with_directive(line: &str) -> bool {
+    DIRECTIVES.iter().any(|d| {
+        line.strip_prefix(d)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+    })
+}
+
 /// Clauses the v0.1 grammar accepts inside ACCEPT WHEN. Anything else is a
 /// hard error: the spec must never promise inert semantics.
 fn validate_accept_condition(text: &str, line_no: usize) -> Result<()> {
@@ -94,7 +119,14 @@ fn push_verification(
     line_no: usize,
     verifications: &mut Vec<Verification>,
 ) -> Result<()> {
-    let (verifier_ref, inline_shell) = if let Some(q) = using_raw.strip_prefix("shell") {
+    // `shell` is a whole token, not a prefix: without the boundary check a
+    // registry key like `shellcheck` parses as the inline verifier `shell`
+    // running the command `check`, which turns a plain registry reference into
+    // an inline command. That is the exact escape the registry exists to stop.
+    let shell_rest = using_raw
+        .strip_prefix("shell")
+        .filter(|q| q.is_empty() || q.starts_with(char::is_whitespace));
+    let (verifier_ref, inline_shell) = if let Some(q) = shell_rest {
         let cmd = q.trim().trim_matches('"').to_string();
         ("shell".to_string(), Some(cmd))
     } else {
@@ -184,12 +216,12 @@ pub fn parse(source: &str) -> Result<Contract> {
             continue;
         }
         if in_goal {
-            if line.starts_with("CLAIM")
-                || line.starts_with("INVARIANT")
-                || line.starts_with("FORBID")
-                || line.starts_with("VERIFY")
-                || line.starts_with("ACCEPT")
-            {
+            // Ends on ANY directive, not on a hand-picked few. Otherwise a
+            // stray `ENSURE` is silently absorbed as goal prose and — worse — a
+            // reserved `REJECT WHEN` right after GOAL bypasses the hard error
+            // the vocabulary promises. Goal text is prose; a directive is a
+            // directive wherever it appears.
+            if starts_with_directive(line) {
                 in_goal = false;
             } else {
                 if !goal.is_empty() {
@@ -201,12 +233,12 @@ pub fn parse(source: &str) -> Result<Contract> {
         }
         if let Some(rest) = line.strip_prefix("CLAIM") {
             // CLAIM <id> REQUIRED | OPTIONAL
-            let parts: Vec<&str> = rest.trim().split_whitespace().collect();
+            let parts: Vec<&str> = rest.split_whitespace().collect();
             if parts.is_empty() {
                 return Err(anyhow!("line {line_no}: CLAIM needs an id"));
             }
             let id = parts[0].to_string();
-            let required = !parts.iter().any(|p| *p == "OPTIONAL");
+            let required = !parts.contains(&"OPTIONAL");
             // next line(s) ENSURE ... — handled in second pass? read inline: ENSURE may be same line after?
             let _ = required;
             claims.push(Claim {
@@ -220,12 +252,12 @@ pub fn parse(source: &str) -> Result<Contract> {
             continue;
         }
         if let Some(rest) = line.strip_prefix("INVARIANT") {
-            let parts: Vec<&str> = rest.trim().split_whitespace().collect();
+            let parts: Vec<&str> = rest.split_whitespace().collect();
             if parts.is_empty() {
                 return Err(anyhow!("line {line_no}: INVARIANT needs an id"));
             }
             let id = parts[0].to_string();
-            let critical = parts.iter().any(|p| *p == "CRITICAL");
+            let critical = parts.contains(&"CRITICAL");
             claims.push(Claim {
                 id,
                 kind: ClaimKind::Invariant,

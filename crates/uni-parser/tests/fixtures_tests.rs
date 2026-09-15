@@ -115,3 +115,141 @@ fn require_after_other_block_is_hard_error() {
     let err = parse(src).unwrap_err().to_string();
     assert!(err.contains("must immediately follow"), "got: {err}");
 }
+
+// --- the parts of the closed vocabulary the fixtures above do not reach ---
+
+fn head(body: &str) -> String {
+    format!("VERSION 0.1\nDOMAIN software\nINTENT x\nGOAL\n  n\n{body}ACCEPT WHEN\n  required_claims == VERIFIED\n")
+}
+
+/// The GOAL block is free-form prose, and it used to end only on a hand-picked
+/// few directives. A reserved keyword sitting right after GOAL was therefore
+/// absorbed as goal text: the hard error the vocabulary promises never fired.
+/// These two are the regression, and the reason the terminator list is the
+/// whole vocabulary rather than a subset.
+#[test]
+fn a_reserved_directive_right_after_goal_still_errors() {
+    for keyword in ["REJECT WHEN", "ESCALATE WHEN"] {
+        let src = head(&format!("{keyword}\n  x\n"));
+        let err = parse(&src).unwrap_err().to_string();
+        assert!(
+            err.contains("reserved for v0.2"),
+            "{keyword} was swallowed: {err}"
+        );
+        assert!(
+            err.contains("line 6"),
+            "{keyword} must name its line: {err}"
+        );
+    }
+}
+
+#[test]
+fn a_stray_ensure_after_goal_is_not_swallowed_as_prose() {
+    let err = parse(&head("ENSURE orphan\n")).unwrap_err().to_string();
+    assert!(err.contains("ENSURE without preceding"), "got: {err}");
+}
+
+#[test]
+fn domain_and_intent_are_required_too() {
+    let body = "CLAIM a REQUIRED\n  ENSURE ok\nVERIFY a\n  USING k\nACCEPT WHEN\n  required_claims == VERIFIED\n";
+    for (line, needle) in [
+        ("VERSION 0.1\n", "missing VERSION"),
+        ("DOMAIN software\n", "missing DOMAIN"),
+        ("INTENT x\n", "missing INTENT"),
+    ] {
+        let src =
+            format!("VERSION 0.1\nDOMAIN software\nINTENT x\nGOAL\n  n\n{body}").replace(line, "");
+        let err = parse(&src).unwrap_err().to_string();
+        assert!(err.contains(needle), "expected {needle:?}, got: {err}");
+    }
+}
+
+#[test]
+fn a_contract_needs_at_least_one_claim() {
+    let src = "VERSION 0.1\nDOMAIN software\nINTENT x\nGOAL\n  n\nVERIFY a\n  USING k\n";
+    let err = parse(src).unwrap_err().to_string();
+    assert!(err.contains("no CLAIM/INVARIANT"), "got: {err}");
+}
+
+#[test]
+fn claim_and_invariant_need_an_id() {
+    let e = parse(&head("CLAIM\n  ENSURE ok\nVERIFY a\n  USING k\n"))
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("CLAIM needs an id"), "got: {e}");
+
+    let e = parse(&head("INVARIANT\n  ENSURE ok\nVERIFY a\n  USING k\n"))
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("INVARIANT needs an id"), "got: {e}");
+}
+
+/// The other three ways an ACCEPT WHEN can be something v0.1 cannot honour:
+/// a repeated clause, no required clause at all, and an empty condition.
+#[test]
+fn every_accept_when_v0_1_cannot_honour_is_an_error() {
+    let body = "CLAIM a REQUIRED\n  ENSURE ok\nVERIFY a\n  USING k\n";
+    for (tail, needle) in [
+        (
+            "ACCEPT WHEN\n  required_claims == VERIFIED\n  AND required_claims == VERIFIED\n",
+            "duplicate clause",
+        ),
+        (
+            "ACCEPT WHEN\n  critical_failures == 0\n",
+            "must include 'required_claims == VERIFIED'",
+        ),
+        ("ACCEPT WHEN\n", "needs a condition"),
+    ] {
+        let err = parse(&format!(
+            "VERSION 0.1\nDOMAIN software\nINTENT x\nGOAL\n  n\n{body}{tail}"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains(needle), "expected {needle:?}, got: {err}");
+    }
+}
+
+/// `shell` is the inline verifier as a whole word. As a bare prefix it hijacked
+/// any registry key starting with those letters — `USING shellcheck` parsed as
+/// `shell` running `check` — which turns a plain registry reference into an
+/// inline command. That is the escape the trusted registry exists to prevent.
+#[test]
+fn shell_is_a_token_not_a_prefix() {
+    let inline = parse(&head(
+        "CLAIM a REQUIRED\n  ENSURE ok\nVERIFY a\n  USING shell \"cargo test\"\n",
+    ))
+    .unwrap();
+    assert_eq!(inline.verifications[0].verifier_ref, "shell");
+    assert_eq!(
+        inline.verifications[0].inline_shell.as_deref(),
+        Some("cargo test")
+    );
+
+    for key in ["shellcheck", "shell-runner", "shells"] {
+        let c = parse(&head(&format!(
+            "CLAIM a REQUIRED\n  ENSURE ok\nVERIFY a\n  USING {key}\n"
+        )))
+        .unwrap();
+        assert_eq!(
+            c.verifications[0].verifier_ref, key,
+            "{key} must stay a registry reference"
+        );
+        assert_eq!(
+            c.verifications[0].inline_shell, None,
+            "{key} must not carry an inline command"
+        );
+    }
+}
+
+#[test]
+fn a_quoted_argument_is_captured_without_its_quotes() {
+    let c = parse(&head(
+        "CLAIM a REQUIRED\n  ENSURE ok\nVERIFY a\n  USING suite \"clamps above\"\n",
+    ))
+    .unwrap();
+    assert_eq!(c.verifications[0].verifier_ref, "suite");
+    assert_eq!(
+        c.verifications[0].inline_shell.as_deref(),
+        Some("clamps above")
+    );
+}
