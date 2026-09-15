@@ -1,14 +1,48 @@
 # UNI — tickets
 
-Current: **v0.9.2** · 134 tests, 0 warnings · public repo
-`github.com/guillaume-flambard/uni-protocol` · CI green on ubuntu/macOS/Windows +
-POSIX examples + a smoke job that runs the published action · release `v0.9.2`
-with five binaries, action default bumped to it.
+Current: **v0.9.2 + final review** · 142 tests, 0 rustc warnings, 0 clippy
+warnings, rustfmt clean · public repo `github.com/guillaume-flambard/uni-protocol`
+· CI green on ubuntu/macOS/Windows + POSIX examples + a `lint` job (fmt, clippy,
+every contract) + a smoke job that runs the published action's default version ·
+release `v0.9.2` with five binaries · MIT OR Apache-2.0.
 
 What `v0.9.2` adds over `v0.9.1`: ADR-002 (pinned test names are a contract
 smell, `uni lint` warns), the live A3 workflow against GitHub's real OIDC
 issuer, the Google example, the second-model study arm on a free implementer,
 and t11 with the hidden-owner-invariant harness.
+
+## Done — final review (2026-09-15)
+
+A full pass over code, tests, docs and the collaboration surface. It found more
+than it was supposed to, which is the point.
+
+- **Two parser leaks, both security-relevant.** `USING shellcheck` parsed as the
+  inline verifier `shell` running `check`: a registry reference silently became
+  an inline command, the exact escape the trusted registry exists to stop. And
+  the `GOAL` block ended only on a hand-picked few directives, so a reserved
+  `REJECT WHEN` right after `GOAL` was absorbed as goal prose and the promised
+  hard error never fired. Both fixed with regressions in the parser's existing
+  fixtures suite.
+- **The claim in `claims.md` that `REQUIRE` is a hard parse error was false**; it
+  shipped in v0.2 and contradicted `specification.md`. That is the kind of doc
+  bug that costs a newcomer an hour.
+- **The repo was never rustfmt-clean and clippy was never run** (rustc warned
+  nothing, which is why the tickets said "0 warnings"). Eleven clippy findings
+  fixed, one whole-repo reformat isolated in its own commit, and CI now asserts
+  both with `-D warnings`.
+- **The action smoke pinned `v0.5.1`**, so it tested a four-releases-old tag
+  instead of the default the action ships. It now pins nothing.
+- **No licence at all**, on a public repo asking for contributions. Now MIT OR
+  Apache-2.0 in the workspace and all six crates, plus `CONTRIBUTING.md`,
+  `SECURITY.md`, and issue and pull request templates.
+- Also fixed: `github-integration.md` pinned at v0.7.0, `specification.md`
+  announcing v0.5 and listing two lint warnings of five, a stale test count and
+  a missing t11 entry in the README, and `examples/identity-google` not carrying
+  its own registry.
+
+Left alone on purpose, and named rather than silently reworded: `.scratch/tickets.md`
+and one old results file use em dashes as section separators. They are internal
+working notes, not published prose, and the convention predates this pass.
 
 ## Done — release v0.9.2 (2026-09-15)
 
