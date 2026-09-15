@@ -6,7 +6,10 @@
 **/.uni/evidence/
 **/.uni/decisions/
 **/.uni/artifacts/
-**/.uni/contracts/candidate-*.uni
+# `uni import-speckit` writes a candidate contract and its work order together.
+# Both are generated output for review, never a source: nothing in the tree
+# should ship one.
+**/.uni/contracts/candidate-*
 **/.uni/events.jsonl
 **/.uni/.registry.hash
 **/.uni/.registry.snapshot.toml

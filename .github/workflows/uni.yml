@@ -100,6 +100,13 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy (warnings are errors)
         run: cargo clippy --all-targets -- -D warnings
+      - name: The Spec Kit constitution copy is not stale
+        run: |
+          # The copy is generated from constitution.md. If this fails, run
+          # scripts/sync-constitution.sh and commit the result: the two are not
+          # allowed to drift (rule 7, one source of truth).
+          scripts/sync-constitution.sh
+          git diff --exit-code -- .specify/memory/constitution.md
       - name: Every shipped contract lints clean
         run: |
           cargo build --release
