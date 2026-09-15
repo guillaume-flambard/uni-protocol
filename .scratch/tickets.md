@@ -2,6 +2,12 @@
 
 Open work only. History lives in git.
 
+`v0.9.3` is released (five assets, marked latest) and verified on the published
+binary, not just in CI: the downloaded macOS archive refuses `CLAIM x BANANA`
+and a duplicate claim id, and reaches A3 against GitHub's real OIDC issuer. The
+action default moved to it, so the closed-vocabulary fixes are no longer
+main-only.
+
 State: **v0.9.3**, 148 tests, rustfmt clean, clippy clean at
 `-D warnings`, CI green with a `lint` job (fmt, clippy, constitution drift,
 every contract) and the action smoke, live A3 against a real issuer,
@@ -37,7 +43,13 @@ Workflow per `AGENTS.md`: implement (TDD at the seam: `assure_contract` then
 
 ## Open
 
-### 1. The IR is not validated against its schema
+### 1. Re-release when the next batch lands
+`main` is one commit ahead of `v0.9.3` (the action's download retry). The action
+file is read by ref, so a user pinning `@v0.9.3` gets the version without the
+retry; the next tag carries it. No action needed until then, noted so it is not
+forgotten.
+
+### 2. The IR is not validated against its schema
 `uni compile` emits the canonical IR but nothing checks it against
 `schemas/uni.schema.json`; the spec now says so honestly. Validating at compile
 time is cheap now that the shapes match, and it turns the schema from a
@@ -46,34 +58,34 @@ description into an assertion. The one real cost is a JSON Schema dependency.
 checks that matter (required keys, types, enum membership) and keep the tree
 dependency-free.
 
-### 2. `uni run` and the work order
+### 3. `uni run` and the work order
 The brief arm showed the handoff must *invoke* the brief, not merely emit it.
 **decision:** should `uni run` generate `brief.md` and name it in the executor's
 prompt? A behaviour change on a shipped command.
 
-### 3. A non-conforming implementer
+### 4. A non-conforming implementer
 The study's one honest gap. t11 on five free implementers with the owner
 invariant and the contract hidden: all five Accepted, all integer arithmetic,
 all named the required test. The trap is deterministic (the scripted float
 delivery is Rejected while its own tests are green), but no model on hand is
 careless. Needs a weak or adversarial implementer.
 
-### 4. A second real-repo task
+### 5. A second real-repo task
 `tasks/t11-fee-conservation/` is the shape to copy. Derived-index coherence is
 the natural next one: a denormalized index a plausible fix forgets to update,
 checked only by the owner's hidden invariant.
 
-### 5. Test debt
+### 6. Test debt
 `uni-ir` has 5 tests for 176 lines. The truth table in `uni-decision` deserves a
 named test per row. Prefer growing the low crates over the CLI integration
 surface.
 
-### 6. Migrate the study and dogfood registries to selector templates
+### 7. Migrate the study and dogfood registries to selector templates
 They pin literal test names, so they lint with `pinned-test-selector` warnings.
 ADR-002 records why this is deferred on both sides (study comparability,
 example-as-documentation). Do it as each file is touched, not as a sweep.
 
-### 7. Low value, do not start before the above
+### 8. Low value, do not start before the above
 - A3 against a workforce issuer with a human token (the Google example). GitHub
   OIDC already proves the path live and unattended.
 - Cloud and org: organizations, dashboards, cost per accepted outcome.
@@ -90,4 +102,4 @@ example-as-documentation). Do it as each file is touched, not as a sweep.
 
 Answered and implemented: `CLAIM ... CRITICAL` is refused, `.uni/policies` is
 created by `init`, and assurance is a property of the evidence. Still open:
-the schema dependency (1), the `uni run` brief (2), and the code of conduct (7).
+the schema dependency (2), the `uni run` brief (3), and the code of conduct (8).
