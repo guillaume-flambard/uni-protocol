@@ -36,7 +36,23 @@ runs:
         mkdir -p "$bin_dir"
         url="https://github.com/${{ inputs.repository }}/releases/download/${{ inputs.version }}/uni-${target}.tar.gz"
         echo "downloading $url"
-        curl -fsSL "$url" | tar -xz -C "$bin_dir"
+        # Bounded retry. A release asset is not immediately downloadable after
+        # the tag is pushed, so a job that runs in the same breath as the tag
+        # races it; a transient CDN miss looks identical. Both are worth six
+        # attempts before failing, and the failure still names the URL.
+        for attempt in 1 2 3 4 5 6; do
+          if curl -fsSL "$url" -o "$bin_dir/uni.tar.gz"; then
+            break
+          fi
+          if [ "$attempt" = 6 ]; then
+            echo "could not download $url after $attempt attempts" >&2
+            exit 1
+          fi
+          echo "attempt $attempt failed, retrying in 10s" >&2
+          sleep 10
+        done
+        tar -xzf "$bin_dir/uni.tar.gz" -C "$bin_dir"
+        rm -f "$bin_dir/uni.tar.gz"
         echo "$bin_dir" >> "$GITHUB_PATH"
     - name: Verify
       id: verify
