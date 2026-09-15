@@ -34,7 +34,10 @@ pub const KEEP_ARCHIVES: usize = 3;
 
 /// Archive `path` when it exceeds `max_bytes`, and prune old archives.
 /// Returns the archive path when a rotation happened.
-pub fn rotate_if_needed(path: &std::path::Path, max_bytes: u64) -> Result<Option<std::path::PathBuf>> {
+pub fn rotate_if_needed(
+    path: &std::path::Path,
+    max_bytes: u64,
+) -> Result<Option<std::path::PathBuf>> {
     let size = match std::fs::metadata(path) {
         Ok(m) => m.len(),
         Err(_) => return Ok(None),
@@ -53,7 +56,10 @@ pub fn rotate_if_needed(path: &std::path::Path, max_bytes: u64) -> Result<Option
 /// which also starts with "events." — counting it as an archive would let the
 /// retention prune delete the live journal.
 fn is_archive_of(path: &std::path::Path, candidate: &std::path::Path) -> bool {
-    let live = path.file_name().and_then(|n| n.to_str()).unwrap_or("events.jsonl");
+    let live = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("events.jsonl");
     let Some(name) = candidate.file_name().and_then(|n| n.to_str()) else {
         return false;
     };
@@ -63,7 +69,9 @@ fn is_archive_of(path: &std::path::Path, candidate: &std::path::Path) -> bool {
 /// Keep the newest `keep` archives, delete the rest. Ordering is by the
 /// embedded timestamp, which is why the archive name starts with it.
 pub fn prune_archives(path: &std::path::Path, keep: usize) -> Result<usize> {
-    let Some(dir) = path.parent() else { return Ok(0) };
+    let Some(dir) = path.parent() else {
+        return Ok(0);
+    };
     let mut archives: Vec<std::path::PathBuf> = std::fs::read_dir(dir)?
         .flatten()
         .map(|e| e.path())
@@ -87,7 +95,9 @@ pub fn archives() -> Vec<std::path::PathBuf> {
 
 /// Archives present beside `path`, oldest first.
 pub fn archives_at(path: &std::path::Path) -> Vec<std::path::PathBuf> {
-    let Some(dir) = path.parent() else { return vec![] };
+    let Some(dir) = path.parent() else {
+        return vec![];
+    };
     let mut out: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
         .map(|rd| {
             rd.flatten()
@@ -108,7 +118,10 @@ pub fn append(events: &[Event]) -> Result<usize> {
     // Rotate before writing so a single run cannot push the file past its cap.
     rotate_if_needed(&path, JOURNAL_MAX_BYTES)?;
     let ts = chrono::Utc::now().to_rfc3339();
-    let mut out = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+    let mut out = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)?;
     use std::io::Write;
     for e in events {
         writeln!(out, "{}", e.to_json(&ts))?;
@@ -252,7 +265,11 @@ mod tests {
             rotate_if_needed(&path, 1024).unwrap();
         }
         let kept = archives_at(&path);
-        assert_eq!(kept.len(), KEEP_ARCHIVES, "retention caps the archives: {kept:?}");
+        assert_eq!(
+            kept.len(),
+            KEEP_ARCHIVES,
+            "retention caps the archives: {kept:?}"
+        );
         // The survivors are the newest ones (sorted by embedded timestamp).
         let mut sorted = kept.clone();
         sorted.sort();
@@ -265,7 +282,10 @@ mod tests {
             event: "DecisionIssued".into(),
             timestamp: "2026-09-14T10:00:00Z".into(),
             attributes: [
-                ("uni.intent.id".to_string(), serde_json::json!("booking.cancel")),
+                (
+                    "uni.intent.id".to_string(),
+                    serde_json::json!("booking.cancel"),
+                ),
                 ("uni.assurance.level".to_string(), serde_json::json!("A2")),
             ]
             .into_iter()
@@ -276,14 +296,21 @@ mod tests {
         assert_eq!(span["name"], "DecisionIssued");
         assert_eq!(span["traceId"].as_str().unwrap().len(), 32);
         assert_eq!(span["spanId"].as_str().unwrap().len(), 16);
-        assert!(span["startTimeUnixNano"].as_str().unwrap().parse::<u128>().is_ok());
+        assert!(span["startTimeUnixNano"]
+            .as_str()
+            .unwrap()
+            .parse::<u128>()
+            .is_ok());
         let keys: Vec<&str> = span["attributes"]
             .as_array()
             .unwrap()
             .iter()
             .map(|a| a["key"].as_str().unwrap())
             .collect();
-        assert!(keys.contains(&"uni.intent.id") && keys.contains(&"uni.assurance.level"), "{keys:?}");
+        assert!(
+            keys.contains(&"uni.intent.id") && keys.contains(&"uni.assurance.level"),
+            "{keys:?}"
+        );
         assert_eq!(
             doc["resourceSpans"][0]["resource"]["attributes"][0]["value"]["stringValue"],
             "uni"

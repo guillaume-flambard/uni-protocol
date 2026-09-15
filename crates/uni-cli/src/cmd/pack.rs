@@ -1,7 +1,7 @@
-use anyhow::{Result, anyhow};
-use std::path::{PathBuf};
+use crate::dot_uni;
+use anyhow::{anyhow, Result};
 use clap::Subcommand;
-use crate::{dot_uni};
+use std::path::PathBuf;
 
 #[derive(Subcommand)]
 pub enum PackCmd {
@@ -24,7 +24,12 @@ fn discover_packs() -> Vec<(String, toml::Value)> {
             let manifest = e.path().join("pack.toml");
             if let Ok(text) = std::fs::read_to_string(&manifest) {
                 if let Ok(v) = text.parse::<toml::Value>() {
-                    let name = e.path().file_name().unwrap_or_default().to_string_lossy().to_string();
+                    let name = e
+                        .path()
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
                     out.push((name, v));
                 }
             }
@@ -61,15 +66,25 @@ pub(crate) fn cmd_pack(sub: PackCmd, as_json: bool) -> Result<()> {
             } else {
                 for (dir, doc) in &packs {
                     let p = doc.get("pack");
-                    println!("{} {} - {}",
-                        p.and_then(|x| x.get("name")).and_then(|x| x.as_str()).unwrap_or(dir),
-                        p.and_then(|x| x.get("version")).and_then(|x| x.as_str()).unwrap_or("?"),
-                        p.and_then(|x| x.get("description")).and_then(|x| x.as_str()).unwrap_or(""));
+                    println!(
+                        "{} {} - {}",
+                        p.and_then(|x| x.get("name"))
+                            .and_then(|x| x.as_str())
+                            .unwrap_or(dir),
+                        p.and_then(|x| x.get("version"))
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("?"),
+                        p.and_then(|x| x.get("description"))
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("")
+                    );
                     if let Some(t) = doc.get("template").and_then(|t| t.as_array()) {
                         for tt in t {
-                            println!("  {:<24} {}",
+                            println!(
+                                "  {:<24} {}",
                                 tt.get("name").and_then(|n| n.as_str()).unwrap_or("?"),
-                                tt.get("description").and_then(|d| d.as_str()).unwrap_or(""));
+                                tt.get("description").and_then(|d| d.as_str()).unwrap_or("")
+                            );
                         }
                     }
                 }
@@ -77,17 +92,35 @@ pub(crate) fn cmd_pack(sub: PackCmd, as_json: bool) -> Result<()> {
         }
         PackCmd::Template { pack, name } => {
             let rel = format!("packs/{pack}/templates/{name}.uni");
-            let src = [std::path::PathBuf::from(&rel), dot_uni().join("packs").join(&pack).join("templates").join(format!("{name}.uni"))]
-                .into_iter()
-                .find(|p| p.exists())
-                .ok_or_else(|| anyhow!("template '{pack}/{name}' not found (uni pack list shows available templates)"))?;
+            let src = [
+                std::path::PathBuf::from(&rel),
+                dot_uni()
+                    .join("packs")
+                    .join(&pack)
+                    .join("templates")
+                    .join(format!("{name}.uni")),
+            ]
+            .into_iter()
+            .find(|p| p.exists())
+            .ok_or_else(|| {
+                anyhow!(
+                    "template '{pack}/{name}' not found (uni pack list shows available templates)"
+                )
+            })?;
             std::fs::create_dir_all("uni/intents")?;
             let dst = PathBuf::from("uni/intents").join(format!("{name}.uni"));
             std::fs::copy(&src, &dst)?;
             if as_json {
-                println!("{}", serde_json::json!({ "written": dst.display().to_string(), "pack": pack, "template": name }));
+                println!(
+                    "{}",
+                    serde_json::json!({ "written": dst.display().to_string(), "pack": pack, "template": name })
+                );
             } else {
-                println!("wrote {}\nedit claims + verifier refs, then: uni lint {}", dst.display(), dst.display());
+                println!(
+                    "wrote {}\nedit claims + verifier refs, then: uni lint {}",
+                    dst.display(),
+                    dst.display()
+                );
             }
         }
     }

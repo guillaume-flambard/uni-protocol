@@ -1,5 +1,5 @@
+use crate::dot_uni;
 use anyhow::{Context, Result};
-use crate::{dot_uni};
 
 /// CI/PR-facing view of the last decision: stable shape, no volatile fields
 /// (no timestamps, durations, excerpts). One byte change = real state change.
@@ -120,15 +120,26 @@ pub(crate) fn cmd_report(as_json: bool) -> Result<()> {
     println!("UNI Assurance");
     println!("-------------");
     if let Some(i) = r["intent"].as_object() {
-        println!("Intent      {}", i.get("id").and_then(|x| x.as_str()).unwrap_or("?"));
+        println!(
+            "Intent      {}",
+            i.get("id").and_then(|x| x.as_str()).unwrap_or("?")
+        );
     }
     let s = &r["summary"];
-    println!("Claims      {}/{} verified",
-        s["claims_verified"], s["claims_total"]);
-    println!("Assurance   {} (independent actor: {}, identity: {})",
+    println!(
+        "Claims      {}/{} verified",
+        s["claims_verified"], s["claims_total"]
+    );
+    println!(
+        "Assurance   {} (independent actor: {}, identity: {})",
         r["assurance"].as_str().unwrap_or("A0"),
-        if r["independent_actor"].as_bool().unwrap_or(false) { "YES" } else { "NO" },
-        r["identity_assurance"].as_str().unwrap_or("SELF-DECLARED"));
+        if r["independent_actor"].as_bool().unwrap_or(false) {
+            "YES"
+        } else {
+            "NO"
+        },
+        r["identity_assurance"].as_str().unwrap_or("SELF-DECLARED")
+    );
     if let Some(claims) = r["claims"].as_array() {
         println!("\nClaims");
         for c in claims {
@@ -170,25 +181,38 @@ pub(crate) fn cmd_explain(arg: Option<String>, as_json: bool, annotations: bool)
                 Some("Stale") => "⏳",
                 _ => "✗",
             };
-            println!("  {mark} {:<24} {}", c["claim_id"].as_str().unwrap_or("?"), c["state"].as_str().unwrap_or("?"));
+            println!(
+                "  {mark} {:<24} {}",
+                c["claim_id"].as_str().unwrap_or("?"),
+                c["state"].as_str().unwrap_or("?")
+            );
         }
     }
 
-    let summary = v["claims"].as_array().map(|a| {
-        let tested = a.iter().filter(|c| c["state"] == "Valid").count();
-        format!("{}/{} verified", tested, a.len())
-    }).unwrap_or_default();
+    let summary = v["claims"]
+        .as_array()
+        .map(|a| {
+            let tested = a.iter().filter(|c| c["state"] == "Valid").count();
+            format!("{}/{} verified", tested, a.len())
+        })
+        .unwrap_or_default();
     // Persisted assurance wins; legacy files fall back to the decision-only base.
-    let assurance = v["assurance"].as_str().map(str::to_string).unwrap_or_else(|| {
-        let a = uni_decision::assurance_of_json(&v["decision"]);
-        format!("A{a}")
-    });
+    let assurance = v["assurance"]
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            let a = uni_decision::assurance_of_json(&v["decision"]);
+            format!("A{a}")
+        });
     let independent = v["independent_actor"].as_bool().unwrap_or(false);
     let identity = v["identity_assurance"].as_str().unwrap_or("SELF-DECLARED");
     println!("\nSummary");
     println!("  Claims     {summary}");
-    println!("  Assurance  {assurance} (independent actor: {}, identity: {})",
-        if independent { "YES" } else { "NO" }, identity);
+    println!(
+        "  Assurance  {assurance} (independent actor: {}, identity: {})",
+        if independent { "YES" } else { "NO" },
+        identity
+    );
     println!("\n{}", v["reason"].as_str().unwrap_or(""));
 
     // One block per claim that is not Valid, telling the story: what was
@@ -196,7 +220,12 @@ pub(crate) fn cmd_explain(arg: Option<String>, as_json: bool, annotations: bool)
     // applying. This is the product's central message, so it is spelled out.
     let failing: Vec<serde_json::Value> = v["claims"]
         .as_array()
-        .map(|a| a.iter().filter(|c| c["state"] != "Valid").cloned().collect())
+        .map(|a| {
+            a.iter()
+                .filter(|c| c["state"] != "Valid")
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default();
     let current_commit = v["commit"].as_str().unwrap_or("");
     for c in failing {

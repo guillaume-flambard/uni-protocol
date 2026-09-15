@@ -1,5 +1,5 @@
-use anyhow::{Result, anyhow};
 use crate::{dot_uni, events};
+use anyhow::{anyhow, Result};
 
 /// Workspace health check, read-only: git binding, registry, policies,
 /// evidence/journal writability. Exit 0 when everything is healthy.
@@ -11,7 +11,11 @@ pub(crate) fn cmd_doctor(as_json: bool) -> Result<()> {
     checks.push((
         ".uni present".into(),
         ok_uni,
-        if ok_uni { String::new() } else { "run `uni init`".into() },
+        if ok_uni {
+            String::new()
+        } else {
+            "run `uni init`".into()
+        },
     ));
     let (sha, dirty) = uni_evidence::git_info(&ws);
     let git_ok = sha != "no-git" && !sha.is_empty();
@@ -25,14 +29,21 @@ pub(crate) fn cmd_doctor(as_json: bool) -> Result<()> {
         },
     ));
     let registry = uni_verify::load_registry(&du);
-    checks.push(("registry".into(), true, format!("{} verifier(s)", registry.len())));
+    checks.push((
+        "registry".into(),
+        true,
+        format!("{} verifier(s)", registry.len()),
+    ));
     let pol = uni_decision::load_policies(&du.join("policies"));
     checks.push((
         "policies".into(),
         true,
         format!(
             "reject_on_invalid={} escalate_on_stale={} escalate_on_missing={} min_ratio={:.2}",
-            pol.reject_on_invalid, pol.escalate_on_stale, pol.escalate_on_missing, pol.min_verified_ratio
+            pol.reject_on_invalid,
+            pol.escalate_on_stale,
+            pol.escalate_on_missing,
+            pol.min_verified_ratio
         ),
     ));
     let ev_ok = std::fs::create_dir_all(du.join("evidence")).is_ok();
@@ -71,7 +82,12 @@ pub(crate) fn cmd_doctor(as_json: bool) -> Result<()> {
     } else {
         println!("uni doctor");
         for (name, ok, detail) in &checks {
-            println!("  {} {:<22} {}", if *ok { "OK  " } else { "FAIL" }, name, detail);
+            println!(
+                "  {} {:<22} {}",
+                if *ok { "OK  " } else { "FAIL" },
+                name,
+                detail
+            );
         }
         println!("\nhealthy: {}", failed == 0);
     }
@@ -108,8 +124,10 @@ pub(crate) fn cmd_events(as_json: bool, max: usize, all: bool, otlp: bool) -> Re
                 .collect();
             println!("{:<22} {} {}", e.event, e.timestamp, attrs.join(" "));
         }
-        println!("
-{n} events (append-only .uni/events.jsonl)");
+        println!(
+            "
+{n} events (append-only .uni/events.jsonl)"
+        );
     }
     Ok(())
 }

@@ -114,9 +114,18 @@ mod tests {
     fn to_json_round_trips_schema_keys() {
         let ir = compile(&sample()).unwrap();
         let v: serde_json::Value = serde_json::from_str(&to_json(&ir).unwrap()).unwrap();
-        for key in ["uni_version", "intent", "claims", "verification", "acceptance"] {
+        for key in [
+            "uni_version",
+            "intent",
+            "claims",
+            "verification",
+            "acceptance",
+        ] {
             assert!(v.get(key).is_some(), "missing {key}");
         }
-        assert!(v.get("constraints").is_none(), "constraints must be gone (A2)");
+        assert!(
+            v.get("constraints").is_none(),
+            "constraints must be gone (A2)"
+        );
     }
 }

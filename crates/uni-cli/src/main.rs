@@ -17,7 +17,9 @@ struct Cli {
 #[derive(Subcommand)]
 enum Cmd {
     Init,
-    Compile { file: PathBuf },
+    Compile {
+        file: PathBuf,
+    },
     Verify {
         file: PathBuf,
         /// Verifier actor identity (e.g. ci:build-12). Always self-declared:
@@ -35,8 +37,12 @@ enum Cmd {
         #[arg(long, default_value_t = false)]
         annotations: bool,
     },
-    Inspect { file: PathBuf },
-    ImportSpeckit { dir: PathBuf },
+    Inspect {
+        file: PathBuf,
+    },
+    ImportSpeckit {
+        dir: PathBuf,
+    },
     Report,
     Events {
         /// Read the retained archives as well as the current journal.
@@ -46,7 +52,9 @@ enum Cmd {
         #[arg(long)]
         otlp: bool,
     },
-    Lint { file: PathBuf },
+    Lint {
+        file: PathBuf,
+    },
     Doctor,
     #[command(subcommand)]
     Pack(cmd::pack::PackCmd),
@@ -104,10 +112,15 @@ fn main() -> Result<()> {
     match cli.cmd {
         Cmd::Init => cmd::contract::cmd_init(),
         Cmd::Compile { file } => cmd::contract::cmd_compile(&file, cli.json),
-        Cmd::Verify { file, actor, attest } => cmd::verify::cmd_verify(&file, cli.json, actor.as_deref(), attest),
-        Cmd::Explain { claim_or_intent, annotations } => {
-            cmd::report::cmd_explain(claim_or_intent, cli.json, annotations)
-        }
+        Cmd::Verify {
+            file,
+            actor,
+            attest,
+        } => cmd::verify::cmd_verify(&file, cli.json, actor.as_deref(), attest),
+        Cmd::Explain {
+            claim_or_intent,
+            annotations,
+        } => cmd::report::cmd_explain(claim_or_intent, cli.json, annotations),
         Cmd::Inspect { file } => cmd::contract::cmd_inspect(&file, cli.json),
         Cmd::ImportSpeckit { dir } => cmd::speckit::cmd_import_speckit(&dir, cli.json),
         Cmd::Report => cmd::report::cmd_report(cli.json),
@@ -115,21 +128,34 @@ fn main() -> Result<()> {
         Cmd::Lint { file } => cmd::contract::cmd_lint(&file, cli.json),
         Cmd::Doctor => cmd::journal::cmd_doctor(cli.json),
         Cmd::Pack(sub) => cmd::pack::cmd_pack(sub, cli.json),
-        Cmd::Bind { claim, verifier, requirement, selector, from } => {
-            cmd::authorize::cmd_bind(
-                claim.as_deref(),
-                verifier.as_deref(),
-                &requirement,
-                selector.as_deref(),
-                from.as_deref(),
-                cli.json,
-            )
-        }
+        Cmd::Bind {
+            claim,
+            verifier,
+            requirement,
+            selector,
+            from,
+        } => cmd::authorize::cmd_bind(
+            claim.as_deref(),
+            verifier.as_deref(),
+            &requirement,
+            selector.as_deref(),
+            from.as_deref(),
+            cli.json,
+        ),
         Cmd::Bindings => cmd::authorize::cmd_bindings(cli.json),
         Cmd::Bundle(sub) => cmd::handoff::cmd_bundle(sub, cli.json),
         Cmd::Brief { file, out } => cmd::handoff::cmd_brief(&file, out.as_deref(), cli.json),
-        Cmd::Run { file, command, actor, timeout_ms } => {
-            cmd::verify::cmd_run(&file, &command.join(" "), actor.as_deref(), timeout_ms, cli.json)
-        }
+        Cmd::Run {
+            file,
+            command,
+            actor,
+            timeout_ms,
+        } => cmd::verify::cmd_run(
+            &file,
+            &command.join(" "),
+            actor.as_deref(),
+            timeout_ms,
+            cli.json,
+        ),
     }
 }

@@ -55,13 +55,19 @@ pub fn export(dot_uni: &Path, contract_path: &Path, out: &Path) -> Result<Bundle
         Ok(())
     };
 
-    push("contract", serde_json::json!({
-        "path": contract_path.display().to_string(),
-        "text": contract_text,
-        "hash": contract_hash,
-        "ir": ir,
-    }))?;
-    push("registry", serde_json::json!({ "text": registry_text, "hash": registry_hash }))?;
+    push(
+        "contract",
+        serde_json::json!({
+            "path": contract_path.display().to_string(),
+            "text": contract_text,
+            "hash": contract_hash,
+            "ir": ir,
+        }),
+    )?;
+    push(
+        "registry",
+        serde_json::json!({ "text": registry_text, "hash": registry_hash }),
+    )?;
 
     // Policies: the merged view is already persisted at decision time via
     // policy_hash on evidence; ship the raw files for audit.
@@ -70,12 +76,18 @@ pub fn export(dot_uni: &Path, contract_path: &Path, out: &Path) -> Result<Bundle
         let mut files: Vec<_> = rd.flatten().map(|e| e.path()).collect();
         files.sort();
         for f in files {
-            if f.extension().map(|x| x == "toml" || x == "rego").unwrap_or(false) {
+            if f.extension()
+                .map(|x| x == "toml" || x == "rego")
+                .unwrap_or(false)
+            {
                 if let Ok(text) = std::fs::read_to_string(&f) {
-                    push("policy", serde_json::json!({
-                        "name": f.file_name().unwrap_or_default().to_string_lossy(),
-                        "text": text,
-                    }))?;
+                    push(
+                        "policy",
+                        serde_json::json!({
+                            "name": f.file_name().unwrap_or_default().to_string_lossy(),
+                            "text": text,
+                        }),
+                    )?;
                 }
             }
         }
@@ -108,9 +120,9 @@ pub fn export(dot_uni: &Path, contract_path: &Path, out: &Path) -> Result<Bundle
     }
 
     // Last decision, if it belongs to this intent.
-    if let Some(decision) = uni_evidence::load_json::<serde_json::Value>(
-        &dot_uni.join("decisions").join("last.json"),
-    ) {
+    if let Some(decision) =
+        uni_evidence::load_json::<serde_json::Value>(&dot_uni.join("decisions").join("last.json"))
+    {
         if decision
             .get("intent")
             .and_then(|i| i.get("id"))
@@ -187,8 +199,7 @@ pub struct BundleReport {
 
 /// Offline verification: never touches the live cache.
 pub fn verify(path: &Path) -> Result<(BundleHeader, BundleReport)> {
-    let text = std::fs::read_to_string(path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     let mut lines = text.lines().filter(|l| !l.trim().is_empty());
     let header_line = lines.next().ok_or_else(|| anyhow!("empty bundle"))?;
     let header_json: serde_json::Value = serde_json::from_str(header_line)?;
@@ -228,17 +239,15 @@ pub fn verify(path: &Path) -> Result<(BundleHeader, BundleReport)> {
             .push("header sha256 mismatch".into());
     }
 
-    let mut evidence_claim_ids: std::collections::BTreeSet<String> =
-        Default::default();
-    let mut contract_claim_ids: std::collections::BTreeSet<String> =
-        Default::default();
+    let mut evidence_claim_ids: std::collections::BTreeSet<String> = Default::default();
+    let mut contract_claim_ids: std::collections::BTreeSet<String> = Default::default();
     let mut bindings: std::collections::BTreeSet<String> = Default::default();
     let mut requirements: Vec<(String, String)> = vec![];
     let mut decision_claims: std::collections::BTreeSet<String> = Default::default();
 
     for line in lines {
-        let rec: serde_json::Value = serde_json::from_str(line)
-            .map_err(|e| anyhow!("malformed record: {e}"))?;
+        let rec: serde_json::Value =
+            serde_json::from_str(line).map_err(|e| anyhow!("malformed record: {e}"))?;
         report.records += 1;
         let kind = rec.get("kind").and_then(|k| k.as_str()).unwrap_or("?");
         let body = &rec["body"];
@@ -288,17 +297,13 @@ pub fn verify(path: &Path) -> Result<(BundleHeader, BundleReport)> {
             "evidence" => {
                 let ev: uni_evidence::Evidence = serde_json::from_value(body.clone())?;
                 evidence_claim_ids.insert(ev.claim_id.clone());
-                if !ev.registry_hash.is_empty()
-                    && ev.registry_hash != header.registry_hash
-                {
+                if !ev.registry_hash.is_empty() && ev.registry_hash != header.registry_hash {
                     report.cross_check_errors.push(format!(
                         "evidence '{}' was gathered under a different registry",
                         ev.claim_id
                     ));
                 }
-                if !ev.contract_hash.is_empty()
-                    && ev.contract_hash != header.contract_hash
-                {
+                if !ev.contract_hash.is_empty() && ev.contract_hash != header.contract_hash {
                     report.cross_check_errors.push(format!(
                         "evidence '{}' was gathered under a different contract",
                         ev.claim_id
@@ -347,13 +352,11 @@ pub fn verify(path: &Path) -> Result<(BundleHeader, BundleReport)> {
     }
     // Evidence for claims that are not in the contract is suspicious.
     for c in evidence_claim_ids.difference(&contract_claim_ids) {
-        report.cross_check_errors.push(format!(
-            "bundled evidence for unknown claim '{c}'"
-        ));
+        report
+            .cross_check_errors
+            .push(format!("bundled evidence for unknown claim '{c}'"));
     }
     report.claims_total = contract_claim_ids.len();
-    report.claims_covered = contract_claim_ids
-        .intersection(&evidence_claim_ids)
-        .count();
+    report.claims_covered = contract_claim_ids.intersection(&evidence_claim_ids).count();
     Ok((header, report))
 }

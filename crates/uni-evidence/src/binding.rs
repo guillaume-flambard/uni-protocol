@@ -114,11 +114,12 @@ fn write_file(path: &std::path::Path, file: &BindingFile) -> Result<()> {
 /// Every authorized binding: the reviewed file first, then legacy per-claim
 /// files for claims it does not mention (pre-v0.7 repositories).
 pub fn load_all(dot_uni: &std::path::Path) -> std::collections::BTreeMap<String, VerifierBinding> {
-    let mut out: std::collections::BTreeMap<String, VerifierBinding> = read_file(&bindings_file_path(dot_uni))
-        .bindings
-        .iter()
-        .map(|(claim, e)| (claim.clone(), to_binding(claim, e)))
-        .collect();
+    let mut out: std::collections::BTreeMap<String, VerifierBinding> =
+        read_file(&bindings_file_path(dot_uni))
+            .bindings
+            .iter()
+            .map(|(claim, e)| (claim.clone(), to_binding(claim, e)))
+            .collect();
     if let Ok(rd) = std::fs::read_dir(bindings_dir(dot_uni)) {
         for e in rd.flatten() {
             let path = e.path();
@@ -164,7 +165,8 @@ pub fn authorize(
     };
     let path = bindings_file_path(dot_uni);
     let mut file = read_file(&path);
-    file.bindings.insert(claim_id.to_string(), to_entry(&binding));
+    file.bindings
+        .insert(claim_id.to_string(), to_entry(&binding));
     write_file(&path, &file)?;
     Ok(binding)
 }
@@ -180,10 +182,7 @@ pub fn authorize_from_file(
 ) -> Result<Vec<VerifierBinding>> {
     let incoming = read_file(source);
     if incoming.bindings.is_empty() {
-        anyhow::bail!(
-            "{} lists no [bindings] entries",
-            source.display()
-        );
+        anyhow::bail!("{} lists no [bindings] entries", source.display());
     }
     let path = bindings_file_path(dot_uni);
     let mut file = read_file(&path);
@@ -235,7 +234,10 @@ mod tests {
     fn bulk_file_round_trip_and_legacy_precedence() {
         let dir = std::env::temp_dir().join(format!(
             "uni-bindset-{}",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         let du = dir.join(".uni");
 
@@ -259,15 +261,18 @@ mod tests {
         // A legacy per-claim file still loads, and the reviewed file wins on
         // a claim it also mentions.
         let legacy = binding_path(&du, "c");
-        save_json(&legacy, &VerifierBinding {
-            claim_id: "c".into(),
-            verifier_ref: "old".into(),
-            requirement: String::new(),
-            selector: None,
-            authorized_by: "local:legacy".into(),
-            authorized_at: "2026-01-01T00:00:00Z".into(),
-            binding_hash: binding_hash("c", "old", "", None),
-        })
+        save_json(
+            &legacy,
+            &VerifierBinding {
+                claim_id: "c".into(),
+                verifier_ref: "old".into(),
+                requirement: String::new(),
+                selector: None,
+                authorized_by: "local:legacy".into(),
+                authorized_at: "2026-01-01T00:00:00Z".into(),
+                binding_hash: binding_hash("c", "old", "", None),
+            },
+        )
         .unwrap();
         assert_eq!(load_all(&du)["c"].verifier_ref, "old");
         // Re-authorizing through the file replaces the legacy view.
@@ -279,7 +284,10 @@ mod tests {
     fn empty_reviewed_file_is_refused() {
         let dir = std::env::temp_dir().join(format!(
             "uni-bindempty-{}",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let f = dir.join("empty.toml");
@@ -298,7 +306,10 @@ mod tests {
         ));
         let du = dir.join(".uni");
         let b = authorize(&du, "c", "v", "behaves", Some("test_a"), "local:memo").unwrap();
-        assert_eq!(b.binding_hash, binding_hash("c", "v", "behaves", Some("test_a")));
+        assert_eq!(
+            b.binding_hash,
+            binding_hash("c", "v", "behaves", Some("test_a"))
+        );
         let back = load_binding(&du, "c").unwrap();
         assert_eq!(back, b);
         // Re-authorization replaces (explicit human act, never merged).

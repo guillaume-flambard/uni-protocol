@@ -1,7 +1,7 @@
-use anyhow::{Result, anyhow};
-use std::path::{Path, PathBuf};
+use crate::dot_uni;
+use anyhow::{anyhow, Result};
 use clap::Subcommand;
-use crate::{dot_uni};
+use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
 pub enum BundleCmd {
@@ -22,7 +22,12 @@ pub(crate) fn cmd_brief(file: &Path, out: Option<&Path>, as_json: bool) -> Resul
     let registry_text = std::fs::read_to_string(du.join("config.toml")).unwrap_or_default();
     let (claims, problems) = crate::brief::build(&ir, &registry);
     let body = if as_json {
-        serde_json::to_string_pretty(&crate::brief::to_json(&ir, &claims, &problems, &crate::brief::registry_hash(&registry_text))?)?
+        serde_json::to_string_pretty(&crate::brief::to_json(
+            &ir,
+            &claims,
+            &problems,
+            &crate::brief::registry_hash(&registry_text),
+        )?)?
     } else {
         crate::brief::to_markdown(&ir, &claims, &problems)
     };
@@ -48,18 +53,24 @@ pub(crate) fn cmd_bundle(sub: BundleCmd, as_json: bool) -> Result<()> {
         BundleCmd::Export { file, out } => {
             let du = dot_uni();
             let out = out.unwrap_or_else(|| {
-                PathBuf::from(format!("uni-bundle-{}.jsonl", du.display().to_string().replace(['/', '.'], "-")))
+                PathBuf::from(format!(
+                    "uni-bundle-{}.jsonl",
+                    du.display().to_string().replace(['/', '.'], "-")
+                ))
             });
             let header = crate::bundle::export(&du, &file, &out)?;
             if as_json {
-                println!("{}", serde_json::json!({
-                    "bundle": out.display().to_string(),
-                    "version": header.version,
-                    "intent": header.intent,
-                    "records": header.records,
-                    "registry_hash": header.registry_hash,
-                    "contract_hash": header.contract_hash,
-                }));
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "bundle": out.display().to_string(),
+                        "version": header.version,
+                        "intent": header.intent,
+                        "records": header.records,
+                        "registry_hash": header.registry_hash,
+                        "contract_hash": header.contract_hash,
+                    })
+                );
             } else {
                 println!("bundle written: {}", out.display());
                 println!("intent:  {}", header.intent);
@@ -71,20 +82,26 @@ pub(crate) fn cmd_bundle(sub: BundleCmd, as_json: bool) -> Result<()> {
             let (header, report) = crate::bundle::verify(&file)?;
             let ok = report.integrity_errors.is_empty() && report.cross_check_errors.is_empty();
             if as_json {
-                println!("{}", serde_json::json!({
-                    "bundle": file.display().to_string(),
-                    "intent": header.intent,
-                    "records": report.records,
-                    "claims_total": report.claims_total,
-                    "claims_covered": report.claims_covered,
-                    "integrity_errors": report.integrity_errors,
-                    "cross_check_errors": report.cross_check_errors,
-                    "ok": ok,
-                }));
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "bundle": file.display().to_string(),
+                        "intent": header.intent,
+                        "records": report.records,
+                        "claims_total": report.claims_total,
+                        "claims_covered": report.claims_covered,
+                        "integrity_errors": report.integrity_errors,
+                        "cross_check_errors": report.cross_check_errors,
+                        "ok": ok,
+                    })
+                );
             } else {
                 println!("bundle: {}", file.display());
                 println!("intent: {}  records: {}", header.intent, report.records);
-                println!("claims covered by evidence: {}/{}", report.claims_covered, report.claims_total);
+                println!(
+                    "claims covered by evidence: {}/{}",
+                    report.claims_covered, report.claims_total
+                );
                 for e in &report.integrity_errors {
                     println!("  INTEGRITY {e}");
                 }
@@ -94,7 +111,9 @@ pub(crate) fn cmd_bundle(sub: BundleCmd, as_json: bool) -> Result<()> {
                 println!("\nOK: {ok}");
             }
             if !ok {
-                return Err(anyhow!("uni bundle verify: bundle is not internally consistent"));
+                return Err(anyhow!(
+                    "uni bundle verify: bundle is not internally consistent"
+                ));
             }
         }
     }

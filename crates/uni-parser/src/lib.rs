@@ -65,7 +65,9 @@ fn validate_accept_condition(text: &str, line_no: usize) -> Result<()> {
         match *part {
             "required_claims == VERIFIED" => {
                 if seen_required {
-                    return Err(anyhow!("line {line_no}: duplicate clause 'required_claims == VERIFIED'"));
+                    return Err(anyhow!(
+                        "line {line_no}: duplicate clause 'required_claims == VERIFIED'"
+                    ));
                 }
                 seen_required = true;
             }
@@ -102,7 +104,9 @@ fn push_verification(
         (head, quoted)
     };
     if claim_id.is_empty() || verifier_ref.is_empty() {
-        return Err(anyhow!("line {line_no}: VERIFY needs claim id and verifier ref"));
+        return Err(anyhow!(
+            "line {line_no}: VERIFY needs claim id and verifier ref"
+        ));
     }
     verifications.push(Verification {
         claim_id: claim_id.to_string(),
@@ -141,9 +145,9 @@ pub fn parse(source: &str) -> Result<Contract> {
         let line_no = idx + 1;
         let line = raw.trim();
         if line.starts_with("USING") {
-            let (claim_id, vline) = pending_verify.take().ok_or_else(|| {
-                anyhow!("line {line_no}: USING without preceding VERIFY")
-            })?;
+            let (claim_id, vline) = pending_verify
+                .take()
+                .ok_or_else(|| anyhow!("line {line_no}: USING without preceding VERIFY"))?;
             push_verification(
                 &claim_id,
                 line.strip_prefix("USING").unwrap().trim(),
@@ -236,7 +240,11 @@ pub fn parse(source: &str) -> Result<Contract> {
             let text = rest.trim().to_string();
             match claims.last_mut() {
                 Some(c) => c.ensure = text,
-                None => return Err(anyhow!("line {line_no}: ENSURE without preceding CLAIM/INVARIANT")),
+                None => {
+                    return Err(anyhow!(
+                        "line {line_no}: ENSURE without preceding CLAIM/INVARIANT"
+                    ))
+                }
             }
             continue;
         }
@@ -326,7 +334,9 @@ pub fn parse(source: &str) -> Result<Contract> {
         if line.starts_with("REQUIRE") {
             let expr = line.strip_prefix("REQUIRE").unwrap().trim().to_string();
             if expr.is_empty() {
-                return Err(anyhow!("line {line_no}: REQUIRE needs an expression, e.g. REQUIRE behavior(\"...\")"));
+                return Err(anyhow!(
+                    "line {line_no}: REQUIRE needs an expression, e.g. REQUIRE behavior(\"...\")"
+                ));
             }
             if pending_verify.is_some() {
                 return Err(anyhow!(
@@ -345,9 +355,9 @@ pub fn parse(source: &str) -> Result<Contract> {
                     ));
                 }
             }
-            let target = verifications.last_mut().ok_or_else(|| {
-                anyhow!("line {line_no}: REQUIRE without preceding VERIFY")
-            })?;
+            let target = verifications
+                .last_mut()
+                .ok_or_else(|| anyhow!("line {line_no}: REQUIRE without preceding VERIFY"))?;
             if target.requirement.is_some() {
                 return Err(anyhow!(
                     "line {line_no}: duplicate REQUIRE for claim '{}'",

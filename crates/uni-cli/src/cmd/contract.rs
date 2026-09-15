@@ -1,6 +1,6 @@
-use anyhow::{Context, Result, anyhow};
-use std::path::{Path};
-use crate::{dot_uni};
+use crate::dot_uni;
+use anyhow::{anyhow, Context, Result};
+use std::path::Path;
 
 pub(crate) fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
     let (ir, _) = crate::cmd::contract::load_contract(file)?;
@@ -28,32 +28,53 @@ pub(crate) fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
     }
     for c in &ir.claims {
         if !ir.verification.iter().any(|v| v.claim_id == c.id) {
-            push!(2, "missing-verify", &c.id, format!("claim '{}' has no VERIFY", c.id));
+            push!(
+                2,
+                "missing-verify",
+                &c.id,
+                format!("claim '{}' has no VERIFY", c.id)
+            );
         }
     }
     if !registry.is_empty() {
         for v in &ir.verification {
             if v.verifier_ref != "shell" && !registry.contains_key(&v.verifier_ref) {
-                push!(1, "unknown-verifier", &v.claim_id, format!(
+                push!(
+                    1,
+                    "unknown-verifier",
+                    &v.claim_id,
+                    format!(
                     "VERIFY {} uses '{}' not found in .uni/config.toml (may fail at verify time)",
                     v.claim_id, v.verifier_ref
-                ));
+                )
+                );
             }
         }
     }
     for (i, a) in ir.verification.iter().enumerate() {
         for b in ir.verification.iter().skip(i + 1) {
-            if b.claim_id == a.claim_id && b.verifier_ref == a.verifier_ref && b.inline_shell == a.inline_shell {
-                push!(1, "duplicate-verify", &a.claim_id, format!(
-                    "VERIFY '{}' → '{}' declared twice", a.claim_id, a.verifier_ref
-                ));
+            if b.claim_id == a.claim_id
+                && b.verifier_ref == a.verifier_ref
+                && b.inline_shell == a.inline_shell
+            {
+                push!(
+                    1,
+                    "duplicate-verify",
+                    &a.claim_id,
+                    format!(
+                        "VERIFY '{}' → '{}' declared twice",
+                        a.claim_id, a.verifier_ref
+                    )
+                );
             }
         }
     }
     // v0.4: a selector-template verifier needs an authorized selector binding,
     // and the specific message beats the generic unbound-requirement warning.
     for v in &ir.verification {
-        let Some(spec) = registry.get(&v.verifier_ref) else { continue };
+        let Some(spec) = registry.get(&v.verifier_ref) else {
+            continue;
+        };
         if !uni_verify::is_selector_template(spec) {
             continue;
         }
@@ -61,7 +82,10 @@ pub(crate) fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
             Some(b) => {
                 b.verifier_ref == v.verifier_ref
                     && b.requirement == v.requirement.clone().unwrap_or_default()
-                    && b.selector.as_deref().map(|s| !s.trim().is_empty()).unwrap_or(false)
+                    && b.selector
+                        .as_deref()
+                        .map(|s| !s.trim().is_empty())
+                        .unwrap_or(false)
             }
             None => false,
         };
@@ -82,7 +106,9 @@ pub(crate) fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
     // decision engine is untouched, but new contracts get nudged toward a
     // {{selector}} template plus `uni brief` as the handoff.
     for v in &ir.verification {
-        let Some(spec) = registry.get(&v.verifier_ref) else { continue };
+        let Some(spec) = registry.get(&v.verifier_ref) else {
+            continue;
+        };
         if !uni_verify::pinned_test_selector(spec) {
             continue;
         }
@@ -124,7 +150,12 @@ pub(crate) fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
     } else {
         println!("uni lint — {}", ir.intent.id);
         for f in &findings {
-            println!("  {} {:<18} {}", if f.severity == 2 { "ERROR" } else { "WARN " }, f.kind, f.message);
+            println!(
+                "  {} {:<18} {}",
+                if f.severity == 2 { "ERROR" } else { "WARN " },
+                f.kind,
+                f.message
+            );
         }
         if findings.is_empty() {
             println!("  clean: coverage complete, registry refs ok");
@@ -158,8 +189,7 @@ pub(crate) fn cmd_init() -> Result<()> {
 }
 
 pub(crate) fn load_contract(file: &Path) -> Result<(uni_ir::Ir, uni_parser::Contract)> {
-    let src = std::fs::read_to_string(file)
-        .with_context(|| format!("read {}", file.display()))?;
+    let src = std::fs::read_to_string(file).with_context(|| format!("read {}", file.display()))?;
     let ast = uni_parser::parse(&src)?;
     let ir = uni_ir::compile(&ast)?;
     Ok((ir, ast))

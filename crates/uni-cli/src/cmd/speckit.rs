@@ -1,6 +1,6 @@
-use anyhow::{Result, anyhow};
-use std::path::{Path};
-use crate::{dot_uni};
+use crate::dot_uni;
+use anyhow::{anyhow, Result};
+use std::path::Path;
 
 /// Minimal SpecKit importer (MVP): constitution.md + spec.md + plan.md -> candidate contract JSON.
 /// Never authoritative: prints DIFF/REVIEW reminder; human must approve into uni/intents/.
@@ -51,21 +51,39 @@ pub(crate) fn cmd_import_speckit(dir: &Path, as_json: bool) -> Result<()> {
         let (maybe_id, text) = if t.starts_with("FR-") {
             // FR-001: description | FR-001 description
             let head: &str = t.split([':', ' ']).next().unwrap_or("");
-            let desc = t.split_once(|c| c == ':' || c == ' ').map(|(_, d)| d.trim()).unwrap_or(t);
-            (head.trim_end_matches(['*', ':']).to_lowercase(), desc.to_string())
+            let desc = t
+                .split_once(|c| c == ':' || c == ' ')
+                .map(|(_, d)| d.trim())
+                .unwrap_or(t);
+            (
+                head.trim_end_matches(['*', ':']).to_lowercase(),
+                desc.to_string(),
+            )
         } else if let Some(b) = t.strip_prefix("**FR-") {
             let head: &str = b.split([':', '*', ' ']).next().unwrap_or("");
             let desc = b
                 .split_once("**:")
                 .map(|(_, d)| d.trim())
                 .unwrap_or(t.trim_start_matches("**"));
-            (format!("fr-{}", head.trim_matches(['*', ':'])), desc.to_string())
+            (
+                format!("fr-{}", head.trim_matches(['*', ':'])),
+                desc.to_string(),
+            )
         } else if t.starts_with("Requirement") {
-            (t.split_whitespace().next().unwrap_or("").to_lowercase(), t.to_string())
+            (
+                t.split_whitespace().next().unwrap_or("").to_lowercase(),
+                t.to_string(),
+            )
         } else if let Some(s) = t.strip_prefix("Scenario:") {
-            (format!("scenario-{:02}", claims.len() + 1), s.trim().to_string())
+            (
+                format!("scenario-{:02}", claims.len() + 1),
+                s.trim().to_string(),
+            )
         } else if t.starts_with("[ ]") || t.starts_with("[x]") {
-            (format!("check-{:02}", claims.len() + 1), t[4..].trim().to_string())
+            (
+                format!("check-{:02}", claims.len() + 1),
+                t[4..].trim().to_string(),
+            )
         } else {
             continue;
         };
@@ -73,7 +91,11 @@ pub(crate) fn cmd_import_speckit(dir: &Path, as_json: bool) -> Result<()> {
             claims.push((maybe_id, text.chars().take(160).collect()));
         }
     }
-    let intent_id = dir.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let intent_id = dir
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
     if claims.is_empty() {
         claims.push((
             "intent-satisfied".into(),
@@ -86,14 +108,19 @@ pub(crate) fn cmd_import_speckit(dir: &Path, as_json: bool) -> Result<()> {
         "VERSION 0.1\nDOMAIN software\nINTENT candidate-{intent_id}\nGOAL\n  Imported from Spec Kit (candidate — review required).\n"
     );
     for (id, ensure) in &claims {
-        dsl.push_str(&format!("CLAIM {id} REQUIRED\n  ENSURE {}\n", ensure.replace('\n', " ")));
+        dsl.push_str(&format!(
+            "CLAIM {id} REQUIRED\n  ENSURE {}\n",
+            ensure.replace('\n', " ")
+        ));
     }
     for (id, _) in &claims {
         dsl.push_str(&format!("VERIFY {id}\n  USING project.tests\n"));
     }
     dsl.push_str("ACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n");
 
-    let out_dsl = dot_uni().join("contracts").join(format!("candidate-{intent_id}.uni"));
+    let out_dsl = dot_uni()
+        .join("contracts")
+        .join(format!("candidate-{intent_id}.uni"));
     std::fs::create_dir_all(dot_uni().join("contracts"))?;
     std::fs::write(&out_dsl, &dsl)?;
 
@@ -103,17 +130,19 @@ pub(crate) fn cmd_import_speckit(dir: &Path, as_json: bool) -> Result<()> {
     let out_brief = dot_uni()
         .join("contracts")
         .join(format!("candidate-{intent_id}.brief.md"));
-    let (brief_claims, brief_problems) = match uni_parser::parse(&dsl)
-        .and_then(|ast| uni_ir::compile(&ast))
-    {
-        Ok(ir) => {
-            let registry = uni_verify::load_registry(&dot_uni());
-            let (claims, problems) = crate::brief::build(&ir, &registry);
-            std::fs::write(&out_brief, format!("{}\n", crate::brief::to_markdown(&ir, &claims, &problems)))?;
-            (claims.len(), problems)
-        }
-        Err(e) => (0, vec![format!("candidate did not compile: {e}")]),
-    };
+    let (brief_claims, brief_problems) =
+        match uni_parser::parse(&dsl).and_then(|ast| uni_ir::compile(&ast)) {
+            Ok(ir) => {
+                let registry = uni_verify::load_registry(&dot_uni());
+                let (claims, problems) = crate::brief::build(&ir, &registry);
+                std::fs::write(
+                    &out_brief,
+                    format!("{}\n", crate::brief::to_markdown(&ir, &claims, &problems)),
+                )?;
+                (claims.len(), problems)
+            }
+            Err(e) => (0, vec![format!("candidate did not compile: {e}")]),
+        };
     let candidate = serde_json::json!({
         "uniVersion": "0.1",
         "intent": {"id": intent_id, "domain": "software"},

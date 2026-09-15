@@ -131,12 +131,13 @@ fn default_true() -> bool {
 }
 
 /// Deterministic policy application on top of the engine result.
-pub fn apply_policy(
-    mut result: DecisionResult,
-    policy: &Policy,
-) -> DecisionResult {
+pub fn apply_policy(mut result: DecisionResult, policy: &Policy) -> DecisionResult {
     let total = result.claims.len();
-    let verified = result.claims.iter().filter(|c| c.state == EvidenceState::Valid).count();
+    let verified = result
+        .claims
+        .iter()
+        .filter(|c| c.state == EvidenceState::Valid)
+        .count();
 
     let ratio: f64 = verified as f64 / total.max(1) as f64;
     if total > 0 && policy.min_verified_ratio > 0.0 && ratio < policy.min_verified_ratio {
@@ -148,13 +149,16 @@ pub fn apply_policy(
         return result;
     }
 
-    let has_stale = result.claims.iter().any(|c| c.state == EvidenceState::Stale);
-    let has_invalid = result.claims.iter().any(|c| c.state == EvidenceState::Invalid);
+    let has_stale = result
+        .claims
+        .iter()
+        .any(|c| c.state == EvidenceState::Stale);
+    let has_invalid = result
+        .claims
+        .iter()
+        .any(|c| c.state == EvidenceState::Invalid);
 
-    if has_stale
-        && policy.escalate_on_stale
-        && result.decision != Decision::Accepted
-    {
+    if has_stale && policy.escalate_on_stale && result.decision != Decision::Accepted {
         result.decision = Decision::Escalated;
         result.reason = format!("policy escalate_on_stale: {}", result.reason);
         return result;
@@ -165,10 +169,7 @@ pub fn apply_policy(
         result.reason = format!("policy reject_on_invalid=false: {}", result.reason);
         return result;
     }
-    if has_invalid
-        && policy.escalate_on_missing
-        && base == "EvidenceRequired"
-    {
+    if has_invalid && policy.escalate_on_missing && base == "EvidenceRequired" {
         result.decision = Decision::Escalated;
         result.reason = format!("policy escalate_on_missing: {}", result.reason);
     }
@@ -196,7 +197,10 @@ impl PolicyProvider for TomlPolicy<'_> {
 
 /// Files sorted by name; later boolean values win, ratio takes the max.
 pub fn load_policies(dir: &std::path::Path) -> Policy {
-    let mut policy = Policy { reject_on_invalid: true, ..Default::default() };
+    let mut policy = Policy {
+        reject_on_invalid: true,
+        ..Default::default()
+    };
     if let Ok(rd) = std::fs::read_dir(dir) {
         let mut files: Vec<_> = rd
             .flatten()
@@ -248,29 +252,56 @@ fn escalate(b: Option<bool>) -> bool {
 impl PolicyProvider for OpaPolicy {
     fn resolve(&self) -> Policy {
         let output = std::process::Command::new("opa")
-            .args(["eval", "data.uni.rules", "-d", self.bundle.display().to_string().as_str(), "-f", "values"])
+            .args([
+                "eval",
+                "data.uni.rules",
+                "-d",
+                self.bundle.display().to_string().as_str(),
+                "-f",
+                "values",
+            ])
             .output();
         let Ok(out) = output else {
-            return Policy { reject_on_invalid: true, ..Default::default() };
+            return Policy {
+                reject_on_invalid: true,
+                ..Default::default()
+            };
         };
         if !out.status.success() {
-            return Policy { reject_on_invalid: true, ..Default::default() };
+            return Policy {
+                reject_on_invalid: true,
+                ..Default::default()
+            };
         }
         let Ok(text) = String::from_utf8(out.stdout) else {
-            return Policy { reject_on_invalid: true, ..Default::default() };
+            return Policy {
+                reject_on_invalid: true,
+                ..Default::default()
+            };
         };
         let v: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
-        let first = v.as_array().and_then(|a| a.first()).and_then(|x| x.as_object()).cloned().unwrap_or_default();
+        let first = v
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(|x| x.as_object())
+            .cloned()
+            .unwrap_or_default();
         Policy {
-            reject_on_invalid: first.get("reject_on_invalid").and_then(|x| x.as_bool()).unwrap_or(true),
+            reject_on_invalid: first
+                .get("reject_on_invalid")
+                .and_then(|x| x.as_bool())
+                .unwrap_or(true),
             escalate_on_stale: escalate(first.get("escalate_on_stale").and_then(|x| x.as_bool())),
-            escalate_on_missing: escalate(first.get("escalate_on_missing").and_then(|x| x.as_bool())),
-            min_verified_ratio: first.get("min_verified_ratio").and_then(|x| x.as_f64()).unwrap_or(0.0),
+            escalate_on_missing: escalate(
+                first.get("escalate_on_missing").and_then(|x| x.as_bool()),
+            ),
+            min_verified_ratio: first
+                .get("min_verified_ratio")
+                .and_then(|x| x.as_f64())
+                .unwrap_or(0.0),
         }
     }
 }
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DecisionResult {
@@ -346,7 +377,10 @@ pub fn evaluate(ir: &Ir, evidences: &[Evidence]) -> DecisionResult {
     }
 
     let (decision, reason) = if critical_fail > 0 {
-        (Decision::Rejected, format!("{critical_fail} critical failure(s)"))
+        (
+            Decision::Rejected,
+            format!("{critical_fail} critical failure(s)"),
+        )
     } else if missing > 0 {
         (
             Decision::EvidenceRequired,
@@ -424,10 +458,7 @@ mod tests {
             evaluate(&ir1(), &[ev(EvidenceState::Valid, 0)]).decision,
             Decision::Accepted
         );
-        assert_eq!(
-            evaluate(&ir1(), &[]).decision,
-            Decision::EvidenceRequired
-        );
+        assert_eq!(evaluate(&ir1(), &[]).decision, Decision::EvidenceRequired);
         assert_eq!(
             evaluate(&ir1(), &[ev(EvidenceState::Stale, 0)]).decision,
             Decision::EvidenceRequired
@@ -556,18 +587,39 @@ mod decision_matrix {
     fn required_claim_matrix() {
         let ir = Ir {
             uni_version: "0.1".into(),
-            intent: uni_ir::IntentIr { id: "x".into(), domain: "s".into(), goal: "g".into() },
+            intent: uni_ir::IntentIr {
+                id: "x".into(),
+                domain: "s".into(),
+                goal: "g".into(),
+            },
             claims: vec![uni_ir::ClaimIr {
-                id: "a".into(), kind: "claim".into(), required: true, critical: false, ensure: "e".into(),
+                id: "a".into(),
+                kind: "claim".into(),
+                required: true,
+                critical: false,
+                ensure: "e".into(),
             }],
             verification: vec![],
-            acceptance: uni_ir::AcceptanceIr { require_verified: true },
+            acceptance: uni_ir::AcceptanceIr {
+                require_verified: true,
+            },
         };
         let mk = |st: EvidenceState, code: i32| Evidence {
-            id: "a-e".into(), claim_id: "a".into(), producer: "t".into(), command: "c".into(),
-            exit_code: code, output_hash: "h".into(), output_excerpt: "".into(),
-            commit_sha: "s".into(), workspace_dirty: false, state: st,
-            created_at: chrono::Utc::now(), duration_ms: 1, artifact_hash: String::new(), artifact_files: Default::default(), fingerprint: String::new(),
+            id: "a-e".into(),
+            claim_id: "a".into(),
+            producer: "t".into(),
+            command: "c".into(),
+            exit_code: code,
+            output_hash: "h".into(),
+            output_excerpt: "".into(),
+            commit_sha: "s".into(),
+            workspace_dirty: false,
+            state: st,
+            created_at: chrono::Utc::now(),
+            duration_ms: 1,
+            artifact_hash: String::new(),
+            artifact_files: Default::default(),
+            fingerprint: String::new(),
             expires_at: None,
             registry_hash: String::new(),
             policy_hash: String::new(),
@@ -578,27 +630,52 @@ mod decision_matrix {
             executor: uni_evidence::Actor::local(),
         };
         // valid + exit 0 → Accepted
-        assert_eq!(evaluate(&ir, &[mk(EvidenceState::Valid, 0)]).decision, Decision::Accepted);
+        assert_eq!(
+            evaluate(&ir, &[mk(EvidenceState::Valid, 0)]).decision,
+            Decision::Accepted
+        );
         // valid but exit != 0 → EvidenceRequired (no critical)
-        assert_eq!(evaluate(&ir, &[mk(EvidenceState::Valid, 1)]).decision, Decision::EvidenceRequired);
+        assert_eq!(
+            evaluate(&ir, &[mk(EvidenceState::Valid, 1)]).decision,
+            Decision::EvidenceRequired
+        );
         // missing
         assert_eq!(evaluate(&ir, &[]).decision, Decision::EvidenceRequired);
         // stale → needs revalidation
-        assert_eq!(evaluate(&ir, &[mk(EvidenceState::Stale, 0)]).decision, Decision::EvidenceRequired);
+        assert_eq!(
+            evaluate(&ir, &[mk(EvidenceState::Stale, 0)]).decision,
+            Decision::EvidenceRequired
+        );
         // invalid
-        assert_eq!(evaluate(&ir, &[mk(EvidenceState::Invalid, 1)]).decision, Decision::EvidenceRequired);
+        assert_eq!(
+            evaluate(&ir, &[mk(EvidenceState::Invalid, 1)]).decision,
+            Decision::EvidenceRequired
+        );
 
         // critical: missing → EvidenceRequired (cannot silently accept), invalid → REJECTED
         let mut irc = ir.clone();
         irc.claims[0].critical = true;
-        assert_eq!(evaluate(&irc, &[mk(EvidenceState::Valid, 0)]).decision, Decision::Accepted);
-        assert_eq!(evaluate(&irc, &[mk(EvidenceState::Invalid, 1)]).decision, Decision::Rejected);
+        assert_eq!(
+            evaluate(&irc, &[mk(EvidenceState::Valid, 0)]).decision,
+            Decision::Accepted
+        );
+        assert_eq!(
+            evaluate(&irc, &[mk(EvidenceState::Invalid, 1)]).decision,
+            Decision::Rejected
+        );
         // partial: 2 required, one valid one missing
         let mut ir2 = ir.clone();
         ir2.claims.push(uni_ir::ClaimIr {
-            id: "b".into(), kind: "claim".into(), required: true, critical: false, ensure: "e".into(),
+            id: "b".into(),
+            kind: "claim".into(),
+            required: true,
+            critical: false,
+            ensure: "e".into(),
         });
-        assert_eq!(evaluate(&ir2, &[mk(EvidenceState::Valid, 0)]).decision, Decision::EvidenceRequired);
+        assert_eq!(
+            evaluate(&ir2, &[mk(EvidenceState::Valid, 0)]).decision,
+            Decision::EvidenceRequired
+        );
     }
 }
 
@@ -611,7 +688,11 @@ mod policy_tests {
     fn ir_claims(n: usize) -> Ir {
         Ir {
             uni_version: "0.1".into(),
-            intent: IntentIr { id: "p".into(), domain: "s".into(), goal: "g".into() },
+            intent: IntentIr {
+                id: "p".into(),
+                domain: "s".into(),
+                goal: "g".into(),
+            },
             claims: (0..n)
                 .map(|i| ClaimIr {
                     id: format!("c{i}"),
@@ -622,7 +703,9 @@ mod policy_tests {
                 })
                 .collect(),
             verification: vec![],
-            acceptance: AcceptanceIr { require_verified: true },
+            acceptance: AcceptanceIr {
+                require_verified: true,
+            },
         }
     }
     fn ev(claim: &str, state: EvidenceState, code: i32) -> Evidence {
@@ -657,7 +740,13 @@ mod policy_tests {
     fn default_policy_matches_legacy_behavior() {
         let ir = ir_claims(1);
         let base = evaluate(&ir, &[]);
-        let out = apply_policy(base, &Policy { reject_on_invalid: true, ..Default::default() });
+        let out = apply_policy(
+            base,
+            &Policy {
+                reject_on_invalid: true,
+                ..Default::default()
+            },
+        );
         assert_eq!(out.decision, Decision::EvidenceRequired);
     }
 
@@ -665,7 +754,13 @@ mod policy_tests {
     fn escalate_on_stale_upgrades_required() {
         let ir = ir_claims(1);
         let base = evaluate(&ir, &[ev("c0", EvidenceState::Stale, 0)]);
-        let out = apply_policy(base, &Policy { escalate_on_stale: true, ..Default::default() });
+        let out = apply_policy(
+            base,
+            &Policy {
+                escalate_on_stale: true,
+                ..Default::default()
+            },
+        );
         assert_eq!(out.decision, Decision::Escalated);
         assert!(out.reason.contains("escalate_on_stale"));
     }
@@ -673,22 +768,41 @@ mod policy_tests {
     #[test]
     fn min_verified_ratio_rejects() {
         let ir = ir_claims(4);
-        let evs: Vec<Evidence> = (0..1).map(|i| ev(&format!("c{i}"), EvidenceState::Valid, 0)).collect();
+        let evs: Vec<Evidence> = (0..1)
+            .map(|i| ev(&format!("c{i}"), EvidenceState::Valid, 0))
+            .collect();
         let base = evaluate(&ir, &evs);
-        let out = apply_policy(base, &Policy { min_verified_ratio: 0.75, ..Default::default() });
+        let out = apply_policy(
+            base,
+            &Policy {
+                min_verified_ratio: 0.75,
+                ..Default::default()
+            },
+        );
         assert_eq!(out.decision, Decision::Rejected);
         assert!(out.reason.contains("min_verified_ratio"));
     }
 
     #[test]
     fn policies_load_from_toml_stack() {
-        let dir = std::env::temp_dir().join(format!("uni-pol-{}",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+        let dir = std::env::temp_dir().join(format!(
+            "uni-pol-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("01-base.toml"),
-"[policy]\nescalate_on_stale = true\nmin_verified_ratio = 0.5\n").unwrap();
-        std::fs::write(dir.join("02-override.toml"),
-"[policy]\nreject_on_invalid = false\n").unwrap();
+        std::fs::write(
+            dir.join("01-base.toml"),
+            "[policy]\nescalate_on_stale = true\nmin_verified_ratio = 0.5\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("02-override.toml"),
+            "[policy]\nreject_on_invalid = false\n",
+        )
+        .unwrap();
         let p = load_policies(&dir);
         assert!(!p.reject_on_invalid);
         assert!(p.escalate_on_stale);
@@ -705,7 +819,11 @@ mod policy_property {
     fn ir_n(n: usize) -> Ir {
         Ir {
             uni_version: "0.1".into(),
-            intent: IntentIr { id: "x".into(), domain: "s".into(), goal: "g".into() },
+            intent: IntentIr {
+                id: "x".into(),
+                domain: "s".into(),
+                goal: "g".into(),
+            },
             claims: (0..n)
                 .map(|i| ClaimIr {
                     id: format!("c{i}"),
@@ -716,7 +834,9 @@ mod policy_property {
                 })
                 .collect(),
             verification: vec![],
-            acceptance: uni_ir::AcceptanceIr { require_verified: true },
+            acceptance: uni_ir::AcceptanceIr {
+                require_verified: true,
+            },
         }
     }
     fn ev(claim: &str, state: EvidenceState, code: i32) -> Evidence {
@@ -829,8 +949,16 @@ mod independence_tests {
             platform: String::new(),
             binding_hash: String::new(),
             expires_at: None,
-            actor: Actor { id: actor_id.into(), source: "cli".into(), assurance: assurance.into() },
-            executor: Actor { id: executor_id.into(), source: "local".into(), assurance: "self-declared".into() },
+            actor: Actor {
+                id: actor_id.into(),
+                source: "cli".into(),
+                assurance: assurance.into(),
+            },
+            executor: Actor {
+                id: executor_id.into(),
+                source: "local".into(),
+                assurance: "self-declared".into(),
+            },
         }
     }
 
@@ -861,8 +989,7 @@ mod independence_tests {
 
     #[test]
     fn assurance_splits_independence_from_identity() {
-        let declared =
-            vec![ev("ci:build-12", "local:alice", "self-declared")];
+        let declared = vec![ev("ci:build-12", "local:alice", "self-declared")];
         assert_eq!(assurance_for(&Decision::Accepted, &declared), "A3-D");
         assert_eq!(identity_assurance(&declared), "SELF-DECLARED");
         let verified = vec![ev("spiffe://acme/v", "local:alice", "verified")];
@@ -883,7 +1010,12 @@ mod independence_tests {
         let s = Actor::declared("spiffe://acme/verifier/b12");
         assert_eq!(s.source, "spiffe");
         assert_eq!(s.assurance, "self-declared");
-        assert!(Actor { id: "".into(), source: "cli".into(), assurance: "self-declared".into() }.is_anonymous());
+        assert!(Actor {
+            id: "".into(),
+            source: "cli".into(),
+            assurance: "self-declared".into()
+        }
+        .is_anonymous());
         assert!(!Actor::local().is_anonymous());
     }
 }

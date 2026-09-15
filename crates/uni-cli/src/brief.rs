@@ -30,7 +30,8 @@ pub fn test_selector(command: &str) -> Option<String> {
     // cargo test <name> [-- --exact]
     if let Some(i) = tokens.iter().position(|t| *t == "test") {
         if let Some(candidate) = tokens.get(i + 1) {
-            if !candidate.starts_with('-') && *candidate != "--" && !candidate.starts_with("tests") {
+            if !candidate.starts_with('-') && *candidate != "--" && !candidate.starts_with("tests")
+            {
                 return Some((*candidate).to_string());
             }
         }
@@ -100,11 +101,19 @@ pub fn build<'a>(
             problems.push(format!("claim '{}' has no VERIFY", c.id));
         }
         if let Some(p) = &problem {
-            if registry.get(verifier_ref.as_deref().unwrap_or("")).is_none() {
+            if registry
+                .get(verifier_ref.as_deref().unwrap_or(""))
+                .is_none()
+            {
                 problems.push(format!("claim '{}': {p}", c.id));
             }
         }
-        out.push(ClaimBrief { claim: c, verifier_ref, spec, problem });
+        out.push(ClaimBrief {
+            claim: c,
+            verifier_ref,
+            spec,
+            problem,
+        });
     }
     (out, problems)
 }
@@ -168,7 +177,11 @@ pub fn to_markdown(ir: &Ir, claims: &[ClaimBrief], problems: &[String]) -> Strin
     md.push_str("## Claims to satisfy\n\n");
     for b in claims {
         let critical = if b.claim.critical { " CRITICAL" } else { "" };
-        let required = if b.claim.required { "required" } else { "optional" };
+        let required = if b.claim.required {
+            "required"
+        } else {
+            "optional"
+        };
         md.push_str(&format!(
             "### {} ({}, {}{})\n",
             b.claim.id, b.claim.kind, required, critical
@@ -182,10 +195,7 @@ pub fn to_markdown(ir: &Ir, claims: &[ClaimBrief], problems: &[String]) -> Strin
                 if spec.kind == "file-hash" {
                     md.push_str("- type: file-hash (no command runs)\n");
                     if !spec.files.is_empty() {
-                        md.push_str(&format!(
-                            "- watched files: {}\n",
-                            spec.files.join(", ")
-                        ));
+                        md.push_str(&format!("- watched files: {}\n", spec.files.join(", ")));
                     }
                     if !spec.expect_sha256.is_empty() {
                         md.push_str("- expected sha256:\n");
@@ -206,7 +216,8 @@ pub fn to_markdown(ir: &Ir, claims: &[ClaimBrief], problems: &[String]) -> Strin
                     ));
                     md.push_str(&format!(
                         "- it will run as: `{}`\n",
-                        spec.run.replace(uni_verify::SELECTOR_TOKEN, "<your-test-name>")
+                        spec.run
+                            .replace(uni_verify::SELECTOR_TOKEN, "<your-test-name>")
                     ));
                     if !spec.expect.is_empty() {
                         md.push_str(&format!("- required in output: `{}`\n", spec.expect));
@@ -214,16 +225,10 @@ pub fn to_markdown(ir: &Ir, claims: &[ClaimBrief], problems: &[String]) -> Strin
                 } else {
                     md.push_str(&format!("- command: `{}`\n", spec.run));
                     if !spec.expect.is_empty() {
-                        md.push_str(&format!(
-                            "- required in output: `{}`\n",
-                            spec.expect
-                        ));
+                        md.push_str(&format!("- required in output: `{}`\n", spec.expect));
                     }
                     if !spec.expect_not.is_empty() {
-                        md.push_str(&format!(
-                            "- forbidden in output: `{}`\n",
-                            spec.expect_not
-                        ));
+                        md.push_str(&format!("- forbidden in output: `{}`\n", spec.expect_not));
                     }
                     if !spec.files.is_empty() {
                         md.push_str(&format!(
@@ -245,7 +250,9 @@ pub fn to_markdown(ir: &Ir, claims: &[ClaimBrief], problems: &[String]) -> Strin
                 ));
             }
             _ => {
-                md.push_str("\nEvidence required: nothing declared. This claim cannot be accepted.\n");
+                md.push_str(
+                    "\nEvidence required: nothing declared. This claim cannot be accepted.\n",
+                );
             }
         }
         md.push('\n');
@@ -282,19 +289,29 @@ mod tests {
 
     #[test]
     fn selector_extraction_is_conservative() {
-        assert_eq!(test_selector("cargo test clamp_upper_works -- --exact").as_deref(), Some("clamp_upper_works"));
+        assert_eq!(
+            test_selector("cargo test clamp_upper_works -- --exact").as_deref(),
+            Some("clamp_upper_works")
+        );
         assert_eq!(test_selector("cargo test").as_deref(), None);
         assert_eq!(test_selector("cargo check"), None);
         assert_eq!(test_selector("true"), None);
         assert_eq!(
-            test_selector("node --test --test-name-pattern \"spaces become dashes\" x.mjs").as_deref(),
+            test_selector("node --test --test-name-pattern \"spaces become dashes\" x.mjs")
+                .as_deref(),
             Some("spaces become dashes")
         );
-        assert_eq!(test_selector("pytest -k bump_floor").as_deref(), Some("bump_floor"));
+        assert_eq!(
+            test_selector("pytest -k bump_floor").as_deref(),
+            Some("bump_floor")
+        );
         assert_eq!(
             test_selector("python3 -m unittest test_pricing.Pricing.test_floor").as_deref(),
             Some("test_floor")
         );
-        assert_eq!(test_selector("python3 -m unittest discover -p 'test_*.py'").as_deref(), None);
+        assert_eq!(
+            test_selector("python3 -m unittest discover -p 'test_*.py'").as_deref(),
+            None
+        );
     }
 }

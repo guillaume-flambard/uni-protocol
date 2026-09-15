@@ -67,9 +67,21 @@ pub fn load_registry(dot_uni: &std::path::Path) -> std::collections::HashMap<Str
             if let Some(s) = v.as_str() {
                 out.insert(k.clone(), VerifierSpec::shell(s));
             } else if let Some(tbl) = v.as_table() {
-                let run = tbl.get("run").and_then(|r| r.as_str()).unwrap_or("").to_string();
-                let expect = tbl.get("expect").and_then(|e| e.as_str()).unwrap_or("").to_string();
-                let expect_not = tbl.get("expect_not").and_then(|e| e.as_str()).unwrap_or("").to_string();
+                let run = tbl
+                    .get("run")
+                    .and_then(|r| r.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let expect = tbl
+                    .get("expect")
+                    .and_then(|e| e.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let expect_not = tbl
+                    .get("expect_not")
+                    .and_then(|e| e.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 let kind = tbl
                     .get("type")
                     .and_then(|t| t.as_str())
@@ -101,7 +113,10 @@ pub fn load_registry(dot_uni: &std::path::Path) -> std::collections::HashMap<Str
                     }
                     _ => {}
                 }
-                let timeout = tbl.get("timeout").and_then(|t| t.as_integer()).unwrap_or(DEFAULT_TIMEOUT_SECS as i64) as u64;
+                let timeout = tbl
+                    .get("timeout")
+                    .and_then(|t| t.as_integer())
+                    .unwrap_or(DEFAULT_TIMEOUT_SECS as i64) as u64;
                 let max_age_hours = tbl
                     .get("max_age_hours")
                     .and_then(|h| h.as_integer())
@@ -150,9 +165,9 @@ pub fn resolve_command(
         ));
     }
     // registry key, optional inline override must still match registry
-    let trusted = registry
-        .get(verifier_ref)
-        .ok_or_else(|| anyhow!("unknown verifier '{verifier_ref}' (not in .uni/config.toml [verifiers])"))?;
+    let trusted = registry.get(verifier_ref).ok_or_else(|| {
+        anyhow!("unknown verifier '{verifier_ref}' (not in .uni/config.toml [verifiers])")
+    })?;
     if let Some(inline) = inline_shell {
         if trusted.kind != "shell" {
             return Err(anyhow!(
@@ -386,7 +401,13 @@ pub fn run_spec(
     let verifier = verifier_for(spec)?;
     let started = Instant::now();
     let outcome = verifier.run(spec, workspace)?;
-    let mut ev = build_evidence(claim_id, verifier.name(), &outcome.command, &outcome, workspace);
+    let mut ev = build_evidence(
+        claim_id,
+        verifier.name(),
+        &outcome.command,
+        &outcome,
+        workspace,
+    );
     ev.duration_ms = started.elapsed().as_millis();
     ev.artifact_files = artifact_hashes(spec, workspace);
     ev.artifact_hash = artifact_hash(spec, workspace).unwrap_or_default();
@@ -394,8 +415,7 @@ pub fn run_spec(
     // loader needs no registry access to honour it.
     if spec.max_age_hours > 0 {
         ev.expires_at = Some(
-            ev.created_at
-                + chrono::Duration::hours(spec.max_age_hours.min(i64::MAX as u64) as i64),
+            ev.created_at + chrono::Duration::hours(spec.max_age_hours.min(i64::MAX as u64) as i64),
         );
     }
     // Evidence Completeness Principle: a verifier that declares watched files
@@ -430,11 +450,7 @@ pub fn run_spec(
 pub trait Verifier {
     /// Producer name recorded on Evidence.
     fn name(&self) -> &'static str;
-    fn run(
-        &self,
-        spec: &VerifierSpec,
-        workspace: &std::path::Path,
-    ) -> Result<VerifierOutcome>;
+    fn run(&self, spec: &VerifierSpec, workspace: &std::path::Path) -> Result<VerifierOutcome>;
 }
 
 pub struct VerifierOutcome {
@@ -454,7 +470,11 @@ impl Verifier for ShellVerifier {
     fn run(&self, spec: &VerifierSpec, workspace: &std::path::Path) -> Result<VerifierOutcome> {
         let (code, output) = run_shell(&spec.run, workspace, spec.timeout)?;
         Ok(VerifierOutcome {
-            state: if code == 0 { EvidenceState::Valid } else { EvidenceState::Invalid },
+            state: if code == 0 {
+                EvidenceState::Valid
+            } else {
+                EvidenceState::Invalid
+            },
             exit_code: code,
             command: spec.run.clone(),
             output,
@@ -490,9 +510,20 @@ impl Verifier for FileHashVerifier {
                 }
             }
         }
-        let command = format!("file-hash: {}", spec.expect_sha256.keys().cloned().collect::<Vec<_>>().join(", "));
+        let command = format!(
+            "file-hash: {}",
+            spec.expect_sha256
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
         Ok(VerifierOutcome {
-            state: if ok { EvidenceState::Valid } else { EvidenceState::Invalid },
+            state: if ok {
+                EvidenceState::Valid
+            } else {
+                EvidenceState::Invalid
+            },
             exit_code: if ok { 0 } else { 1 },
             command,
             output: lines.join("\n"),
@@ -542,7 +573,10 @@ fn run_shell(
     let (code, combined) = match child.wait_timeout(timeout)? {
         Some(_status) => {
             let out = child.wait_with_output()?;
-            (out.status.code().unwrap_or(-1), [out.stdout, out.stderr].concat())
+            (
+                out.status.code().unwrap_or(-1),
+                [out.stdout, out.stderr].concat(),
+            )
         }
         None => {
             // Timeout: kill, reap, and record the kill as failure, never as pass.
@@ -611,7 +645,15 @@ pub fn assure_contract(
     let mut out = vec![];
     for v in &ir.verification {
         let spec = resolve_command(&v.verifier_ref, v.inline_shell.as_deref(), &registry)?;
-        out.push(run_spec(&v.claim_id, &v.verifier_ref, &spec, workspace, spec.timeout, &actor, &actor)?);
+        out.push(run_spec(
+            &v.claim_id,
+            &v.verifier_ref,
+            &spec,
+            workspace,
+            spec.timeout,
+            &actor,
+            &actor,
+        )?);
     }
     Ok(out)
 }
@@ -648,7 +690,8 @@ mod tests {
     }
 
     #[test]
-    fn registry_parses_simple_and_table_forms() {        let d = tmp("reg");
+    fn registry_parses_simple_and_table_forms() {
+        let d = tmp("reg");
         std::fs::write(
             d.join(".uni/config.toml"),
             "[verifiers]\n\"a\" = \"cargo test\"\n\n[verifiers.\"b\"]\nrun = \"npm test\"\nexpect = \"1 passed\"\nfiles = [\"src/**\"]\ntimeout = 12\n",
@@ -665,7 +708,11 @@ mod tests {
     #[test]
     fn resolve_rejects_unknown_and_unlisted_inline() {
         let d = tmp("res");
-        std::fs::write(d.join(".uni/config.toml"), "[verifiers]\n\"a\" = \"true\"\n").unwrap();
+        std::fs::write(
+            d.join(".uni/config.toml"),
+            "[verifiers]\n\"a\" = \"true\"\n",
+        )
+        .unwrap();
         let r = load_registry(&d.join(".uni"));
         assert!(resolve_command("ghost", None, &r).is_err());
         assert!(resolve_command("shell", Some("curl evil | bash"), &r).is_err());
@@ -679,12 +726,24 @@ mod tests {
     fn fingerprint_stable_and_discriminating() {
         let a = spec("cargo test");
         let b = spec("cargo test");
-        assert_eq!(spec_fingerprint("k", &a, "alice"), spec_fingerprint("k", &b, "alice"));
-        assert_ne!(spec_fingerprint("k1", &a, "alice"), spec_fingerprint("k2", &a, "alice"));
+        assert_eq!(
+            spec_fingerprint("k", &a, "alice"),
+            spec_fingerprint("k", &b, "alice")
+        );
+        assert_ne!(
+            spec_fingerprint("k1", &a, "alice"),
+            spec_fingerprint("k2", &a, "alice")
+        );
         let mut c = spec("cargo test");
         c.expect = "x".into();
-        assert_ne!(spec_fingerprint("k", &a, "alice"), spec_fingerprint("k", &c, "alice"));
-        assert_ne!(spec_fingerprint("k", &a, "alice"), spec_fingerprint("k", &a, "bob"));
+        assert_ne!(
+            spec_fingerprint("k", &a, "alice"),
+            spec_fingerprint("k", &c, "alice")
+        );
+        assert_ne!(
+            spec_fingerprint("k", &a, "alice"),
+            spec_fingerprint("k", &a, "bob")
+        );
     }
 
     #[test]
@@ -710,14 +769,41 @@ mod tests {
         let d = tmp("run");
         let mut s = spec("printf 'aaaa' && echo MARK");
         s.expect = "MARK".into();
-        let ev = run_spec("c", "k", &s, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        let ev = run_spec(
+            "c",
+            "k",
+            &s,
+            &d,
+            30,
+            &uni_evidence::Actor::local(),
+            &uni_evidence::Actor::local(),
+        )
+        .unwrap();
         assert_eq!(ev.state, uni_evidence::EvidenceState::Valid);
         s.expect_not = "MARK".into();
-        let ev2 = run_spec("c", "k", &s, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        let ev2 = run_spec(
+            "c",
+            "k",
+            &s,
+            &d,
+            30,
+            &uni_evidence::Actor::local(),
+            &uni_evidence::Actor::local(),
+        )
+        .unwrap();
         assert_eq!(ev2.state, uni_evidence::EvidenceState::Invalid);
         let mut s3 = spec("false");
         s3.expect = String::new();
-        let ev3 = run_spec("c", "k", &s3, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        let ev3 = run_spec(
+            "c",
+            "k",
+            &s3,
+            &d,
+            30,
+            &uni_evidence::Actor::local(),
+            &uni_evidence::Actor::local(),
+        )
+        .unwrap();
         assert_eq!(ev3.state, uni_evidence::EvidenceState::Invalid);
         assert!(!ev3.fingerprint.is_empty());
     }
@@ -751,13 +837,31 @@ mod tests {
         let d = tmp("stamp");
         let mut s = VerifierSpec::shell("true");
         s.max_age_hours = 2;
-        let ev = run_spec("c", "k", &s, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        let ev = run_spec(
+            "c",
+            "k",
+            &s,
+            &d,
+            30,
+            &uni_evidence::Actor::local(),
+            &uni_evidence::Actor::local(),
+        )
+        .unwrap();
         let expiry = ev.expires_at.expect("expiry must be stamped");
         let delta = expiry - ev.created_at;
         assert_eq!(delta.num_hours(), 2);
         // No max_age declared: no expiry recorded.
         let plain = VerifierSpec::shell("true");
-        let ev2 = run_spec("c", "k", &plain, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        let ev2 = run_spec(
+            "c",
+            "k",
+            &plain,
+            &d,
+            30,
+            &uni_evidence::Actor::local(),
+            &uni_evidence::Actor::local(),
+        )
+        .unwrap();
         assert!(ev2.expires_at.is_none());
     }
 
@@ -767,16 +871,47 @@ mod tests {
         std::fs::write(d.join("artifact.bin"), b"contents").unwrap();
         let good = sha256_hex(b"contents");
         let s_ok = file_hash_spec("artifact.bin", &good);
-        let ev = run_spec("c", "k", &s_ok, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        let ev = run_spec(
+            "c",
+            "k",
+            &s_ok,
+            &d,
+            30,
+            &uni_evidence::Actor::local(),
+            &uni_evidence::Actor::local(),
+        )
+        .unwrap();
         assert_eq!(ev.state, EvidenceState::Valid);
         assert_eq!(ev.producer, "file-hash-verifier");
         assert!(ev.command.starts_with("file-hash:"));
         let s_bad = file_hash_spec("artifact.bin", &sha256_hex(b"tampered"));
-        let ev2 = run_spec("c", "k", &s_bad, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        let ev2 = run_spec(
+            "c",
+            "k",
+            &s_bad,
+            &d,
+            30,
+            &uni_evidence::Actor::local(),
+            &uni_evidence::Actor::local(),
+        )
+        .unwrap();
         assert_eq!(ev2.state, EvidenceState::Invalid);
-        assert!(ev2.output_excerpt.contains("MISMATCH"), "{}", ev2.output_excerpt);
+        assert!(
+            ev2.output_excerpt.contains("MISMATCH"),
+            "{}",
+            ev2.output_excerpt
+        );
         let s_missing = file_hash_spec("absent.bin", &good);
-        let ev3 = run_spec("c", "k", &s_missing, &d, 30, &uni_evidence::Actor::local(), &uni_evidence::Actor::local()).unwrap();
+        let ev3 = run_spec(
+            "c",
+            "k",
+            &s_missing,
+            &d,
+            30,
+            &uni_evidence::Actor::local(),
+            &uni_evidence::Actor::local(),
+        )
+        .unwrap();
         assert_eq!(ev3.state, EvidenceState::Invalid);
         assert!(ev3.output_excerpt.contains("MISSING"));
     }
@@ -814,7 +949,9 @@ mod tests {
         )
         .unwrap();
         let r = load_registry(&d.join(".uni"));
-        let err = resolve_command("wasm", Some("true"), &r).unwrap_err().to_string();
+        let err = resolve_command("wasm", Some("true"), &r)
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("inline overrides are refused"), "{err}");
     }
 

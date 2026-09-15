@@ -1,6 +1,6 @@
-use anyhow::{Result, anyhow};
-use std::path::{Path};
 use crate::{dot_uni, events};
+use anyhow::{anyhow, Result};
+use std::path::Path;
 
 /// Human authorization act for VerifierBindings, journaled as such.
 pub(crate) fn cmd_bind(
@@ -55,7 +55,10 @@ pub(crate) fn cmd_bind(
                 ("uni.claim.id".into(), b.claim_id.clone()),
                 ("uni.verifier.id".into(), b.verifier_ref.clone()),
                 ("uni.binding.hash".into(), b.binding_hash.clone()),
-                ("uni.binding.selector".into(), b.selector.clone().unwrap_or_default()),
+                (
+                    "uni.binding.selector".into(),
+                    b.selector.clone().unwrap_or_default(),
+                ),
                 ("uni.binding.by".into(), by.clone()),
             ],
         })
@@ -71,7 +74,10 @@ pub(crate) fn cmd_bind(
         return Ok(());
     }
     for b in &authorized {
-        println!("authorized: claim '{}' -> verifier '{}'", b.claim_id, b.verifier_ref);
+        println!(
+            "authorized: claim '{}' -> verifier '{}'",
+            b.claim_id, b.verifier_ref
+        );
         if !b.requirement.is_empty() {
             println!("  requirement: {}", b.requirement);
         }
@@ -95,8 +101,10 @@ pub(crate) fn cmd_bindings(as_json: bool) -> Result<()> {
     } else {
         for b in &out {
             let sel = b.selector.as_deref().unwrap_or("-");
-            println!("{:<24} -> {:<24} selector {:<20} [{}] by {} at {}",
-                b.claim_id, b.verifier_ref, sel, b.binding_hash, b.authorized_by, b.authorized_at);
+            println!(
+                "{:<24} -> {:<24} selector {:<20} [{}] by {} at {}",
+                b.claim_id, b.verifier_ref, sel, b.binding_hash, b.authorized_by, b.authorized_at
+            );
         }
     }
     Ok(())

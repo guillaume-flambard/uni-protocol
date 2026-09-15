@@ -1,7 +1,7 @@
-use anyhow::{Result, anyhow};
-use std::path::{Path};
-use wait_timeout::ChildExt;
 use crate::{dot_uni, events};
+use anyhow::{anyhow, Result};
+use std::path::Path;
+use wait_timeout::ChildExt;
 
 /// The execute half of the loop: run the command the human chose, then verify
 /// the contract. The command comes from the command line, never from the
@@ -58,7 +58,10 @@ pub(crate) fn cmd_run(
         attrs: vec![
             ("uni.execution.command".into(), command.to_string()),
             ("uni.execution.exit_code".into(), executor_code.to_string()),
-            ("uni.execution.duration_ms".into(), started.elapsed().as_millis().to_string()),
+            (
+                "uni.execution.duration_ms".into(),
+                started.elapsed().as_millis().to_string(),
+            ),
         ],
     }]);
     let _ = journal_path;
@@ -120,7 +123,12 @@ fn require_binding(
     }
 }
 
-pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, attest: bool) -> Result<()> {
+pub(crate) fn cmd_verify(
+    file: &Path,
+    as_json: bool,
+    actor_flag: Option<&str>,
+    attest: bool,
+) -> Result<()> {
     if attest {
         return Err(anyhow!(
             "signed provenance (A4) is reserved: no signer is configured in v0.2 (see docs/decisions.md)"
@@ -146,7 +154,10 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
                 ));
             }
             let identities = uni_verify::identity::load_identities(&du, &ws)?;
-            (uni_verify::identity::verify_token(token, &identities)?, true)
+            (
+                uni_verify::identity::verify_token(token, &identities)?,
+                true,
+            )
         }
         None => (
             match actor_flag {
@@ -156,13 +167,13 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
             false,
         ),
     };
-    let external_scheme = actor_flag.map(|id| {
-        id.split_once("://").map(|(s, _)| s).unwrap_or("")
-    });
+    let external_scheme = actor_flag.map(|id| id.split_once("://").map(|(s, _)| s).unwrap_or(""));
     // A scheme prefix without a token is a declaration, not a proof: recorded
     // explicitly, and it stays self-declared.
-    let identity_unverified_warning =
-        matches!(external_scheme, Some("spiffe") | Some("entra") | Some("oidc"));
+    let identity_unverified_warning = matches!(
+        external_scheme,
+        Some("spiffe") | Some("entra") | Some("oidc")
+    );
     let (cur_sha, cur_dirty) = uni_evidence::git_info(&ws);
     let registry = uni_verify::load_registry(&du);
     // Verification Context, computed once per run: any drift on these
@@ -192,7 +203,10 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
     if trust_boundary_changed {
         if !as_json {
             println!("REGISTRY_CHANGED");
-            println!("Previous: sha256:{}", &prev_registry_hash[..12.min(prev_registry_hash.len())]);
+            println!(
+                "Previous: sha256:{}",
+                &prev_registry_hash[..12.min(prev_registry_hash.len())]
+            );
             println!("Current:  sha256:{}", &registry_hash[..12]);
             println!(
                 "Existing evidence: STALE\nAuthorization: REQUIRED ({} added, {} removed, {} changed)",
@@ -200,7 +214,13 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
                 tb_diff.removed.len(),
                 tb_diff.changed.len()
             );
-            for name in tb_diff.added.iter().chain(tb_diff.removed.iter()).chain(tb_diff.changed.iter()).take(10) {
+            for name in tb_diff
+                .added
+                .iter()
+                .chain(tb_diff.removed.iter())
+                .chain(tb_diff.changed.iter())
+                .take(10)
+            {
                 println!("  - {name}");
             }
         }
@@ -242,7 +262,10 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
         journal.push(events::Event {
             name: "RegistryChanged",
             attrs: vec![
-                ("uni.registry.previous".into(), prev_registry_hash[..8.min(prev_registry_hash.len())].into()),
+                (
+                    "uni.registry.previous".into(),
+                    prev_registry_hash[..8.min(prev_registry_hash.len())].into(),
+                ),
                 ("uni.registry.current".into(), registry_hash[..8].into()),
                 ("uni.registry.added".into(), tb_diff.added.join(",")),
                 ("uni.registry.removed".into(), tb_diff.removed.join(",")),
@@ -270,7 +293,10 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
         // Resolve the selector into the command before anything is hashed or
         // fingerprinted: two selectors on the same key are different proofs.
         let resolved_spec = match &base_spec {
-            Some(spec) => Some(uni_verify::with_selector(spec, resolution.selector.as_deref())?),
+            Some(spec) => Some(uni_verify::with_selector(
+                spec,
+                resolution.selector.as_deref(),
+            )?),
             None => None,
         };
         let binding_hash = resolution.binding_hash.clone();
@@ -337,11 +363,21 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
                     ],
                 });
                 stale_ids.push(v.claim_id.clone());
-                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone(), binding_hash.clone(), resolved_spec.clone()));
+                need_run.push((
+                    v.claim_id.clone(),
+                    v.verifier_ref.clone(),
+                    v.inline_shell.clone(),
+                    binding_hash.clone(),
+                    resolved_spec.clone(),
+                ));
             }
-            uni_evidence::CacheOutcome::Miss => {
-                need_run.push((v.claim_id.clone(), v.verifier_ref.clone(), v.inline_shell.clone(), binding_hash.clone(), resolved_spec.clone()))
-            }
+            uni_evidence::CacheOutcome::Miss => need_run.push((
+                v.claim_id.clone(),
+                v.verifier_ref.clone(),
+                v.inline_shell.clone(),
+                binding_hash.clone(),
+                resolved_spec.clone(),
+            )),
         }
     }
     // Policy source selection: OPA bundle when both rego + opa binary exist, else TOML stack.
@@ -361,8 +397,11 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
         Box::new(uni_decision::TomlPolicy { dir: &policies_dir })
     };
     let policy = provider.resolve();
-    let policy_hash =
-        uni_evidence::sha256_hex(serde_json::to_string(&policy).unwrap_or_default().as_bytes());
+    let policy_hash = uni_evidence::sha256_hex(
+        serde_json::to_string(&policy)
+            .unwrap_or_default()
+            .as_bytes(),
+    );
     // 2) Re-run only for missing/stale/invalid claims (unlocked: reruns are
     // idempotent and deterministic, so concurrent runs only duplicate work).
     let mut fresh: Vec<(uni_evidence::Evidence, String)> = vec![];
@@ -382,7 +421,15 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
             ],
         });
         let fingerprint = uni_verify::spec_fingerprint(&ref_r, &spec, &actor.id);
-        let mut ev = uni_verify::run_spec(&claim_id, &ref_r, &spec, &ws, spec.timeout, &actor, &executor)?;
+        let mut ev = uni_verify::run_spec(
+            &claim_id,
+            &ref_r,
+            &spec,
+            &ws,
+            spec.timeout,
+            &actor,
+            &executor,
+        )?;
         ev.registry_hash = registry_hash.clone();
         ev.contract_hash = contract_hash.clone();
         ev.platform = platform.clone();
@@ -397,7 +444,8 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
         stored.push(ev.clone());
     }
     // Policy already resolved above (recorded on fresh evidence for audit).
-    let mut decision = uni_decision::apply_policy(uni_decision::evaluate_intent(&ir, &stored), &policy);
+    let mut decision =
+        uni_decision::apply_policy(uni_decision::evaluate_intent(&ir, &stored), &policy);
     // Stale-but-unreprovable escalation: a claim whose previous proof drifted
     // out of context and could NOT be re-proven needs a human, not a retry.
     // (When the re-run succeeds the claim is Valid and this never fires.)
@@ -410,11 +458,15 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
             .collect();
         if stale_ids.iter().any(|id| !valid.contains(id.as_str())) {
             decision.decision = uni_decision::Decision::Escalated;
-            decision.reason = format!("policy escalate_on_stale: stale proof could not be renewed: {}", decision.reason);
+            decision.reason = format!(
+                "policy escalate_on_stale: stale proof could not be renewed: {}",
+                decision.reason
+            );
         }
     }
     let assurance = uni_decision::assurance_for(&decision.decision, &stored);
-    let independent = uni_decision::independence(&stored) == uni_decision::Independence::Independent;
+    let independent =
+        uni_decision::independence(&stored) == uni_decision::Independence::Independent;
     let identity = uni_decision::identity_assurance(&stored);
     // Durable drift record: a claim that went stale keeps its reasons until it is
     // proved again, so `uni explain` can narrate the drift on later runs too
@@ -464,7 +516,10 @@ pub(crate) fn cmd_verify(file: &Path, as_json: bool, actor_flag: Option<&str>, a
         name: "DecisionIssued",
         attrs: vec![
             ("uni.intent.id".into(), ir.intent.id.clone()),
-            ("uni.decision.state".into(), format!("{:?}", decision.decision)),
+            (
+                "uni.decision.state".into(),
+                format!("{:?}", decision.decision),
+            ),
             ("uni.assurance.level".into(), assurance.to_string()),
             ("uni.actor.independent".into(), independent.to_string()),
             ("uni.actor.identity_assurance".into(), identity.to_string()),

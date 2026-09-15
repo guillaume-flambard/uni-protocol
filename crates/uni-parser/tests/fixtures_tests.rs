@@ -12,19 +12,25 @@ fn missing_version_errors() {
 
 #[test]
 fn bad_directive_has_line() {
-    let err = parse(&fixture("bad_directive.uni")).unwrap_err().to_string();
+    let err = parse(&fixture("bad_directive.uni"))
+        .unwrap_err()
+        .to_string();
     assert!(err.contains("line 4"), "got: {err}");
 }
 
 #[test]
 fn verify_unknown_claim_rejected() {
-    let err = parse(&fixture("orphan_verify.uni")).unwrap_err().to_string();
+    let err = parse(&fixture("orphan_verify.uni"))
+        .unwrap_err()
+        .to_string();
     assert!(err.contains("unknown claim 'ghost'"), "got: {err}");
 }
 
 #[test]
 fn ensure_without_claim_rejected() {
-    let err = parse(&fixture("no_ensure.diag.uni")).unwrap_err().to_string();
+    let err = parse(&fixture("no_ensure.diag.uni"))
+        .unwrap_err()
+        .to_string();
     assert!(err.contains("ENSURE without preceding"), "got: {err}");
 }
 
@@ -46,7 +52,9 @@ VERIFY a
 #[test]
 fn standalone_require_is_hard_error() {
     // v0.2 implements REQUIRE only as a VERIFY-attached resolution requirement.
-    let err = parse(&fixture("reserved_require.uni")).unwrap_err().to_string();
+    let err = parse(&fixture("reserved_require.uni"))
+        .unwrap_err()
+        .to_string();
     assert!(err.contains("must immediately follow"), "got: {err}");
 }
 
@@ -88,7 +96,10 @@ fn require_attaches_to_preceding_verify() {
     let src = "VERSION 0.1\nDOMAIN software\nINTENT x\nCLAIM a REQUIRED\n  ENSURE ok\nVERIFY a\n  USING project.check\n  REQUIRE behavior(\"checks\")\nACCEPT WHEN\n  required_claims == VERIFIED\n  AND critical_failures == 0\n";
     let c = parse(src).unwrap();
     assert_eq!(c.verifications.len(), 1);
-    assert_eq!(c.verifications[0].requirement.as_deref(), Some("behavior(\"checks\")"));
+    assert_eq!(
+        c.verifications[0].requirement.as_deref(),
+        Some("behavior(\"checks\")")
+    );
 }
 
 #[test]

@@ -115,7 +115,14 @@ pub fn git_info(workspace: &std::path::Path) -> (String, bool) {
     //    that compiles (target/, Cargo.lock, node_modules) must not stale its
     //    own fresh evidence. Watched-file drift is caught by artifact_hash.
     let dirty = std::process::Command::new("git")
-        .args(["status", "--porcelain", "--untracked-files=no", "--", ".", ":!.uni"])
+        .args([
+            "status",
+            "--porcelain",
+            "--untracked-files=no",
+            "--",
+            ".",
+            ":!.uni",
+        ])
         .current_dir(workspace)
         .output()
         .map(|o| !o.stdout.is_empty())
@@ -123,8 +130,14 @@ pub fn git_info(workspace: &std::path::Path) -> (String, bool) {
     (sha, dirty)
 }
 
-pub fn evidence_path(dot_uni: &std::path::Path, claim_id: &str, fingerprint: &str) -> std::path::PathBuf {
-    dot_uni.join("evidence").join(format!("{claim_id}__{fingerprint}.json"))
+pub fn evidence_path(
+    dot_uni: &std::path::Path,
+    claim_id: &str,
+    fingerprint: &str,
+) -> std::path::PathBuf {
+    dot_uni
+        .join("evidence")
+        .join(format!("{claim_id}__{fingerprint}.json"))
 }
 
 /// Find any evidence file for a claim (newest first) - for explain/detail views.
@@ -136,7 +149,11 @@ pub fn latest_for_claim(dot_uni: &std::path::Path, claim_id: &str) -> Option<Evi
         let name = e.file_name().to_string_lossy().to_string();
         if name.starts_with(&format!("{claim_id}__")) && name.ends_with(".json") {
             if let Some(ev) = load_json::<Evidence>(&e.path()) {
-                if best.as_ref().map(|b: &Evidence| ev.created_at > b.created_at).unwrap_or(true) {
+                if best
+                    .as_ref()
+                    .map(|b: &Evidence| ev.created_at > b.created_at)
+                    .unwrap_or(true)
+                {
                     best = Some(ev);
                 }
             }
@@ -152,10 +169,7 @@ pub fn save_json(path: &std::path::Path, value: &impl Serialize) -> Result<()> {
     let text = serde_json::to_string_pretty(value)?;
     // Atomic write: tmp sibling + rename, so a concurrent or killed writer
     // can never leave a half-written JSON behind.
-    let tmp = path.with_extension(format!(
-        "tmp-{}",
-        std::process::id()
-    ));
+    let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
     std::fs::write(&tmp, text)?;
     #[cfg(windows)]
     let _ = std::fs::remove_file(path);
@@ -301,7 +315,9 @@ impl Actor {
 }
 
 pub fn load_json<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Option<T> {
-    std::fs::read_to_string(path).ok().and_then(|t| serde_json::from_str(&t).ok())
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
 }
 
 /// Cache outcome with the reason for a miss, so callers can tell "never
@@ -370,7 +386,11 @@ impl StaleReason {
             StaleReason::UncommittedChanges { .. } => {
                 "tracked files were modified after the proof".to_string()
             }
-            StaleReason::SubjectChanged { changed, added, removed } => {
+            StaleReason::SubjectChanged {
+                changed,
+                added,
+                removed,
+            } => {
                 let mut parts = vec![];
                 if !changed.is_empty() {
                     parts.push(format!("changed: {}", changed.join(", ")));
@@ -431,7 +451,8 @@ pub fn load_valid_for_claim(
             workspace_dirty: ctx.workspace_dirty,
         });
     }
-    if !ev.artifact_hash.is_empty() && ctx.artifact_hash.as_deref() != Some(ev.artifact_hash.as_str())
+    if !ev.artifact_hash.is_empty()
+        && ctx.artifact_hash.as_deref() != Some(ev.artifact_hash.as_str())
     {
         // Name the files when the proof carries per-file hashes.
         let mut changed = vec![];
@@ -449,7 +470,11 @@ pub fn load_valid_for_claim(
                 added.push(path.clone());
             }
         }
-        reasons.push(StaleReason::SubjectChanged { changed, added, removed });
+        reasons.push(StaleReason::SubjectChanged {
+            changed,
+            added,
+            removed,
+        });
     }
     if !ev.contract_hash.is_empty() && ev.contract_hash != ctx.contract_hash {
         reasons.push(StaleReason::ContractChanged {
@@ -589,7 +614,10 @@ mod tests {
         assert!(matches!(load_valid_for_claim(&du, "c", &wrong_fp), Miss));
         let mut other_sha = ctx();
         other_sha.commit_sha = "other".into();
-        assert!(matches!(load_valid_for_claim(&du, "c", &other_sha), Stale(_)));
+        assert!(matches!(
+            load_valid_for_claim(&du, "c", &other_sha),
+            Stale(_)
+        ));
         e.state = EvidenceState::Invalid;
         save_json(&evidence_path(&du, "c", "fp1"), &e).unwrap();
         assert!(matches!(load_valid_for_claim(&du, "c", &ctx()), Miss));
