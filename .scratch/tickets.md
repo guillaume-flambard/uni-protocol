@@ -2,7 +2,7 @@
 
 Open work only. History lives in git.
 
-State: **main**, 158 tests, rustfmt clean, clippy clean at `-D warnings`, CI
+State: **v0.9.4**, 158 tests, rustfmt clean, clippy clean at `-D warnings`, CI
 green with a `lint` job (fmt, clippy, constitution drift, every contract) and
 the action smoke, live A3 against a real issuer, MIT OR Apache-2.0.
 

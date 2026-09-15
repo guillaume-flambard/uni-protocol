@@ -78,6 +78,11 @@ jobs:
   # passed on purpose: the point is to exercise the DEFAULT the action ships,
   # which a pinned old tag would never test.
   action-smoke:
+    # Skipped on tag pushes. A tag points at a commit the branch push already
+    # tested, and the asset this job downloads is produced by the tag's own
+    # release workflow, which has not finished when this starts. That race made
+    # the tag commits for v0.9.2 and v0.9.3 go red on an unrelated job.
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
