@@ -1,0 +1,33 @@
+{
+  "id": "x-b5bea41b",
+  "claim_id": "x",
+  "producer": "shell-verifier",
+  "command": "true",
+  "exit_code": 0,
+  "output_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "output_excerpt": "",
+  "commit_sha": "3e004d549f23386148d6f6c4a05ab6f6b51b3b2e",
+  "workspace_dirty": false,
+  "state": "Valid",
+  "created_at": "2026-09-15T06:57:38.345548Z",
+  "duration_ms": 27,
+  "artifact_hash": "",
+  "artifact_files": {},
+  "fingerprint": "8932615d6c74",
+  "registry_hash": "b947b61e2a706bd9a2449991ec6f9f69838cb8ae57d512f9fbb14834c2c92d39",
+  "policy_hash": "338e7cad5aef87a8c08be6e6b49a3301059b054fc43f11cedd95814a53e05938",
+  "contract_hash": "97c32dbe20705a99e7a606452964adb044c86fbac92e3376ef4262d1b9af9d2e",
+  "platform": "macos-aarch64",
+  "actor": {
+    "id": "local:memo",
+    "source": "local",
+    "assurance": "self-declared"
+  },
+  "executor": {
+    "id": "local:memo",
+    "source": "local",
+    "assurance": "self-declared"
+  },
+  "binding_hash": "",
+  "expires_at": null
+}

@@ -1,0 +1,23 @@
+{
+  "assurance": "A2",
+  "claims": [
+    {
+      "claim_id": "x",
+      "critical": false,
+      "detail": "evidence x-b5bea41b",
+      "required": true,
+      "state": "Valid"
+    }
+  ],
+  "commit": "3e004d549f23386148d6f6c4a05ab6f6b51b3b2e",
+  "decision": "Accepted",
+  "identity_assurance": "SELF-DECLARED",
+  "independent_actor": false,
+  "intent": {
+    "domain": "software",
+    "goal": "prove who produced the proof with a GitHub-signed identity",
+    "id": "identity-github-actions"
+  },
+  "reason": "all required claims verified",
+  "stale": {}
+}

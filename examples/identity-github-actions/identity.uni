@@ -1,0 +1,11 @@
+VERSION 0.1
+DOMAIN software
+INTENT identity-github-actions
+GOAL
+  prove who produced the proof with a GitHub-signed identity
+CLAIM x REQUIRED
+  ENSURE true
+VERIFY x
+  USING pass
+ACCEPT WHEN
+  required_claims == VERIFIED

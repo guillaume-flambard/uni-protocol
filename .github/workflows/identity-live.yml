@@ -1,0 +1,84 @@
+name: identity-live (A3 against a real issuer)
+
+# Proves the identity adapter end to end against a real, platform-signed
+# token: GitHub mints an OIDC JWT for this job, UNI verifies it offline
+# against key material pinned in examples/identity-github-actions/.
+# No secret, no human-minted token, no network call in the verify path.
+# See examples/identity-github-actions/README.md.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly: catches a JWKS rotation early, as a fail-closed signal.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  a3:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uni
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL \
+            https://github.com/guillaume-flambard/uni-protocol/releases/download/v0.9.1/uni-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Mint a real issuer token
+        id: token
+        shell: bash
+        run: |
+          set -euo pipefail
+          jwt="$(curl -fsSL \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=uni-cli" | jq -r .value)"
+          test -n "$jwt" && test "$jwt" != "null"
+          # Mask it: it is short-lived, but it is still an identity proof.
+          echo "::add-mask::$jwt"
+          echo "jwt=$jwt" >> "$GITHUB_OUTPUT"
+
+      - name: Verify against the pinned issuer
+        shell: bash
+        working-directory: examples/identity-github-actions
+        env:
+          UNI_IDENTITY_TOKEN: ${{ steps.token.outputs.jwt }}
+        run: |
+          set -euo pipefail
+          uni verify identity.uni
+          report="$(uni report --json)"
+          echo "$report" | jq .
+          echo "$report" | jq -e '.assurance == "A3"' > /dev/null
+          echo "$report" | jq -e '.identity_assurance == "VERIFIED"' > /dev/null
+          echo "$report" | jq -e '.independent_actor == true' > /dev/null
+          {
+            echo "### A3, live"
+            echo ""
+            echo '```'
+            echo "$report" | jq '{decision, assurance, identity_assurance, independent_actor}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: The same token with no issuer declared is refused
+        shell: bash
+        working-directory: examples/identity-github-actions
+        env:
+          UNI_IDENTITY_TOKEN: ${{ steps.token.outputs.jwt }}
+        run: |
+          set -euo pipefail
+          # Same real token, registry with the issuer removed: the trust
+          # boundary must refuse it, not fall back to self-declared.
+          cp .uni/config.toml /tmp/config.toml
+          printf '[verifiers]\n"pass" = "true"\n' > .uni/config.toml
+          if uni verify identity.uni; then
+            echo "::error::a token was believed without a declared issuer"
+            exit 1
+          fi
+          cp /tmp/config.toml .uni/config.toml
+          echo "refused as expected: no [identities] issuer to believe it"
