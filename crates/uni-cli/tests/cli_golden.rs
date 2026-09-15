@@ -146,9 +146,6 @@ fn golden_verify_exit_codes() {
     assert_eq!(run(&["verify", "examples/booking/booking.uni"], &root), 0);
 }
 
-#[allow(dead_code)]
-fn _unused(_p: &Path) {}
-
 /// Golden: speckit importer extracts markdown FR + scenarios into a candidate DSL file.
 #[test]
 fn golden_import_speckit() {

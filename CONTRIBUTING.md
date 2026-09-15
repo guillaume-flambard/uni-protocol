@@ -90,8 +90,9 @@ Ordered by what unblocks the most:
 
 These are decisions, not oversights. A pull request adding them will be declined
 until the constitution changes: orchestration and multi-agent frameworks, a
-control plane, a policy engine (OPA and Cedar are wired by interface, never
-reimplemented), Postgres and Protobuf in the core, and MCP or A2A servers. See
+control plane, a policy engine (OPA is wired through the `PolicyProvider` trait
+and UNI never reimplements one), Postgres and Protobuf in the core, and MCP or
+A2A servers. See
 `specs/001-uni-software-v01/spec.md` for the v0.1 boundary.
 
 ## Pull requests

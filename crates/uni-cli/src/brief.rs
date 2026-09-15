@@ -10,7 +10,7 @@
 
 use anyhow::Result;
 use uni_ir::Ir;
-use uni_verify::{RegistryDiff, VerifierSpec};
+use uni_verify::VerifierSpec;
 
 /// Resolved evidence requirement for one claim.
 pub struct ClaimBrief<'a> {
@@ -279,9 +279,6 @@ pub fn to_markdown(ir: &Ir, claims: &[ClaimBrief], problems: &[String]) -> Strin
 pub fn registry_hash(registry_text: &str) -> String {
     uni_evidence::sha256_hex(registry_text.as_bytes())
 }
-
-#[allow(dead_code)]
-fn _diff_type_anchor(_: RegistryDiff) {}
 
 #[cfg(test)]
 mod tests {

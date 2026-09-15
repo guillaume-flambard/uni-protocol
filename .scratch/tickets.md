@@ -1,273 +1,220 @@
-# UNI — tickets
+# UNI - tickets
 
-Current: **v0.9.2 + final review** · 142 tests, 0 rustc warnings, 0 clippy
-warnings, rustfmt clean · public repo `github.com/guillaume-flambard/uni-protocol`
-· CI green on ubuntu/macOS/Windows + POSIX examples + a `lint` job (fmt, clippy,
-every contract) + a smoke job that runs the published action's default version ·
-release `v0.9.2` with five binaries · MIT OR Apache-2.0.
+Open work only. The history lives in git and in the release notes.
 
-What `v0.9.2` adds over `v0.9.1`: ADR-002 (pinned test names are a contract
-smell, `uni lint` warns), the live A3 workflow against GitHub's real OIDC
-issuer, the Google example, the second-model study arm on a free implementer,
-and t11 with the hidden-owner-invariant harness.
+State: **v0.9.2**, 142 tests, rustfmt clean, clippy clean at `-D warnings`, CI
+green on ubuntu/macOS/Windows plus a `lint` job and the action smoke, live A3
+against a real issuer, MIT OR Apache-2.0.
 
-## Done — final review (2026-09-15)
+Every ticket below came out of a code, test, doc and collaboration audit on
+2026-09-15. Tickets marked **decision** need Guillaume's call before anyone
+implements them; the rest are ready to pick up. Workflow per `AGENTS.md`:
+implement (TDD at the seam) -> code review -> `uni verify` -> `uni explain`.
 
-A full pass over code, tests, docs and the collaboration surface. It found more
-than it was supposed to, which is the point.
+---
 
-- **Two parser leaks, both security-relevant.** `USING shellcheck` parsed as the
-  inline verifier `shell` running `check`: a registry reference silently became
-  an inline command, the exact escape the trusted registry exists to stop. And
-  the `GOAL` block ended only on a hand-picked few directives, so a reserved
-  `REJECT WHEN` right after `GOAL` was absorbed as goal prose and the promised
-  hard error never fired. Both fixed with regressions in the parser's existing
-  fixtures suite.
-- **The claim in `claims.md` that `REQUIRE` is a hard parse error was false**; it
-  shipped in v0.2 and contradicted `specification.md`. That is the kind of doc
-  bug that costs a newcomer an hour.
-- **The repo was never rustfmt-clean and clippy was never run** (rustc warned
-  nothing, which is why the tickets said "0 warnings"). Eleven clippy findings
-  fixed, one whole-repo reformat isolated in its own commit, and CI now asserts
-  both with `-D warnings`.
-- **The action smoke pinned `v0.5.1`**, so it tested a four-releases-old tag
-  instead of the default the action ships. It now pins nothing.
-- **No licence at all**, on a public repo asking for contributions. Now MIT OR
-  Apache-2.0 in the workspace and all six crates, plus `CONTRIBUTING.md`,
-  `SECURITY.md`, and issue and pull request templates.
-- Also fixed: `github-integration.md` pinned at v0.7.0, `specification.md`
-  announcing v0.5 and listing two lint warnings of five, a stale test count and
-  a missing t11 entry in the README, and `examples/identity-google` not carrying
-  its own registry.
+## P0 - the closed vocabulary has two holes
 
-Left alone on purpose, and named rather than silently reworded: `.scratch/tickets.md`
-and one old results file use em dashes as section separators. They are internal
-working notes, not published prose, and the convention predates this pass.
+### 1. A modifier token on CLAIM is never validated
+`CLAIM x CRITICAL` parses, discards `CRITICAL`, and compiles to
+`critical: false`. A failing verifier then yields `EVIDENCE_REQUIRED` where the
+author wrote CRITICAL expecting `REJECTED`. Worse, `CLAIM x BANANA` compiles
+clean, exit 0.
 
-## Done — release v0.9.2 (2026-09-15)
+Verified:
+```
+CLAIM x CRITICAL + failing verifier  -> Decision: EvidenceRequired
+CLAIM x BANANA                       -> compiles, critical: false
+```
+That contradicts constitution rule 5 and `docs/specification.md` ("unknown
+directives are hard parse errors"). The parser validates the modifier position
+on `INVARIANT` but not on `CLAIM`.
 
-Tagged, pushed, published by the release workflow with five assets
-(`uni-{x86_64,aarch64}-{linux,apple-darwin}, windows`). The published action's
-default and the live A3 workflow both move to `v0.9.2`. Re-verified after the
-release: `identity-live.yml` run `34941549189` reached `assurance A3` against
-GitHub's real OIDC issuer using the **released** binary, and refused the same
-token when the issuer is undeclared. `uni 0.9.2` built and green locally.
+Where: `crates/uni-parser/src/lib.rs`, the `CLAIM` branch.
+Done when: `CLAIM x BANANA` fails with a located error, and there is a test for
+it in `crates/uni-parser/tests/fixtures_tests.rs`.
+**decision:** does `CLAIM x CRITICAL` become a hard error ("use INVARIANT") or
+does it set `critical: true`? Error is the smaller change and keeps two words
+for one idea; honouring it makes `CLAIM`/`INVARIANT` interchangeable.
 
-## Done — the owner's invariant is not the worker's to read (t11)
+### 2. Duplicate claim ids are accepted
+`docs/specification.md` says compile validates that claim ids are unique.
+Nothing does. Two `CLAIM a` blocks compile, `lint` reports **clean**, `verify`
+returns **Accepted** and lists `a PASS` twice from a single `VERIFY` - so a
+second obligation with no verifier of its own is silently satisfied by the
+first one's evidence. That is a false accept, the one outcome the whole project
+exists to prevent.
 
-Every earlier task shipped its invariant inside `base/`, so the worker could
-read the specification it was measured against. t11 closes that hole and
-demonstrates detection on a real task.
+Where: `crates/uni-ir` (`compile`) is the natural home; `uni lint` could also
+carry it as an error.
+Done when: a duplicate id fails with a located error, plus a test, plus a
+regression that the two-claims-one-VERIFY case cannot be Accepted.
 
-- **The harness change.** A task may ship `invariants.rs` at its root; the
-  harness writes it in for the baseline, removes it before the agent starts, and
-  delivers it again at verification (committing it then, so `git show HEAD~1`
-  leaks nothing). The arm is `--hide-contract`: repo + `issue.md` only.
-- **The task.** Multi-file (`ledger.rs`, `settlement.rs`, `lib.rs`,
-  `tests/it.rs`), ADR-002 shaped: behavioural claim via a `{{selector}}`
-  template, `bindings.toml` authorizes the selector, `issue.md` states the
-  required test name. Rule: `floor(amount * bps / 10_000)`, whole cents. The
-  issue example is deliberately off the boundary so a float implementation still
-  passes the worker's own tests.
-- **The detection.** A scripted plausible delivery (`f64`, `.round()`) has its
-  own `cargo test` green and reports DONE; UNI returns **Rejected 2/4** — the
-  CRITICAL owner invariant is the only place floor and round part ways
-  (`3 * 3333 = 9999 -> 0`, `round` gives 1). Offline, the same one-line change
-  reproduces it, while conservation and idempotency still pass.
-- **The real agent.** Free OpenRouter model, invariant *and* contract hidden:
-  Accepted 4/4, integer division, exact required name. Third confirmation that
-  this model is careful; the missing variable is a non-conforming implementer,
-  not a harder trap.
-- `RESULTS-2026-09-15-t11-real-task.md`; `fix.patch` (ground truth) and
-  `wrong.patch` (plausible) live with the task.
+---
 
-## Done — 2026-09-15 (committed, pushed as `ac6701d..272fdc5`)
+## P1 - docs that promise what the binary does not do
 
-- **Base re-verified.** `cargo test` 134/134 green with
-  `DEVELOPER_DIR=/Library/Developer/CommandLineTools` (plain `git`/`cargo`
-  fail: Xcode license not accepted, `sudo xcodebuild -license` still pending).
-  Release binary rebuilt (`uni 0.9.1`); `verify` + `explain` on
-  `examples/hello` green.
-- **A3 against a real issuer: CLOSED, live.** GitHub Actions mints a real OIDC
-  token; `examples/identity-github-actions/` pins GitHub's real JWKS (4 RS256
-  keys, snapshot 2026-09-15); `.github/workflows/identity-live.yml` requires
-  `assurance == A3` and proves the refusal too (same token, issuer undeclared,
-  refused). Run `34939375852` reached A3. No secret, no human step, no network
-  call in the verify path. Sibling `examples/identity-google/` keeps the
-  workforce-identity shape (`gcloud`, one human step, `gcloud` absent here).
-- **Second-model arm: UNBLOCKED and run.** `bai/*` refused, `opencode/*`
-  billed or no-op; the free OpenRouter tier
-  (`openrouter/cohere/north-mini-code:free`, $0, real tool use, write-probed
-  before use) carried it. n=10 no-brief: FAR 0%, FRR 30%, all 3 false rejects
-  are test-name coupling. Brief arm t03/t07/t08: a `brief.md` merely present is
-  ignored 3/3, named in the prompt it is followed 3/3 (substance reviewed).
-- **Test-name tension DECIDED (ADR-002).** Pinned test names are a contract
-  smell; `{{selector}}` templates + `uni bind --selector` + `uni brief` as the
-  handoff are the blessed pattern. Enforced as a `uni lint` warning
-  (`pinned-test-selector`, whole-token cargo/node/unittest shapes,
-  warning-only so the decision engine is untouched): `pinned_test_selector()` +
-  unit test in `uni-verify`, lint wiring in `cmd/contract.rs`, golden test in
-  `cli_golden.rs`. Explicitly NOT done: auto-emitting `brief.md` in `uni run`
-  (behaviour change, needs review).
-- **Hygiene.** `.gitignore` now covers `.uni` runtime state at any depth (the
-  example's evidence/decisions had been tracked by a root-anchored pattern);
-  report, README, `docs/index.md` and `docs/verification.md` updated to 134
-  tests and to the live A3 result.
+Each of these is small and checkable. Group them into one or two commits.
 
-## Done — CI hosting decision (2026-09-14)
+### 3. `CLAIM`/`INVARIANT`/`FORBID` need their own VERIFY, and the sample does not say so
+`docs/language.md` presents a contract as complete; running `uni lint` on it
+gives `ERROR missing-verify` twice and exit 1. A `FORBID` compiles to a claim
+`forbid-N` that also needs its own `VERIFY`. `docs/claims.md` says it in prose
+and the sample contradicts it.
+Done when: the sample in `docs/language.md` lints clean, and the `FORBID` row in
+`docs/claims.md` shows the `VERIFY forbid-N`.
 
-Briefly self-hosted, then reverted: the repository is public, so GitHub-hosted
-runners are free and unlimited, and the only gain was ~40 s per push. That is
-not worth executing every dependency's build scripts on the production host.
-lab-infra PR #68 added the runner and PR #69 removed it (runner unregistered,
-service and user deleted). Hosted is the choice for public repos; self-hosting
-stays right for the private ones, where minutes are billed and images must be
-built beside the local registry.
+### 4. The "high seam" function names do not exist
+`assure(contract, workspace) -> AssuranceResult` and
+`evaluate(intent) -> Decision` are cited as the public API in six places. The
+real entry points are
+`assure_contract(ir, dot_uni, workspace) -> Result<Vec<Evidence>>`
+(`crates/uni-verify/src/lib.rs:638`), `evaluate(ir, evidences)` and
+`evaluate_intent` (`crates/uni-decision/src/lib.rs:318,400`), with policy applied
+separately by `apply_policy`.
 
-## Done — the check earns its keep (v0.8.0 / v0.8.1)
+`AssuranceResult` appears nowhere. Files that carry the wrong name: `CONTEXT.md`,
+`AGENTS.md`, `specs/001-uni-software-v01/plan.md`, `docs/adr/ADR-001`, `docs/REPORT-2026-09-14.md`,
+`docs/DEEP-ANALYSIS-2026-09-14.md`, `docs/writing-verifiers.md`.
+Done when: either the docs name the real functions, or the code grows the
+promised seam. Prefer naming reality: a rename would churn every caller for
+philosophy.
 
-The proof is now something a reviewer sees in the pull request, and its failure
-is measured.
+### 5. Two extension points that do not exist
+`docs/why-uni.md:41` claims execution engines are "replaceable behind
+`EXECUTION_PROVIDER`", and no such symbol exists. `docs/why-uni.md:43`,
+`docs/REPORT:56` and `CONTRIBUTING.md` list Cedar as a wired policy engine;
+there is no Cedar adapter, only `OpaPolicy`.
+What is real: the `PolicyProvider` trait
+(`crates/uni-decision/src/lib.rs:183`) with `TomlPolicy` and `OpaPolicy`.
+Done when: the row says what exists, and the "replaceable behind X" claim is
+removed or implemented.
 
-- **Stale reasons as data.** A stale verdict carries the dimension
-  (`uncommitted_changes`, `subject_changed`, `commit_changed`,
-  `contract_changed`, `verifier_config_changed`, `authorization_changed`,
-  `expired`, ...) and the named files that moved. The drift is recorded durably,
-  and `uni explain` narrates what changed instead of a generic "stale".
-- **GitHub annotations.** `uni explain --annotations` emits one `::error`
-  (CRITICAL claim) or `::warning` per moved file, with `file=` set, so the
-  drifted claim lands inline on the diff. A reason that names no path gets no
-  duplicate note on the workflow file.
-- **The published action reports.** `adapters/github/action.yml` verifies, and on
-  failure annotates the drift and appends the plain-word narration to the job
-  summary. Default bumped to `v0.8.1`.
-- **The Stale Evidence Benchmark.** `experiments/stale-bench/` builds 100
-  manufactured drift scenarios and asks three oracles. 70 lose the proof; UNI
-  detects 100% of those it can (86% overall; the missing item is a weakened
-  trusted registry, which it names in 100% and leaves to a human). A plain
-  exit-code CI missed 71% of the 70, a result cache missed all 70. Full table in
-  `experiments/stale-bench/RESULTS-2026-09-14.md`.
-- **Flagship page.** `docs/flagship-check.md`, with screenshots of the red check
-  and the step order (prove, drift, annotate, fail).
+### 6. `uni init` does not create `.uni/policies`
+`README.md` lists `policies` among the created directories; `init` creates
+`artifacts` instead. The policy layer reads `.uni/policies/*.toml`
+(`crates/uni-decision/src/lib.rs:199`), so a fresh workspace has nowhere to put
+a policy without a `mkdir`.
+**decision:** make `init` create `.uni/policies` (small, and the README becomes
+true), or fix the README and document the `mkdir`. Prefer creating it.
 
-## Done — identity adapters: A3 is reachable (v0.9.0, corrected in v0.9.1)
+### 7. `docs/decisions.md` gets two mechanics wrong
+`reject_on_invalid = false` downgrades a **critical** rejection to ESCALATED,
+not a non-critical one; a non-critical failure is `EVIDENCE_REQUIRED` from the
+start and never becomes REJECTED. And the CLI does not distinguish the
+non-accepted decisions on exit code: `Rejected`, `EvidenceRequired` and
+`Escalated` all exit 1, and only the stderr label separates them.
+Done when: both sentences match the binary, and the exit-code table points at
+the stderr label.
 
-A proof's actor identity is verified, not merely named.
+### 8. Assurance is gated on the decision, not only on the evidence graph
+`docs/decisions.md`, `docs/REPORT:191` and `specs/003-assurance-model` FR-204
+say the scale is derived from the evidence graph. `assurance_for`
+(`crates/uni-decision/src/lib.rs:88`) returns `A0`/`A1` for any non-`Accepted`
+decision before it looks at the graph: a rejected run with an independent actor
+reports `assurance A1`, `independent_actor: true`.
+**decision:** is assurance a property of the evidence (A3 evidence for a
+rejected claim is still A3 evidence) or of the outcome? If evidence, move the
+gate; if outcome, fix FR-204 and the three docs. Either answer is defensible,
+and they are not the same product.
 
-- **The adapter.** `UNI_IDENTITY_TOKEN=<jwt> uni verify` verifies a JWT offline
-  against an issuer pinned in `.uni/config.toml` `[identities]` (`source` is
-  oidc/entra/spiffe, `jwks_file`, optional `audiences`/`algorithms`). Signature
-  via the pinned JWKS, `iss`/`aud`/`exp` checked, `kid` selects the key.
-  Success mints an actor with assurance `verified`, which the decision engine
-  already turns into A3 when the actor is independent. `--actor` stays
-  self-declared (A3-D), a bad token is a hard error (never a silent downgrade),
-  and `--actor` together with a token is refused.
-- **Trust root unchanged.** The JWKS lives beside the registry, not behind a
-  network call: the registry stays the only root of trust, and a token whose
-  `iss` is not declared there is refused.
-- **The trust boundary names an issuer edit too.** `registry_diff` now diffs
-  `[identities]` as well as `[verifiers]`, entries prefixed `identity:`, so an
-  issuer-only registry change reports what moved instead of an empty diff.
-- **Proven end to end.** `crates/uni-cli/tests/cli_identity.rs` (A3, A3-D, A2,
-  mutual exclusion, expired/untrusted refused, issuer change named) plus the
-  adapter unit tests (wrong issuer, tampering, audience, spiffe subject,
-  half-wired config).
-- **Constitution v0.7.** Rules 4, 10 and 11 amended with a migration note:
-  `[identities]` joins the trusted registry, a token's `exp` sits in the same
-  availability class as evidence expiry (neither enters the decision), and A3
-  states how it is reached. No DSL keyword, evidence field, or decision path
-  changed.
+### 9. `specs/001` promises three things that do not exist
+- "`uni compile` emits canonical JSON IR (JSON Schema validated)": nothing in
+  `crates/` references `schemas/uni.schema.json`. The shape matches, the
+  validation does not happen.
+- "Commit/dirty change -> STALE -> claim UNVERIFIED -> NEEDS_REVALIDATION": the
+  only states are `Valid|Invalid|Stale` and `Accepted|Rejected|EvidenceRequired|Escalated`.
+- "Action `uni-protocol/verify@v1` running the embedded binary": the shipped
+  action is `adapters/github/action.yml`, it downloads the release archive and
+  builds nothing, and `docs/github-integration.md` already says so.
+Done when: the spec says what exists. Separately worth a ticket of its own:
+actually validating the IR against the schema in `compile`, which is cheap now
+that the schema matches.
 
-## Open
+### 10. The report carries stale and invented content
+`docs/REPORT-2026-09-14.md` is the headline document, so its numbers are read.
+- test count 134 (line 19) and "Total 130" (line 307): actual 142.
+- per-crate test counts (lines 301-306) and LOC (line 18, says 6 497): actual
+  7 148 source lines.
+- "10 contrats" in `examples/` and "16 documents et un ADR": 12 contracts,
+  2 ADRs.
+- `docs/REPORT:80-86` describes seven decision states plus "internal states
+  DRAFT READY EXECUTING VERIFYING". The enum has four variants and none of
+  those four exist.
+- line 148 says `init` takes no `--json`; it does.
+Done when: numbers regenerated and the state list matches the enum.
 
-Ordered by value. Nothing here is started unless marked.
+### 11. Small doc defects, one line each
+- `docs/flagship-check.md` quotes "2 errors and 2 warnings"; the drift demo
+  yields one `::error` and one `::warning`. Structural claims are correct.
+- `CONTEXT.md:5` omits `ESCALATED` from the decision list.
+- `README.md:44-61` labels a sample contract as `examples/booking/booking.uni`;
+  the real file has three claims and three different verifiers.
+- `docs/evidence.md` lists `BindingAuthorized` among the events "every verify
+  appends"; that one comes from `uni bind`.
 
-1. **The non-conforming implementer** — the one variable left. t11 was run on
-   **five** free implementers with the invariant and the contract hidden: all
-   five Accepted 4/4, all integer arithmetic, all named the required test
-   (`results-t11-sweep.csv`, one diff per model). The trap is deterministic and
-   the harness now measures the right thing, but no model on hand is careless.
-   Needs a genuinely weak/adversarial *model*, or a task where the plausible
-   path is wrong by default. Then: a second multi-file task (derived-index
-   coherence is the natural one).
-2. **`uni run` and the work order** — the brief arm showed the handoff must
-   *invoke* the brief, not merely emit it. Decide (behaviour change on a
-   shipped command, needs review) whether `uni run` generates `brief.md` and
-   names it in the executor's prompt.
-3. **Migrate to selector templates** — study and dogfood registries still pin
-   literal test names, so they now lint with `pinned-test-selector` warnings.
-   Mechanical, do it as each file is touched.
-4. **A3 workforce example, live** — the Google example still needs a
-   human-minted token (`gcloud` is not installed). Low value now that GitHub
-   OIDC proves the path live.
-5. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
-   Deliberately after the single-user story is convincing.
-6. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
-   present. Low value until the project has a broader audience.
+---
 
-## Done
+## P2 - structure and hygiene
 
-Condensed by milestone; the detailed history is in git.
+### 12. Two copies of the constitution, already drifted
+`.specify/memory/constitution.md` is tracked and carries a header saying "update
+both together". They no longer match in structure, and the project's own rule 7
+is "one source of truth, no spec duplication". This is the maintenance hazard
+the repo warns others about.
+Done when: one source (the root `constitution.md`), and the Spec Kit copy is
+either generated with a check in CI or replaced by a pointer.
 
-- **v0.1 — core frozen.** DSL (closed vocabulary, hard errors for reserved
-  syntax), canonical IR + JSON Schema, trusted-registry verifiers, git- and
-  content-bound evidence, deterministic decision engine, `explain`/`report`/
-  `events`/`lint`/`doctor`, Software Pack, 5 stack examples. Evidence
-  Completeness Principle in the constitution.
-- **v0.2 — assurance model.** Verification Context (registry/policy/contract/
-  platform hashes), Hit/Stale/Miss cache outcomes, registry trust-boundary diff
-  with `trust_boundary_changed` for CI, actor/executor separation with the
-  A2 / A3-D / A3 / A4 scale, VerifierBinding (`uni bind`, `REQUIRE`).
-- **v0.3 — portability and distribution.** Native verifier timeout, `cmd /C`
-  vs `sh -c`, public `Verifier` trait with a `file-hash` adapter, evidence
-  bundles (`uni bundle export|verify`, read-only verification), release
-  workflow for five targets, published action that downloads the release
-  binary.
-- **v0.4 — the study, corrected.** The first real-agent run (n=7) was
-  invalidated: `opencode run` resolved a stale project directory and fixtures
-  were silently pre-fixed. The harness now pins `--dir`, copies the task
-  statement, refuses a base that already satisfies the contract, restores
-  fixtures, and keeps the agent's diff. Corrected 15-run results:
-  **FAR 0%, FRR 23%**, the model claimed DONE 13/13 with zero human rejections,
-  and the only baseline false accept is the scripted "careless" run
-  (verified at revision A, delivered revision B). Four designed traps
-  (architecture invariant, vague issue, frozen API, conservation semantics) did
-  not fire: the model read the contract and behaved.
-- **v0.5 — work order and selector templates.** `uni brief` (deterministic
-  claims + exact evidence, including the test selector, byte-stable, markdown
-  and JSON) and its emission beside imported Spec Kit candidates; selector
-  templates with `uni bind --selector` (worker names the test, human authorizes
-  it, selector included in the binding hash); tracked-only dirtiness (a
-  verifier that compiles no longer stales its own evidence); Windows path
-  separator fix; a declared watch that observes nothing is Invalid.
-- **v0.6 — evidence lifecycle completed.** Time is real: a verifier may declare
-  `max_age_hours`, the expiry is stamped on the proof so a registry change
-  cannot extend it, and an expired proof is stale (the only clock read inside
-  the evidence context, constitution rule 10). The journal rotates past 1 MiB keeping the
-  three newest archives, `uni events --all` reads the history, `uni doctor`
-  reports size and cap.
-- **v0.7 — execution, export, one bindings file.** `uni run <contract> --
-  <command>` executes your executor then verifies (its exit code is data, the
-  decision drives the exit). `uni events --otlp` emits an OTLP/JSON document
-  with deterministic trace/span ids. `.uni/bindings.toml` holds every binding in
-  one reviewed file, `uni bind --from <file>` authorizes the whole review in one
-  act (legacy per-claim files still load). `main.rs` split into `src/cmd/`
-  (1404 -> 127 lines).
-- **v0.8 — the check earns its keep.** Stale reasons as data (dimension + named
-  files, durable drift record, `uni explain` narration), GitHub annotations per
-  moved file, the published action annotates and writes the job summary, and the
-  Stale Evidence Benchmark (100 scenarios; UNI detects 100% of what it can, a
-  plain exit-code CI misses 71% of the lost proofs, a cache misses all 70).
-- **Review + deploy.** Two-axis review applied (spec honesty, remediation
-  branching, finding ids as data, JSON token leak, unobservable subject).
-  All tags pushed; releases `v0.3.0` through `v0.9.1` with five assets each,
-  `v0.9.1` marked latest. `v0.3.0`/`v0.4.0` tag CI stays red on purpose: those
-  versions predate the fixes, which is the honest record.
+### 13. Finish the test-debt direction
+The low crates gained unit tests; `uni-ir` still has 2 tests for 131 lines, and
+`uni-decision` (17 tests, 1021 lines) is where a wrong truth-table row is most
+expensive. Prefer growing those rather than the CLI integration surface, and
+prefer a test per decision-table row.
+Done when: the truth table has a named test per row and `uni-ir` covers the
+compile error paths.
 
-## Test debt
+---
 
-- `crates/uni-cli/tests/` is the bulk of the suite (golden, security, binding,
-  bundle). The three low crates gained unit tests in v0.1; keep that direction
-  rather than growing the CLI integration surface.
-- Study fixtures are committed intentionally; the harness refuses untracked
-  fixture drift.
+## P3 - open work carried over (unchanged priority)
+
+### 14. A non-conforming implementer
+The study's one honest gap. t11 was run on five free implementers with the owner
+invariant and the contract hidden: all five Accepted, all integer arithmetic,
+all named the required test. The trap is deterministic (the scripted float
+delivery is Rejected while its own tests are green), but no model on hand is
+careless. Needs a weak or adversarial implementer, or a task whose plausible
+path is wrong by default.
+
+### 15. A second real-repo task
+`tasks/t11-fee-conservation/` is the shape to copy. Derived-index coherence is
+the natural next one: a denormalized index that a plausible fix forgets to
+update, checked only by the owner's hidden invariant.
+
+### 16. `uni run` and the work order
+The brief arm showed the handoff must *invoke* the brief, not merely emit it.
+**decision:** should `uni run` generate `brief.md` and name it in the executor's
+prompt? A behaviour change on a shipped command, so it needs review.
+
+### 17. Migrate the study and dogfood registries to selector templates
+They pin literal test names, so they lint with `pinned-test-selector` warnings.
+ADR-002 records why this is deferred on both sides (study comparability,
+example-as-documentation). Do it as each file is touched, not as a sweep.
+
+### 18. Low value, do not start before the above
+- A3 against a workforce issuer with a human token (the Google example). GitHub
+  OIDC already proves the path live and unattended.
+- Cloud and org: organizations, dashboards, cost per accepted outcome.
+- Vault note `1-Projects/uni.md`; the `PROJECTS.md` line already exists.
+- `CODE_OF_CONDUCT.md`. **decision:** add one or not.
+
+---
+
+## Notes on what was deliberately left alone
+
+- `.specify/memory/constitution.md` and the two old results files use em dashes
+  as section separators. They are records, not published prose, and the tickets
+  above decide their fate rather than a blanket rewrite.
+- `examples/identity-google` is not in CI on purpose: it needs a human-minted
+  token. `examples/negative` fails on purpose. `examples/playwright` needs npx.
+- The three `pinned-test-selector` warnings on the repo's own contracts are the
+  intended shape of the warning, not a defect.
