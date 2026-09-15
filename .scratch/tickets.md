@@ -7,6 +7,34 @@ published action · release `v0.9.1` with five binaries. Since `v0.9.1`:
 ADR-002 + lint warning, the live A3 workflow, the Google example, the
 second-model study arm. Those want a `v0.9.2` tag.
 
+## Done — the owner's invariant is not the worker's to read (t11)
+
+Every earlier task shipped its invariant inside `base/`, so the worker could
+read the specification it was measured against. t11 closes that hole and
+demonstrates detection on a real task.
+
+- **The harness change.** A task may ship `invariants.rs` at its root; the
+  harness writes it in for the baseline, removes it before the agent starts, and
+  delivers it again at verification (committing it then, so `git show HEAD~1`
+  leaks nothing). The arm is `--hide-contract`: repo + `issue.md` only.
+- **The task.** Multi-file (`ledger.rs`, `settlement.rs`, `lib.rs`,
+  `tests/it.rs`), ADR-002 shaped: behavioural claim via a `{{selector}}`
+  template, `bindings.toml` authorizes the selector, `issue.md` states the
+  required test name. Rule: `floor(amount * bps / 10_000)`, whole cents. The
+  issue example is deliberately off the boundary so a float implementation still
+  passes the worker's own tests.
+- **The detection.** A scripted plausible delivery (`f64`, `.round()`) has its
+  own `cargo test` green and reports DONE; UNI returns **Rejected 2/4** — the
+  CRITICAL owner invariant is the only place floor and round part ways
+  (`3 * 3333 = 9999 -> 0`, `round` gives 1). Offline, the same one-line change
+  reproduces it, while conservation and idempotency still pass.
+- **The real agent.** Free OpenRouter model, invariant *and* contract hidden:
+  Accepted 4/4, integer division, exact required name. Third confirmation that
+  this model is careful; the missing variable is a non-conforming implementer,
+  not a harder trap.
+- `RESULTS-2026-09-15-t11-real-task.md`; `fix.patch` (ground truth) and
+  `wrong.patch` (plausible) live with the task.
+
 ## Done — 2026-09-15 (committed, pushed as `ac6701d..272fdc5`)
 
 - **Base re-verified.** `cargo test` 134/134 green with
@@ -108,10 +136,12 @@ A proof's actor identity is verified, not merely named.
 
 Ordered by value. Nothing here is started unless marked.
 
-1. **Real-repo study tasks** — the toy family is exhausted (FAR 0% everywhere,
-   FRR fully explained by test naming). Needs tasks that are multi-file, carry
-   a declared invariant, and where plausible-but-wrong is the norm; same
-   harness, both models (the free OpenRouter implementer still works).
+1. **The non-conforming implementer** — the one variable left. t11 proves the
+   trap is deterministic and the hidden-invariant harness measures the right
+   thing, but every model on hand is careful. Needs a weak, careless or
+   adversarial *model* (not a scripted flow) on t11 and its siblings. Next
+   tasks after that: a second multi-file task (derived-index coherence is the
+   natural one) and a re-run of t11 on a second model.
 2. **`uni run` and the work order** — the brief arm showed the handoff must
    *invoke* the brief, not merely emit it. Decide (behaviour change on a
    shipped command, needs review) whether `uni run` generates `brief.md` and

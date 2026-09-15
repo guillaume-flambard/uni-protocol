@@ -1,8 +1,8 @@
 diff --git a/src/settlement.rs b/src/settlement.rs
-index 880f793..e7bdc81 100644
+index 880f793..01043c7 100644
 --- a/src/settlement.rs
 +++ b/src/settlement.rs
-@@ -79,10 +79,22 @@ impl Settlement {
+@@ -79,10 +79,26 @@ impl Settlement {
      /// Returns the fee that was collected.
      pub fn settle_with_fee(
          &mut self,
@@ -22,41 +22,35 @@ index 880f793..e7bdc81 100644
 +        if hold.settled {
 +            return Err(format!("hold {id} is already settled"));
 +        }
-+        let fee = (hold.amount as u64 * fee_bps) / 10000;
-+        ledger.debit(&hold.to, fee as i64);
-+        ledger.credit(FEES_ACCOUNT, fee as i64);
++        // Plausible, and wrong at the boundary: floating point, rounded to
++        // nearest. It conserves the total and it is idempotent, so every test
++        // the worker writes about behaviour passes; the owner's invariant is
++        // where floor and round part ways.
++        let fee = (hold.amount as f64 * fee_bps as f64 / 10_000.0).round() as i64;
++        ledger.debit(&hold.to, fee);
++        ledger.credit(FEES_ACCOUNT, fee);
 +        hold.settled = true;
-+        Ok(fee as i64)
++        Ok(fee)
      }
  }
 diff --git a/tests/it.rs b/tests/it.rs
-index 3edccae..88e0a71 100644
+index 3edccae..58a0f81 100644
 --- a/tests/it.rs
 +++ b/tests/it.rs
-@@ -1,13 +1,25 @@
- use mini_app::ledger::Ledger;
--use mini_app::settlement::Settlement;
-+use mini_app::settlement::{Settlement, FEES_ACCOUNT};
- 
- fn accounts() -> Ledger {
-     let mut l = Ledger::new();
-     l.open("alice", 100).unwrap();
-     l.open("bob", 0).unwrap();
-+    l.open(FEES_ACCOUNT, 0).unwrap();
-     l
+@@ -29,3 +29,16 @@ fn hold_is_refused_without_funds() {
+     assert!(s.hold(&mut l, "alice", "bob", 300).is_err());
+     assert_eq!(l.balance("alice"), 100);
  }
- 
++
 +#[test]
 +fn fee_is_exact() {
-+    let mut l = accounts();
++    let mut l = Ledger::new();
++    l.open("alice", 100).unwrap();
++    l.open("bob", 0).unwrap();
++    l.open(mini_app::settlement::FEES_ACCOUNT, 0).unwrap();
 +    let mut s = Settlement::new();
 +    let hold_id = s.hold(&mut l, "alice", "bob", 100).unwrap();
-+    let fee = s.settle_with_fee(&mut l, hold_id, 250).unwrap();
-+    assert_eq!(fee, 2);
-+    assert_eq!(l.balance("bob"), 100 - 2);
-+    assert_eq!(l.balance(FEES_ACCOUNT), 2);
++    let fee = s.settle_with_fee(&mut l, hold_id, 333).unwrap();
++    assert_eq!(fee, 3);
++    assert_eq!(l.balance("bob"), 97);
 +}
-+
- #[test]
- fn crate_loads() {
-     assert_eq!(mini_app::version(), "0.1");
