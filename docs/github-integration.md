@@ -67,14 +67,14 @@ A composite action that DOWNLOADS the release binary for the runner platform
 action repo root:
 
 ```yaml
-- uses: your-org/uni/adapters/github@v0.9.2
+- uses: your-org/uni/adapters/github@v0.9.3
   with:
     contract: uni/intents/feature.uni
-    # version: v0.9.2   (omit to take the action's default)
+    # version: v0.9.3   (omit to take the action's default)
     repository: your-org/uni
 ```
 
-Inputs: `contract` (required), `version` (default `v0.9.2`), `repository`
+Inputs: `contract` (required), `version` (default `v0.9.3`), `repository`
 (default `guillaume-flambard/uni-protocol`, replace with your fork), `report-to-summary`
 (default true). Unknown runner OS fails loudly instead of silently skipping.
 
@@ -99,7 +99,7 @@ All of the above ran for real on the published repository:
 Pushing the tag and `main` in the same breath races the smoke job against the
 release assets; push the tag first, or re-run the job.
 
-Published releases: `v0.3.0` through `v0.9.2` (latest), five assets each.
+Published releases: `v0.3.0` through `v0.9.3` (latest), five assets each.
 `v0.1.0` predates the release workflow, so it has no release, and its CI run is
 the only historical one that is green by construction. The CI runs for `v0.3.0`
 and `v0.4.0` fail: those tags predate the isolation and portability fixes
