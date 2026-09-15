@@ -165,7 +165,15 @@ the repo warns others about.
 Done when: one source (the root `constitution.md`), and the Spec Kit copy is
 either generated with a check in CI or replaced by a pointer.
 
-### 13. Finish the test-debt direction
+### 13. Two generated artifacts are tracked in the repo
+`.uni/contracts/candidate-sk-fixtures.brief.md` and (before the audit removed it)
+`uni/intents/tests-pass.uni` are outputs of a command, not sources. The project's
+own principle elsewhere is that a mirror is never a source. Decide whether a
+package or repo may ship generated `.uni/` artifacts at all; if yes, say which
+and why in `.gitignore` comments, if no, untrack them and regenerate.
+Done when: `.gitignore` states the rule and the tree matches it.
+
+### 14. Finish the test-debt direction
 The low crates gained unit tests; `uni-ir` still has 2 tests for 131 lines, and
 `uni-decision` (17 tests, 1021 lines) is where a wrong truth-table row is most
 expensive. Prefer growing those rather than the CLI integration surface, and
@@ -177,7 +185,7 @@ compile error paths.
 
 ## P3 - open work carried over (unchanged priority)
 
-### 14. A non-conforming implementer
+### 15. A non-conforming implementer
 The study's one honest gap. t11 was run on five free implementers with the owner
 invariant and the contract hidden: all five Accepted, all integer arithmetic,
 all named the required test. The trap is deterministic (the scripted float
@@ -185,22 +193,22 @@ delivery is Rejected while its own tests are green), but no model on hand is
 careless. Needs a weak or adversarial implementer, or a task whose plausible
 path is wrong by default.
 
-### 15. A second real-repo task
+### 16. A second real-repo task
 `tasks/t11-fee-conservation/` is the shape to copy. Derived-index coherence is
 the natural next one: a denormalized index that a plausible fix forgets to
 update, checked only by the owner's hidden invariant.
 
-### 16. `uni run` and the work order
+### 17. `uni run` and the work order
 The brief arm showed the handoff must *invoke* the brief, not merely emit it.
 **decision:** should `uni run` generate `brief.md` and name it in the executor's
 prompt? A behaviour change on a shipped command, so it needs review.
 
-### 17. Migrate the study and dogfood registries to selector templates
+### 18. Migrate the study and dogfood registries to selector templates
 They pin literal test names, so they lint with `pinned-test-selector` warnings.
 ADR-002 records why this is deferred on both sides (study comparability,
 example-as-documentation). Do it as each file is touched, not as a sweep.
 
-### 18. Low value, do not start before the above
+### 19. Low value, do not start before the above
 - A3 against a workforce issuer with a human token (the Google example). GitHub
   OIDC already proves the path live and unattended.
 - Cloud and org: organizations, dashboards, cost per accepted outcome.
