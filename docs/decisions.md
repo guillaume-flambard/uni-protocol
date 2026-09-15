@@ -29,13 +29,19 @@ fallback).
 
 | Field | Effect |
 |---|---|
-| `reject_on_invalid` (default true) | false downgrades non-critical Rejected to ESCALATED |
+| `reject_on_invalid` (default true) | false downgrades a **critical** rejection to ESCALATED |
 | `escalate_on_stale` | stale evidence on a non-accepted outcome becomes ESCALATED |
 | `escalate_on_missing` | missing evidence becomes ESCALATED instead of EVIDENCE_REQUIRED |
 | `min_verified_ratio` | verified/total claims below ratio becomes REJECTED |
 
 ESCALATED means "a human should look", EVIDENCE_REQUIRED means "run more
-verifiers"; the CLI distinguishes them on exit and in `uni report`.
+verifiers". All three non-accepted decisions exit 1; the stderr label
+(`UNI REJECTED`, `UNI EVIDENCE_REQUIRED`, `UNI ESCALATED`) is what separates
+them, and `uni report` carries the decision itself.
+
+A non-critical failure never becomes REJECTED in the first place: the truth
+table maps it to EVIDENCE_REQUIRED. Only a critical failure rejects, which is
+why `reject_on_invalid` downgrades a critical rejection and nothing else.
 
 ## States
 
@@ -51,10 +57,16 @@ the prover's identity is proven) are DISTINCT properties:
 
 | Level | Meaning |
 |---|---|
+| A0 | No evidence at all: nothing was proven, so there is no evidence level to report. |
 | A2 | Trusted verifier observed a complete subject. Default ceiling. |
 | A3-D | Independent actor (`executor != verifier`), identity SELF-DECLARED. Logically independent, identity unproven. |
 | A3 | Independent actor with an EXTERNALLY VERIFIED identity. |
 | A4 | Reserved: signed provenance has no producer yet (`--attest` refuses explicitly). |
+
+The scale describes the **evidence**, not the verdict. A rejected claim whose
+proof is independent and externally verified is A3-grade evidence that the claim
+is false, and it reports A3. The decision is not an input to the scale, which is
+why `A0` means "no evidence was gathered" rather than "the run did not accept".
 
 Rules: `uni verify` alone caps at A2 (local actor). `uni verify --actor ci:build-12`
 enables A3-D and `uni report`/`explain` display `independent actor: YES,

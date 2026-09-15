@@ -169,7 +169,16 @@ pub(crate) fn cmd_lint(file: &Path, as_json: bool) -> Result<()> {
 }
 
 pub(crate) fn cmd_init() -> Result<()> {
-    for d in ["contracts", "evidence", "decisions", "artifacts"] {
+    // `policies` is created empty because the policy layer reads
+    // `.uni/policies/*.toml`: a fresh workspace should be a place you can put a
+    // policy, not one where you first have to mkdir.
+    for d in [
+        "contracts",
+        "evidence",
+        "decisions",
+        "artifacts",
+        "policies",
+    ] {
         std::fs::create_dir_all(dot_uni().join(d))?;
     }
     std::fs::create_dir_all("uni/intents")?;

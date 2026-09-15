@@ -85,12 +85,17 @@ pub fn identity_assurance(evidences: &[Evidence]) -> &'static str {
 /// (logically independent, identity unproven). A3: independent + externally
 /// verified identities. A4 is never returned here: signed provenance has no
 /// producer yet (see --attest refusal in the CLI).
-pub fn assurance_for(decision: &Decision, evidences: &[Evidence]) -> &'static str {
-    if *decision != Decision::Accepted {
-        return match assurance_of(decision) {
-            1 => "A1",
-            _ => "A0",
-        };
+/// The assurance scale, derived from the evidence graph and from nothing else.
+///
+/// The decision is deliberately NOT an input. A rejected run whose proof is
+/// independent and externally verified is A3-grade evidence that the claim is
+/// false, which is the useful thing to say about it; gating the scale on
+/// `Accepted` used to report A1 there, a level the documented scale does not
+/// even define. The only special case is no evidence at all, where there is no
+/// evidence level to report.
+pub fn assurance_for(evidences: &[Evidence]) -> &'static str {
+    if evidences.is_empty() {
+        return "A0";
     }
     match (independence(evidences), identity_assurance(evidences)) {
         (Independence::Independent, "VERIFIED") => "A3",
@@ -990,16 +995,36 @@ mod independence_tests {
     #[test]
     fn assurance_splits_independence_from_identity() {
         let declared = vec![ev("ci:build-12", "local:alice", "self-declared")];
-        assert_eq!(assurance_for(&Decision::Accepted, &declared), "A3-D");
+        assert_eq!(assurance_for(&declared), "A3-D");
         assert_eq!(identity_assurance(&declared), "SELF-DECLARED");
         let verified = vec![ev("spiffe://acme/v", "local:alice", "verified")];
-        assert_eq!(assurance_for(&Decision::Accepted, &verified), "A3");
+        assert_eq!(assurance_for(&verified), "A3");
         assert_eq!(identity_assurance(&verified), "VERIFIED");
         let same = vec![ev("local:alice", "local:alice", "self-declared")];
-        assert_eq!(assurance_for(&Decision::Accepted, &same), "A2");
-        // Non-accepted decisions never upgrade, whatever the actors.
-        assert_eq!(assurance_for(&Decision::Rejected, &verified), "A1");
-        assert_eq!(assurance_for(&Decision::EvidenceRequired, &verified), "A0");
+        assert_eq!(assurance_for(&same), "A2");
+    }
+
+    /// The scale describes the evidence, not the verdict: a rejected claim
+    /// whose proof is A3-grade is still A3-grade evidence. The old code gated
+    /// the scale on `Accepted` and reported A1/A0 for every other decision,
+    /// levels the documented scale does not define.
+    #[test]
+    fn the_decision_does_not_enter_the_assurance_scale() {
+        let verified = vec![ev("spiffe://acme/v", "local:alice", "verified")];
+        for decision in [
+            Decision::Accepted,
+            Decision::Rejected,
+            Decision::EvidenceRequired,
+            Decision::Escalated,
+        ] {
+            assert_eq!(
+                assurance_for(&verified),
+                "A3",
+                "the scale must not move with {decision:?}"
+            );
+        }
+        // And there is still a floor for "nothing was proven".
+        assert_eq!(assurance_for(&[]), "A0");
     }
 
     #[test]

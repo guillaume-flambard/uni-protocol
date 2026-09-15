@@ -463,7 +463,7 @@ pub(crate) fn cmd_verify(
             );
         }
     }
-    let assurance = uni_decision::assurance_for(&decision.decision, &stored);
+    let assurance = uni_decision::assurance_for(&stored);
     let independent =
         uni_decision::independence(&stored) == uni_decision::Independence::Independent;
     let identity = uni_decision::identity_assurance(&stored);
