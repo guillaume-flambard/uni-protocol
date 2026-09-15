@@ -1,36 +1,44 @@
 # UNI — tickets
 
-Current: **v0.9.1 + solo session 2026-09-15** · 134 tests, 0 warnings · public repo
-`github.com/guillaume-flambard/uni-protocol` · CI green on ubuntu/macOS/Windows +
-POSIX examples + a smoke job that runs the published action · release `v0.9.1`
-with five binaries · workspace changes below are **uncommitted** (review, then
-commit).
+Current: **v0.9.1 + 2026-09-15 work (committed, pushed, unreleased)** · 134
+tests, 0 warnings · public repo `github.com/guillaume-flambard/uni-protocol` ·
+CI green on ubuntu/macOS/Windows + POSIX examples + a smoke job that runs the
+published action · release `v0.9.1` with five binaries. Since `v0.9.1`:
+ADR-002 + lint warning, the live A3 workflow, the Google example, the
+second-model study arm. Those want a `v0.9.2` tag.
 
-## Done — solo session 2026-09-15 (uncommitted)
+## Done — 2026-09-15 (committed, pushed as `ac6701d..272fdc5`)
 
 - **Base re-verified.** `cargo test` 134/134 green with
   `DEVELOPER_DIR=/Library/Developer/CommandLineTools` (plain `git`/`cargo`
   fail: Xcode license not accepted, `sudo xcodebuild -license` still pending).
   Release binary rebuilt (`uni 0.9.1`); `verify` + `explain` on
   `examples/hello` green.
-- **Second-model arm re-checked, still blocked.** `opencode run` with
-  `opencode/gemini-3-flash` returns `CreditsError Insufficient balance`.
-  No credit spent; harness unchanged, one working model away.
-- **A3 against a real issuer, advanced.** `examples/identity-google/` pins a
-  real JWKS snapshot (`googleapis.com/oauth2/v3/certs`, 2 RS256 keys,
-  2026-09-15) with a live-token procedure (`gcloud auth
-  print-identity-token` + registry entry + expected A3). Two new tests in
-  `cli_identity.rs`: the snapshot parses into usable keys, and a token from
-  UNI's throwaway test key is refused against the Google entry. Positive
-  verification still needs one human-minted token.
+- **A3 against a real issuer: CLOSED, live.** GitHub Actions mints a real OIDC
+  token; `examples/identity-github-actions/` pins GitHub's real JWKS (4 RS256
+  keys, snapshot 2026-09-15); `.github/workflows/identity-live.yml` requires
+  `assurance == A3` and proves the refusal too (same token, issuer undeclared,
+  refused). Run `34939375852` reached A3. No secret, no human step, no network
+  call in the verify path. Sibling `examples/identity-google/` keeps the
+  workforce-identity shape (`gcloud`, one human step, `gcloud` absent here).
+- **Second-model arm: UNBLOCKED and run.** `bai/*` refused, `opencode/*`
+  billed or no-op; the free OpenRouter tier
+  (`openrouter/cohere/north-mini-code:free`, $0, real tool use, write-probed
+  before use) carried it. n=10 no-brief: FAR 0%, FRR 30%, all 3 false rejects
+  are test-name coupling. Brief arm t03/t07/t08: a `brief.md` merely present is
+  ignored 3/3, named in the prompt it is followed 3/3 (substance reviewed).
 - **Test-name tension DECIDED (ADR-002).** Pinned test names are a contract
-  smell; `{{selector}}` templates + `uni bind --selector` + `uni brief` as
-  default handoff are the blessed pattern. Enforced as a `uni lint` warning
-  (`pinned-test-selector`, cargo/node/unittest shapes, warning-only so the
-  decision engine is untouched): `pinned_test_selector()` + unit test in
-  `uni-verify`, lint wiring in `cmd/contract.rs`, golden test in
+  smell; `{{selector}}` templates + `uni bind --selector` + `uni brief` as the
+  handoff are the blessed pattern. Enforced as a `uni lint` warning
+  (`pinned-test-selector`, whole-token cargo/node/unittest shapes,
+  warning-only so the decision engine is untouched): `pinned_test_selector()` +
+  unit test in `uni-verify`, lint wiring in `cmd/contract.rs`, golden test in
   `cli_golden.rs`. Explicitly NOT done: auto-emitting `brief.md` in `uni run`
   (behaviour change, needs review).
+- **Hygiene.** `.gitignore` now covers `.uni` runtime state at any depth (the
+  example's evidence/decisions had been tracked by a root-anchored pattern);
+  report, README, `docs/index.md` and `docs/verification.md` updated to 134
+  tests and to the live A3 result.
 
 ## Done — CI hosting decision (2026-09-14)
 
@@ -100,28 +108,27 @@ A proof's actor identity is verified, not merely named.
 
 Ordered by value. Nothing here is started unless marked.
 
-1. **Second-model study arm** — UNBLOCKED 2026-09-15 via OpenRouter free tier
-   (`openrouter/cohere/north-mini-code:free`, $0, real headless tool use).
-   n=10 no-brief runs: FAR 0%, FRR 30%, all 3 false rejects are test-name
-   coupling (second confirmation of ADR-002). Brief arm on t03/t07/t08:
-   silent `brief.md` ignored 3/3, brief **named in the prompt** accepted 3/3
-   (substance reviewed) — the handoff must invoke the work order, not just
-   emit it. Artifacts: `RESULTS-2026-09-15-openrouter-free.md` (both arms) +
-   `results-openrouter-free.csv` + `results-openrouter-brief.csv` (reviewed).
-   Harness fix committed in working tree: `UNI_BRIEF` prompt note in `run.py`.
-   Next: real-repo tasks.
-2. **A3 against a real issuer** — advanced 2026-09-15, not closed. Real Google
-   JWKS pinned under `examples/identity-google/`, refusal against real keys
-   tested, live procedure documented. Needs: one human-minted token
-   (`gcloud auth print-identity-token`), one `uni verify` run reaching A3,
-   and the report row upgraded from "demontre en test".
-3. **Contracts still pin test names** — DECIDED 2026-09-15 (ADR-002), enforced
-   as a lint warning. Remaining: migrate study/dogfood registries to selector
-   templates over time; decide (with review) whether `uni run` auto-emits
-   `brief.md`.
-4. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
+1. **Real-repo study tasks** — the toy family is exhausted (FAR 0% everywhere,
+   FRR fully explained by test naming). Needs tasks that are multi-file, carry
+   a declared invariant, and where plausible-but-wrong is the norm; same
+   harness, both models (the free OpenRouter implementer still works).
+2. **`uni run` and the work order** — the brief arm showed the handoff must
+   *invoke* the brief, not merely emit it. Decide (behaviour change on a
+   shipped command, needs review) whether `uni run` generates `brief.md` and
+   names it in the executor's prompt.
+3. **Migrate to selector templates** — study and dogfood registries still pin
+   literal test names, so they now lint with `pinned-test-selector` warnings.
+   Mechanical, do it as each file is touched.
+4. **Release `v0.9.2`** — ADR-002 + lint warning, live A3 workflow, Google
+   example, second-model results. Tag + five assets; bump the published
+   action's default from `v0.9.1` if the binary changed behaviour (it did:
+   lint warns).
+5. **A3 workforce example, live** — the Google example still needs a
+   human-minted token (`gcloud` is not installed). Low value now that GitHub
+   OIDC proves the path live.
+6. **Cloud / org** — organizations, dashboards, `cost per accepted outcome`.
    Deliberately after the single-user story is convincing.
-5. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
+7. **Vault note** — `1-Projects/uni.md` does not exist; `PROJECTS.md` line is
    present. Low value until the project has a broader audience.
 
 ## Done

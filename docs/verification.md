@@ -90,6 +90,15 @@ actor is never reused by a run that only declares one. Edit `[identities]` and
 the trust-boundary diff says so: those entries are named with an `identity:`
 prefix.
 
+### Live proof: a real issuer, no human step
+
+`examples/identity-github-actions/` pins GitHub's real OIDC JWKS and
+`.github/workflows/identity-live.yml` asks GitHub for a token signed by that
+issuer, then requires `assurance == A3` from `uni report --json`. The same
+token presented to a registry with no `[identities]` entry is refused, so both
+directions are checked in the same job. Nothing is fetched at verification
+time: the keys are the committed snapshot.
+
 ## Built-in verifiers v0.1
 
 The shell verifier is the only executor today; every other tool (cargo, npm,

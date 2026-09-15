@@ -23,6 +23,17 @@ The workflow (`.github/workflows/identity-live.yml`) does exactly four things:
 4. fails unless `uni report --json` says `assurance == "A3"` and
    `identity_assurance == "VERIFIED"`.
 
+## Result
+
+Run `34939375852` (2026-09-15, `workflow_dispatch`, 6s):
+
+```
+Identity: oidc:https://token.actions.githubusercontent.com#
+  repo:guillaume-flambard@56681566/uni-protocol@1370011909:ref:refs/heads/main (verified)
+assurance A3 · identity_assurance VERIFIED · independent_actor true
+refused as expected: no [identities] issuer to believe it
+```
+
 ## What is proven, and what is not
 
 - Proven (live): a real token from a real issuer, verified offline against key

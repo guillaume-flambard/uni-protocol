@@ -5,6 +5,12 @@ material** and documents the live-token procedure. Positive verification
 against a live Google-signed token still needs one human step (mint the
 token), because only you can authenticate as you.
 
+For the fully unattended version, see the sibling example
+`../identity-github-actions/`: GitHub mints a real OIDC token for the CI job
+itself, so A3 is reached with no human step at all. This Google example keeps
+its value as the shape a workforce identity takes (a user authenticating as
+themselves), which is what `gcloud auth print-identity-token` produces.
+
 ## What is pinned here
 
 - `google.jwks.json`: snapshot of `https://www.googleapis.com/oauth2/v3/certs`

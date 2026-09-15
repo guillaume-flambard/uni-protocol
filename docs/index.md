@@ -33,3 +33,6 @@ describes. Constitution: `../constitution.md`. Spec source:
 - [The assurance scale, and how a token earns A3](decisions.md)
 - [End-to-end proof, run against the built binary](../crates/uni-cli/tests/cli_identity.rs)
 - [Registry keys for `[identities]`](verification.md)
+- [**Live, against a real issuer**: GitHub Actions OIDC, run unattended](../examples/identity-github-actions/README.md)
+  (`.github/workflows/identity-live.yml`; run `34939375852` reached A3)
+- [Worked example: Google, needs a human-minted token](../examples/identity-google/README.md)
