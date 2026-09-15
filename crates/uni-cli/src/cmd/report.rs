@@ -288,7 +288,7 @@ pub(crate) fn cmd_explain(arg: Option<String>, as_json: bool, annotations: bool)
 
     if let Some(f) = arg {
         let needle = f.to_lowercase();
-        if !needle.is_empty() && !format!("{text}").to_lowercase().contains(&needle) {
+        if !needle.is_empty() && !text.to_lowercase().contains(&needle) {
             println!("\nNo match for '{f}' in last decision.");
         }
     }

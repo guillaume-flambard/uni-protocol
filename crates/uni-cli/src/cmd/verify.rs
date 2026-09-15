@@ -200,29 +200,27 @@ pub(crate) fn cmd_verify(
     } else {
         uni_verify::RegistryDiff::default()
     };
-    if trust_boundary_changed {
-        if !as_json {
-            println!("REGISTRY_CHANGED");
-            println!(
-                "Previous: sha256:{}",
-                &prev_registry_hash[..12.min(prev_registry_hash.len())]
-            );
-            println!("Current:  sha256:{}", &registry_hash[..12]);
-            println!(
-                "Existing evidence: STALE\nAuthorization: REQUIRED ({} added, {} removed, {} changed)",
-                tb_diff.added.len(),
-                tb_diff.removed.len(),
-                tb_diff.changed.len()
-            );
-            for name in tb_diff
-                .added
-                .iter()
-                .chain(tb_diff.removed.iter())
-                .chain(tb_diff.changed.iter())
-                .take(10)
-            {
-                println!("  - {name}");
-            }
+    if trust_boundary_changed && !as_json {
+        println!("REGISTRY_CHANGED");
+        println!(
+            "Previous: sha256:{}",
+            &prev_registry_hash[..12.min(prev_registry_hash.len())]
+        );
+        println!("Current:  sha256:{}", &registry_hash[..12]);
+        println!(
+            "Existing evidence: STALE\nAuthorization: REQUIRED ({} added, {} removed, {} changed)",
+            tb_diff.added.len(),
+            tb_diff.removed.len(),
+            tb_diff.changed.len()
+        );
+        for name in tb_diff
+            .added
+            .iter()
+            .chain(tb_diff.removed.iter())
+            .chain(tb_diff.changed.iter())
+            .take(10)
+        {
+            println!("  - {name}");
         }
     }
     // 1) Try persisted evidence first (cheap, content-addressed).
@@ -306,7 +304,7 @@ pub(crate) fn cmd_verify(
             .and_then(|spec| uni_verify::artifact_hash(spec, &ws));
         let fingerprint = match &resolved_spec {
             Some(spec) => uni_verify::spec_fingerprint(&v.verifier_ref, spec, &actor.id),
-            None => format!("inline:{}:{}", &v.verifier_ref, actor.id),
+            None => format!("inline:{}:{}", v.verifier_ref, actor.id),
         };
         let current_af = resolved_spec
             .as_ref()
@@ -324,9 +322,10 @@ pub(crate) fn cmd_verify(
             binding_hash: binding_hash.clone(),
         };
         match uni_evidence::load_valid_for_claim(&du, &v.claim_id, &ctx) {
-            uni_evidence::CacheOutcome::Hit(mut ev) => {
+            uni_evidence::CacheOutcome::Hit(ev) => {
                 // The proof is reused, but the decision context is now:
                 // independence is evaluated against the CURRENT executor.
+                let mut ev = *ev;
                 ev.executor = executor.clone();
                 journal.push(events::Event {
                     name: "EvidenceReused",

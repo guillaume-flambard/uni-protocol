@@ -325,7 +325,9 @@ pub fn load_json<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Opti
 /// carries escalation weight under policy (escalate_on_stale).
 #[derive(Debug, Clone)]
 pub enum CacheOutcome {
-    Hit(Evidence),
+    /// Boxed: `Evidence` is close to 600 bytes, and the two other variants are
+    /// tiny, so an unboxed `Hit` would make every `Miss` cost 600 bytes.
+    Hit(Box<Evidence>),
     /// The proof exists but no longer applies, and here is why. This is the
     /// product's central message, so it travels as data, not as a boolean.
     Stale(Vec<StaleReason>),
@@ -514,7 +516,7 @@ pub fn load_valid_for_claim(
     if ev.state == EvidenceState::Invalid {
         return CacheOutcome::Miss;
     }
-    CacheOutcome::Hit(ev)
+    CacheOutcome::Hit(Box::new(ev))
 }
 
 #[cfg(test)]

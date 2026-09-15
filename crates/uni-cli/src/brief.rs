@@ -57,7 +57,7 @@ pub fn test_selector(command: &str) -> Option<String> {
     if command.contains("-m unittest") {
         if let Some(after) = command.split("-m unittest").nth(1) {
             let module = after.split_whitespace().next().unwrap_or("");
-            if let Some(last) = module.split('.').last() {
+            if let Some(last) = module.split('.').next_back() {
                 if !last.is_empty() && module != "discover" {
                     return Some(last.to_string());
                 }

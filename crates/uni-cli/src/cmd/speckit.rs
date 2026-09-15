@@ -51,10 +51,7 @@ pub(crate) fn cmd_import_speckit(dir: &Path, as_json: bool) -> Result<()> {
         let (maybe_id, text) = if t.starts_with("FR-") {
             // FR-001: description | FR-001 description
             let head: &str = t.split([':', ' ']).next().unwrap_or("");
-            let desc = t
-                .split_once(|c| c == ':' || c == ' ')
-                .map(|(_, d)| d.trim())
-                .unwrap_or(t);
+            let desc = t.split_once([':', ' ']).map(|(_, d)| d.trim()).unwrap_or(t);
             (
                 head.trim_end_matches(['*', ':']).to_lowercase(),
                 desc.to_string(),

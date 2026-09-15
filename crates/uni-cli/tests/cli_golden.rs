@@ -264,9 +264,7 @@ fn golden_events_journal() {
         lines.len() >= 3,
         "at least IntentVerified + Evidence + DecisionIssued, got {lines:?}"
     );
-    let last = serde_json::Value::from(
-        serde_json::from_str::<serde_json::Value>(lines[lines.len() - 1]).unwrap(),
-    );
+    let last: serde_json::Value = serde_json::from_str(lines.last().unwrap()).unwrap();
     assert_eq!(last["event"], "DecisionIssued");
     assert!(last["attributes"]["uni.intent.id"].is_string());
     assert!(last["attributes"]["uni.assurance.level"].is_string());
