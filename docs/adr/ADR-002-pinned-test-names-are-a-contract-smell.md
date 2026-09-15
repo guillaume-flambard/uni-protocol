@@ -31,8 +31,19 @@ authorization readable. But a contract that demands a name still demands one.
 - `pinned_test_selector()` in `uni-verify` detects the smell for cargo, node
   `--test-name-pattern`, and `unittest` dotted paths; suites, `--test`
   targets, `discover`, templates, and non-shell verifiers are excluded.
-- Study and dogfood registries still pin names (they measure the old shape);
-  they lint with warnings, which is the honest record, not a failure.
+- Mass migration is **deliberately deferred**, and the reasons are different on
+  each side. The study registry pins names on purpose: changing it mid-study
+  would break comparability with the 25 runs already recorded, so it migrates
+  when the task family is rewritten, not before. The example registries
+  (`examples/python`, `examples/nodejs`) pin per-test names as *documentation*
+  of the per-test verifier pattern; converting them would require committed
+  `uni bind` authorizations in every example, which adds ceremony to a file
+  whose job is to be read.
+- The enforcement was checked against the repo's own contracts, not just unit
+  tests: 16 contracts, 0 errors, exit 0 everywhere, exactly 3 warnings, all on
+  the two examples that pin on purpose (`examples/nodejs` 2,
+  `examples/python` 1). A warning that fires everywhere would be noise; this one
+  fires where the decision says it should.
 - Not decided: auto-emitting `brief.md` inside `uni run` (behaviour change to
   a shipped command; needs a human review, not a solo patch).
 - Cloud/org work stays after this: no point scaling a handoff that still

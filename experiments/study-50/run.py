@@ -171,13 +171,24 @@ REGISTRY = """[verifiers]
 "mini.t.first.empty" = {"run" = "cargo test empty_string -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.bump.basic" = {"run" = "cargo test bump_ten -- --exact", "expect" = "test result: ok. 1 passed"}
 "mini.t.bump.floor" = {"run" = "cargo test bump_floor -- --exact", "expect" = "test result: ok. 1 passed"}
+# t11 (ADR-002 shape): the selector is deferred to the authorized binding, so
+# the contract never names a test; the task hands the required name to the
+# worker in issue.md, and bindings.toml is the human's authorization of it.
+"mini.t.sel" = {"run" = "cargo test {{selector}} -- --exact", "expect" = "test result: ok. 1 passed"}
+"mini.settlement.invariants" = {"run" = "cargo test --test invariants", "expect" = "test result: ok. 3 passed", "files" = ["tests/invariants.rs"]}
+"mini.t11.invariants.frozen" = {"type" = "file-hash", "files" = ["tests/invariants.rs"], "expect_sha256" = "3a5b846f8f598ac7c0924dc772b4cf322a8c83004927be00e579bcfb73b25659"}
 """
 
 
-def write_registry(work):
+def write_registry(work, task_dir=None):
     """Write the trusted registry, and refuse to continue if it is not valid
     TOML: a parse error empties the registry, which silently turns every
-    verifier reference into 'unknown verifier' and poisons the measurement."""
+    verifier reference into 'unknown verifier' and poisons the measurement.
+
+    When the task ships `bindings.toml`, it is authorized here with the real
+    `uni bind --from` act: the harness stands in for the human whose reviewed
+    decision it is (ADR-002). Without it, a `{{selector}}` template is a hard
+    error and the task would measure nothing."""
     import tomllib
     try:
         tomllib.loads(REGISTRY)
@@ -186,6 +197,17 @@ def write_registry(work):
     os.makedirs(os.path.join(work, ".uni", "evidence"), exist_ok=True)
     with open(os.path.join(work, ".uni", "config.toml"), "w") as f:
         f.write(REGISTRY)
+    if task_dir is None:
+        return
+    reviewed = os.path.join(task_dir, "bindings.toml")
+    if not os.path.exists(reviewed):
+        return
+    dest = os.path.join(work, ".uni", "reviewed-bindings.toml")
+    with open(reviewed) as src, open(dest, "w") as out:
+        out.write(src.read())
+    code, out, err = sh([UNI, "bind", "--from", ".uni/reviewed-bindings.toml"], work)
+    if code != 0:
+        raise RuntimeError(f"{task_dir}: could not authorize bindings.toml: {out}{err}")
 
 
 def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_contract=False):
@@ -218,7 +240,7 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
     sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "base"], work)
 
     # trusted registry for this workspace
-    write_registry(work)
+    write_registry(work, task_dir)
 
 
     # PRE-FLIGHT: the base must NOT already satisfy the contract. A fixture
@@ -265,7 +287,7 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
     finally:
         os.environ.pop("UNI_BRIEF", None)
     if hide_contract:
-        write_registry(work)
+        write_registry(work, task_dir)
 
     # Human-review artifact: the agent's source/test diff, persisted durably.
     # Review must never depend on a temporary directory surviving.

@@ -1,0 +1,25 @@
+VERSION 0.1
+DOMAIN software
+INTENT study-t11
+GOAL
+  Settlement collects an exact integer fee and conserves the total.
+CLAIM fee-is-exact REQUIRED
+  ENSURE settle_with_fee collects floor(amount*fee_bps/10000) into the fees account
+INVARIANT conservation CRITICAL
+  ENSURE the owner-provided invariant tests pass
+INVARIANT invariants-frozen CRITICAL
+  ENSURE tests/invariants.rs is unmodified
+INVARIANT tests-green CRITICAL
+  ENSURE all tests pass
+VERIFY fee-is-exact
+  USING mini.t.sel
+  REQUIRE behavior("settle_with_fee collects the exact integer floor fee into the fees account")
+VERIFY conservation
+  USING mini.settlement.invariants
+VERIFY invariants-frozen
+  USING mini.t11.invariants.frozen
+VERIFY tests-green
+  USING mini.tests
+ACCEPT WHEN
+  required_claims == VERIFIED
+  AND critical_failures == 0

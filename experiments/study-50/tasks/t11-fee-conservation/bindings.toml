@@ -1,0 +1,8 @@
+# The harness plays the authorizer here: the required test name for this task
+# is stated in issue.md (the handoff), and this file is the human's standing
+# decision to accept exactly that selector. ADR-002: the worker names the test,
+# the authorization is explicit, and neither is inferred.
+[bindings."fee-is-exact"]
+verifier = "mini.t.sel"
+selector = "fee_is_exact"
+requirement = "behavior(\"settle_with_fee collects the exact integer floor fee into the fees account\")"

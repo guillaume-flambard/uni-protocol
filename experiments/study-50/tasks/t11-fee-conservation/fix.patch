@@ -1,0 +1,52 @@
+diff --git a/src/settlement.rs b/src/settlement.rs
+index 8781231..1eb24ac 100644
+--- a/src/settlement.rs
++++ b/src/settlement.rs
+@@ -81,10 +81,23 @@ impl Settlement {
+     /// Returns the fee that was collected.
+     pub fn settle_with_fee(
+         &mut self,
+-        _ledger: &mut Ledger,
+-        _id: u64,
+-        _fee_bps: u64,
++        ledger: &mut Ledger,
++        id: u64,
++        fee_bps: u64,
+     ) -> Result<i64, String> {
+-        Err("settle_with_fee is not implemented".to_string())
++        let hold = self
++            .holds
++            .iter_mut()
++            .find(|h| h.id == id)
++            .ok_or_else(|| format!("unknown hold {id}"))?;
++        if hold.settled {
++            return Err(format!("hold {id} is already settled"));
++        }
++        // Integer floor: no floating point, no rounding to nearest.
++        let fee = hold.amount.saturating_mul(fee_bps as i64) / 10_000;
++        ledger.debit(&hold.to, fee);
++        ledger.credit(FEES_ACCOUNT, fee);
++        hold.settled = true;
++        Ok(fee)
+     }
+ }
+diff --git a/tests/it.rs b/tests/it.rs
+index 3edccae..909c816 100644
+--- a/tests/it.rs
++++ b/tests/it.rs
+@@ -29,3 +29,15 @@ fn hold_is_refused_without_funds() {
+     assert!(s.hold(&mut l, "alice", "bob", 300).is_err());
+     assert_eq!(l.balance("alice"), 100);
+ }
++
++#[test]
++fn fee_is_exact() {
++    let mut l = Ledger::new();
++    l.open("alice", 100).unwrap();
++    l.open("bob", 0).unwrap();
++    l.open(mini_app::settlement::FEES_ACCOUNT, 0).unwrap();
++    let mut s = Settlement::new();
++    let id = s.hold(&mut l, "alice", "bob", 3).unwrap();
++    assert_eq!(s.settle_with_fee(&mut l, id, 3333).unwrap(), 0);
++    assert_eq!(l.balance(mini_app::settlement::FEES_ACCOUNT), 0);
++}
