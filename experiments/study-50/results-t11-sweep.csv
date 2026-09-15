@@ -1,0 +1,6 @@
+issue,model,agent_done,agent_self_report,uni_decision,human_review,claims_total,claims_verified,baseline_decision,brief_mode,contract_visible,agent_seconds,agent_cost_usd,diff_lines
+t11-fee-conservation,openrouter/cohere/north-mini-code:free,1,DONE,Accepted,1,4,4,Rejected,0,0,,,97
+t11-fee-conservation,openrouter/inclusionai/ling-3.0-flash-fin:free,1,DONE,Accepted,1,4,4,Rejected,0,0,,,89
+t11-fee-conservation,openrouter/nvidia/nemotron-3-super-120b-a12b:free,1,DONE,Accepted,1,4,4,Rejected,0,0,,,140
+t11-fee-conservation,openrouter/dots-studio/dots-3-note-preview:free,1,DONE,Accepted,1,4,4,Rejected,0,0,,,82
+t11-fee-conservation,openrouter/nex-agi/nex-n2.5-pro:free,1,DONE,Accepted,1,4,4,Rejected,0,0,,,83

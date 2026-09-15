@@ -16,6 +16,7 @@ Usage:
 import argparse
 import csv
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -334,7 +335,12 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
     _, agent_diff, _ = sh(["git", "diff", "HEAD~1", "HEAD", "--", "src", "tests"], work)
     diffs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "diffs")
     os.makedirs(diffs_dir, exist_ok=True)
-    with open(os.path.join(diffs_dir, f"{tid}.patch"), "w") as f:
+    # One file per (task, agent): a sweep across models used to overwrite every
+    # earlier delivery with the last one, so review could not see them.
+    model = os.environ.get("UNI_AGENT_MODEL", "")
+    slug = re.sub(r"[^a-z0-9]+", "-", model.lower()).strip("-") if model else ""
+    diff_name = f"{tid}__{slug}.patch" if slug else f"{tid}.patch"
+    with open(os.path.join(diffs_dir, diff_name), "w") as f:
         f.write(agent_diff)
 
     # Deliver the owner's invariant now that the agent cannot see it: this is
@@ -358,6 +364,7 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
 
     out_rows.append({
         "issue": tid,
+        "model": os.environ.get("UNI_AGENT_MODEL", agent_name),
         # 1 only when the agent itself claimed completion (DONE), never assumed
         "agent_done": 1 if self_report == "DONE" else 0,
         "agent_self_report": self_report,
@@ -407,7 +414,7 @@ if __name__ == "__main__":
             continue
         run_task(path, args.agent, rows, args.keep, brief_mode=args.brief, hide_contract=args.hide_contract)
     cols = [
-        "issue", "agent_done", "agent_self_report", "uni_decision", "human_review",
+        "issue", "model", "agent_done", "agent_self_report", "uni_decision", "human_review",
         "claims_total", "claims_verified", "baseline_decision", "brief_mode", "contract_visible",
         "agent_seconds", "agent_cost_usd", "diff_lines",
     ]

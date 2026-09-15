@@ -148,12 +148,14 @@ A proof's actor identity is verified, not merely named.
 
 Ordered by value. Nothing here is started unless marked.
 
-1. **The non-conforming implementer** — the one variable left. t11 proves the
-   trap is deterministic and the hidden-invariant harness measures the right
-   thing, but every model on hand is careful. Needs a weak, careless or
-   adversarial *model* (not a scripted flow) on t11 and its siblings. Next
-   tasks after that: a second multi-file task (derived-index coherence is the
-   natural one) and a re-run of t11 on a second model.
+1. **The non-conforming implementer** — the one variable left. t11 was run on
+   **five** free implementers with the invariant and the contract hidden: all
+   five Accepted 4/4, all integer arithmetic, all named the required test
+   (`results-t11-sweep.csv`, one diff per model). The trap is deterministic and
+   the harness now measures the right thing, but no model on hand is careless.
+   Needs a genuinely weak/adversarial *model*, or a task where the plausible
+   path is wrong by default. Then: a second multi-file task (derived-index
+   coherence is the natural one).
 2. **`uni run` and the work order** — the brief arm showed the handoff must
    *invoke* the brief, not merely emit it. Decide (behaviour change on a
    shipped command, needs review) whether `uni run` generates `brief.md` and

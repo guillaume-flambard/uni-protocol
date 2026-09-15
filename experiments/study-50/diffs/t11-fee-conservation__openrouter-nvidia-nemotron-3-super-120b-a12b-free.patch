@@ -1,0 +1,140 @@
+diff --git a/src/settlement.rs b/src/settlement.rs
+index 880f793..b02fe76 100644
+--- a/src/settlement.rs
++++ b/src/settlement.rs
+@@ -79,10 +79,36 @@ impl Settlement {
+     /// Returns the fee that was collected.
+     pub fn settle_with_fee(
+         &mut self,
+-        _ledger: &mut Ledger,
+-        _id: u64,
+-        _fee_bps: u64,
++        ledger: &mut Ledger,
++        id: u64,
++        fee_bps: u64,
+     ) -> Result<i64, String> {
+-        Err("settle_with_fee is not implemented".to_string())
++        let hold = self
++            .holds
++            .iter_mut()
++            .find(|h| h.id == id)
++            .ok_or_else(|| format!("unknown hold {id}"))?;
++        
++        if hold.settled {
++            return Err(format!("hold {id} is already settled"));
++        }
++        
++        // Calculate fee in whole cents (truncate fractional cents)
++        // fee_bps is in basis points (1/100 of a percent)
++        // So fee = amount * fee_bps / 10000
++        let fee = (hold.amount as u64 * fee_bps) / 10000;
++        
++        // Ensure fee doesn't exceed the amount (shouldn't happen with reasonable fee_bps)
++        if fee > hold.amount as u64 {
++            return Err("fee cannot exceed hold amount".to_string());
++        }
++        
++        // Fee comes out of what the destination was credited
++        ledger.debit(&hold.to, fee as i64);
++        // Fee goes into the fees account
++        ledger.credit(FEES_ACCOUNT, fee as i64);
++        
++        hold.settled = true;
++        Ok(fee as i64)
+     }
+ }
+diff --git a/tests/it.rs b/tests/it.rs
+index 3edccae..7285d57 100644
+--- a/tests/it.rs
++++ b/tests/it.rs
+@@ -29,3 +29,90 @@ fn hold_is_refused_without_funds() {
+     assert!(s.hold(&mut l, "alice", "bob", 300).is_err());
+     assert_eq!(l.balance("alice"), 100);
+ }
++
++#[test]
++fn settle_with_fee_works() {
++    let mut l = accounts();
++    let mut s = Settlement::new();
++    
++    // Place a hold of 100 cents from alice to bob
++    let hold_id = s.hold(&mut l, "alice", "bob", 100).unwrap();
++    assert_eq!(l.balance("alice"), 0);
++    assert_eq!(l.balance("bob"), 100);
++    assert_eq!(l.balance("fees"), 0); // fees account starts at 0
++    
++    // Settle with fee of 333 basis points (should be 3 cents)
++    let fee = s.settle_with_fee(&mut l, hold_id, 333).unwrap();
++    assert_eq!(fee, 3); // 333 bps of 100 = 3 cents
++    
++    // Check that fee came out of bob's amount and went to fees account
++    assert_eq!(l.balance("alice"), 0);
++    assert_eq!(l.balance("bob"), 97); // 100 - 3 = 97
++    assert_eq!(l.balance("fees"), 3); // 3 cents in fees
++    
++    // Ledger total should be unchanged (0 + 97 + 3 = 100, same as initial 100 + 0 + 0)
++    assert_eq!(l.total(), 100);
++}
++
++#[test]
++fn fee_is_exact() {
++    // Test exact fee calculation: 333 basis points on 100 cents is 3 cents
++    {
++        let mut l = accounts();
++        let mut s = Settlement::new();
++        let hold_id = s.hold(&mut l, "alice", "bob", 100).unwrap();
++        let fee = s.settle_with_fee(&mut l, hold_id, 333).unwrap();
++        assert_eq!(fee, 3);
++    }
++    
++    // Test another case: 500 basis points (5%) on 200 cents is 10 cents
++    {
++        let mut l = Ledger::new();
++        l.open("alice", 300).unwrap(); // Give alice enough for 200 hold + 100 buffer
++        l.open("bob", 0).unwrap();
++        let mut s = Settlement::new();
++        let hold_id = s.hold(&mut l, "alice", "bob", 200).unwrap();
++        let fee = s.settle_with_fee(&mut l, hold_id, 500).unwrap();
++        assert_eq!(fee, 10); // 500 bps of 200 = 10 cents
++    }
++    
++    // Test edge case: 0 basis points should yield 0 fee
++    {
++        let mut l = accounts();
++        let mut s = Settlement::new();
++        let hold_id = s.hold(&mut l, "alice", "bob", 100).unwrap();
++        let fee = s.settle_with_fee(&mut l, hold_id, 0).unwrap();
++        assert_eq!(fee, 0);
++    }
++}
++
++#[test]
++fn settle_same_hold_twice_is_refused() {
++    let mut l = accounts();
++    let mut s = Settlement::new();
++    
++    let hold_id = s.hold(&mut l, "alice", "bob", 100).unwrap();
++    
++    // First settlement should work
++    let fee1 = s.settle_with_fee(&mut l, hold_id, 333).unwrap();
++    assert_eq!(fee1, 3);
++    
++    // Second settlement should fail
++    let result = s.settle_with_fee(&mut l, hold_id, 333);
++    assert!(result.is_err());
++    assert_eq!(result.err(), Some(format!("hold {hold_id} is already settled")));
++    
++    // Fee should only be charged once
++    assert_eq!(l.balance("bob"), 97); // 100 - 3 = 97
++    assert_eq!(l.balance("fees"), 3); // Only 3 cents in fees
++}
++
++#[test]
++fn settle_unknown_hold_fails() {
++    let mut l = accounts();
++    let mut s = Settlement::new();
++    
++    let result = s.settle_with_fee(&mut l, 999, 333);
++    assert!(result.is_err());
++    assert_eq!(result.err(), Some("unknown hold 999".to_string()));
++}
