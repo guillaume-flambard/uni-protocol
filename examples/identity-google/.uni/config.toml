@@ -1,0 +1,6 @@
+[verifiers]
+"pass" = "true"
+
+[identities."https://accounts.google.com"]
+source = "oidc"
+jwks_file = "google.jwks.json"

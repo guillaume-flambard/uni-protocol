@@ -14,7 +14,11 @@ acceptance until every required claim is backed by valid evidence.
 - `FORBID <expr>` - compiled to a critical invariant claim
   (`forbid-N`, ensure `FORBID <expr>`). Prove it with an `expect_not` verifier
   (see `verification.md` and `examples/forbid/`).
-- `REQUIRE <expr>` - reserved for v0.2 (VerifierBinding); hard parse error in v0.1.
+- `REQUIRE <expr>` - attaches a resolution requirement to the preceding
+  `VERIFY`/`USING` block, and executes only under an authorized
+  `VerifierBinding` (`uni bind`). Shipped since v0.2; with `--selector`
+  templates since v0.5. Still hard errors: `REJECT WHEN`, `ESCALATE WHEN`.
+  See `verification.md`.
 
 ## Example
 

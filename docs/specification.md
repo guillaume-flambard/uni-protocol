@@ -1,6 +1,6 @@
-# UNI Specification (dev, v0.5)
+# UNI Specification (dev, v0.9)
 
-Status: Developer Preview (v0.5). The wire format is JSON + JSON Schema;
+Status: Developer Preview (v0.9). The wire format is JSON + JSON Schema;
 Protobuf is deferred until the data model stabilizes. Governance stays
 maintainer-driven until UEPs make sense.
 
@@ -26,7 +26,15 @@ promise inert semantics (constitution rule 5).
 ```
 
 Multi-line form: `VERIFY <id>` followed by an indented `USING ...`. `#` comments.
-Unknown directives are hard parse errors with `line N:` diagnostics.
+Unknown directives are hard parse errors with `line N:` diagnostics, and every
+diagnostic names its line.
+
+`GOAL` is free-form prose, and it ends at the first line that begins with a
+directive from the closed vocabulary. The terminator is the whole vocabulary,
+not a hand-picked subset: a reserved `REJECT WHEN` placed right after `GOAL`
+must still be the hard error the vocabulary promises, not a line of goal text.
+`shell` is likewise a whole word, so a registry key that merely starts with
+those letters (`shellcheck`) stays a registry reference.
 
 ## Canonical IR
 
@@ -54,8 +62,11 @@ authorized `VerifierBinding`, never from the contract or the worker alone.
 ## Behavior contract
 
 1. `compile` validates (claim ids unique, VERIFY references known claims).
-2. `lint` never executes; errors = claim without VERIFY; warnings = unknown
-   registry key, duplicate verification.
+2. `lint` never executes; errors = claim without VERIFY (plus malformed contract);
+   warnings = unknown registry key, duplicate verification, a `{{selector}}`
+   template with no authorized selector, a `REQUIRE` with no matching binding,
+   and a verifier whose command pins a literal test name (ADR-002). Warnings
+   never change a decision: the truth table is untouched by them.
 3. `verify` runs registry-resolved commands, writes evidence, applies the truth
    table then the policy, persists `.uni/decisions/last.json`, appends
    `.uni/events.jsonl`.

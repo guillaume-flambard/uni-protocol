@@ -67,37 +67,43 @@ A composite action that DOWNLOADS the release binary for the runner platform
 action repo root:
 
 ```yaml
-- uses: your-org/uni/adapters/github@v0.7.0
+- uses: your-org/uni/adapters/github@v0.9.2
   with:
     contract: uni/intents/feature.uni
-    version: v0.7.0
+    # version: v0.9.2   (omit to take the action's default)
     repository: your-org/uni
 ```
 
-Inputs: `contract` (required), `version` (default `v0.7.0`), `repository`
+Inputs: `contract` (required), `version` (default `v0.9.2`), `repository`
 (default `guillaume-flambard/uni-protocol`, replace with your fork), `report-to-summary`
 (default true). Unknown runner OS fails loudly instead of silently skipping.
 
-## Verified in CI (2026-09-14)
+## Verified in CI (last checked 2026-09-15)
 
 All of the above ran for real on the published repository:
 
 - `uni` workflow: matrix ubuntu / macos / windows (build, portable unit tests,
-  POSIX integration tests outside Windows) plus a POSIX-examples job, all green.
+  POSIX integration tests outside Windows) plus a POSIX-examples job and a
+  `lint` job (`cargo fmt --check`, `clippy -D warnings`, and `uni lint` over
+  every shipped contract), all green.
 - `release` workflow: five targets built and attached on tag push
-  (`uni-<target>.tar.gz`), for `v0.5.0` and `v0.7.0`.
+  (`uni-<target>.tar.gz`), for every release since `v0.5.0`.
 - the composite action itself: an `action-smoke` job downloads the released
-  binary and verifies a runtime-free contract (`examples/artifact`).
+  binary and verifies a runtime-free contract (`examples/artifact`). It passes
+  **no** `version`, so it exercises the default the action ships rather than a
+  pinned old tag.
+- `identity-live` workflow: a real GitHub OIDC token, verified offline against a
+  pinned JWKS, must reach `A3`; the same token with the issuer undeclared must
+  be refused. See `examples/identity-github-actions/`.
 
 Pushing the tag and `main` in the same breath races the smoke job against the
 release assets; push the tag first, or re-run the job.
 
-Published releases: `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.5.1`, `v0.7.0` (latest), five
-assets each. `v0.1.0` predates the release workflow, so it has no release, and
-its CI run is the only historical one that is green by construction. The CI
-runs for `v0.3.0` and `v0.4.0` fail: those tags predate the isolation and
-portability fixes below, which is the honest record of versions that were never
-CI-clean.
+Published releases: `v0.3.0` through `v0.9.2` (latest), five assets each.
+`v0.1.0` predates the release workflow, so it has no release, and its CI run is
+the only historical one that is green by construction. The CI runs for `v0.3.0`
+and `v0.4.0` fail: those tags predate the isolation and portability fixes
+below, which is the honest record of versions that were never CI-clean.
 
 ## Evidence lifecycle in CI
 

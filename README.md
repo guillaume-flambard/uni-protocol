@@ -15,7 +15,7 @@ Rust workspace, single CLI binary `uni`. Deterministic. Filesystem-only. No clou
 | Contract | `uni init` | creates `.uni/{config.toml,contracts,evidence,decisions,policies} + uni/intents` |
 | | `uni compile | inspect` | `.uni` DSL → canonical JSON IR (schema `schemas/uni.schema.json`) |
 | | `uni import-speckit <dir>` | Spec Kit spec.md/plan.md → **candidate** DSL for human review |
-| | `uni lint <contract>` | preflight without execution (coverage, registry refs, duplicates) |
+| | `uni lint <contract>` | preflight without execution (coverage, registry refs, duplicates, selector bindings, pinned test names) |
 | Evidence | `uni verify <contract>` | runs trusted-registry verifiers; incremental, git-+content-bound evidence; STALE on commit or watched-file change |
 | | `uni explain` | claims table + per-claim evidence detail (PRD §16 UX) |
 | Policy | `.uni/policies/*.toml` | reject_on_invalid, escalate_on_stale/missing, min_verified_ratio (deterministic) |
@@ -88,11 +88,11 @@ specification.
 ## Dogfood & tests
 
 ```bash
-cargo test                  # 134 tests incl. property-based decision determinism
+cargo test                  # 142 tests incl. property-based decision determinism
 ./target/release/uni verify examples/hello/hello.uni && echo OK
 ```
 
-Evidence so far, in three parts:
+Evidence so far, in four parts:
 
 - **The check, in the pull request**: a drifted proof lands as an inline
   annotation on the file that moved. [docs/flagship-check.md](docs/flagship-check.md)
@@ -101,10 +101,30 @@ Evidence so far, in three parts:
   exit-code CI stayed green 50 times, a cached CI 70 times, UNI 0 times. UNI
   detection 86 percent (100 percent in every detectable category), false-stale 0
   percent. [experiments/stale-bench/RESULTS-2026-09-14.md](experiments/stale-bench/RESULTS-2026-09-14.md)
-- **Agent study**, 15 reviewed runs: 0 false accepts, 23 percent false rejects all
-  caused by test naming, fixed by `uni brief`; the model never misreported on 13
-  runs. H1/H2 not supported.
+- **Agent study**, 15 reviewed runs plus a five-model sweep: 0 false accepts; the
+  false rejects were all test naming, and `uni brief` plus selector bindings
+  remove the class. The models never misreported. H1/H2 (UNI beats an honest
+  agent's self-report) are **not** supported, and the write-up says so.
   [experiments/study-50/RESULTS-2026-09-14.md](experiments/study-50/RESULTS-2026-09-14.md)
+- **The task where it counts** (`t11`), a multi-file delivery whose own test
+  suite is green and whose author reports DONE, on an owner invariant the author
+  never saw: **Rejected**. The plausible implementation is wrong at exactly one
+  boundary, and the owner's invariant is the only place it shows.
+  [experiments/study-50/RESULTS-2026-09-15-t11-real-task.md](experiments/study-50/RESULTS-2026-09-15-t11-real-task.md)
+
+## Contributing
+
+Issues and pull requests are welcome. Start with
+[CONTRIBUTING.md](CONTRIBUTING.md): it covers the one workflow worth knowing
+(contract first, then `uni verify`), how to write a verifier adapter, and the
+house rule that every claim is proven by a verifier rather than asserted in
+prose. If you want to work on something and are not sure where, open an issue
+with what you tried and what you expected.
+
+Two things make this project easy to contribute to on purpose: a single binary
+with no cloud dependency (`git clone` to a green `uni verify` in under a
+minute), and a test suite that runs the real CLI on real files, so a change that
+works locally is very likely to work in CI.
 
 ## Constitution
 
