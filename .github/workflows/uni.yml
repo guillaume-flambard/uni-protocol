@@ -74,13 +74,48 @@ jobs:
 
   # The published action, exercised for real: it downloads the release binary
   # for the runner platform. The artifact example runs no runtime at all
-  # (file-hash), so this isolates the download-and-run path.
+  # (file-hash), so this isolates the download-and-run path. No `version` is
+  # passed on purpose: the point is to exercise the DEFAULT the action ships,
+  # which a pinned old tag would never test.
   action-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify with the published action
+      - name: Verify with the published action (default version)
         uses: ./adapters/github
         with:
           contract: examples/artifact/artifact.uni
-          version: v0.5.1
+
+  # Hygiene, on one platform because these are platform-independent. Both were
+  # green-ish by accident before (rustc warned nothing; clippy and rustfmt were
+  # never run), so they are asserted here rather than trusted.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Every shipped contract lints clean
+        run: |
+          cargo build --release
+          uni="$PWD/target/release/uni"
+          rc=0
+          # `uni lint` resolves the registry from the working directory, so a
+          # contract that carries its own `.uni/config.toml` (an example that
+          # pins its own verifiers) must be linted from where it lives, or every
+          # reference looks unknown.
+          for f in $(find examples uni packs -type f -name '*.uni' | sort); do
+            dir=$(dirname "$f")
+            echo "--- $f"
+            if [ -f "$dir/.uni/config.toml" ]; then
+              (cd "$dir" && "$uni" lint "$(basename "$f")") || rc=1
+            else
+              "$uni" lint "$f" || rc=1
+            fi
+          done
+          exit $rc
