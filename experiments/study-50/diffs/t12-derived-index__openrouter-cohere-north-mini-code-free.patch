@@ -1,53 +1,27 @@
 diff --git a/src/ledger.rs b/src/ledger.rs
-index 0c87cb6..fa2763c 100644
+index 0c87cb6..f65c5c6 100644
 --- a/src/ledger.rs
 +++ b/src/ledger.rs
-@@ -94,7 +94,38 @@ impl Ledger {
+@@ -94,7 +94,12 @@ impl Ledger {
      /// Apply every entry, all or nothing: if any entry is refused, the ledger
      /// is left exactly as it was, accounts and index alike. Returns how many
      /// entries were applied.
 -    pub fn apply_atomic(&mut self, _entries: &[Entry]) -> Result<usize, String> {
 -        Err("apply_atomic is not implemented".to_string())
 +    pub fn apply_atomic(&mut self, entries: &[Entry]) -> Result<usize, String> {
-+        let mut net_changes: BTreeMap<String, i64> = BTreeMap::new();
-+        
++        let mut applied = 0;
 +        for entry in entries {
-+            *net_changes.entry(entry.from.clone()).or_insert(0) -= entry.amount;
-+            *net_changes.entry(entry.to.clone()).or_insert(0) += entry.amount;
++            self.apply(entry)?;
++            applied += 1;
 +        }
-+        
-+        for (account, change) in &net_changes {
-+            let current_balance = self.balance(account);
-+            if current_balance < -change {
-+                return Err(format!("insufficient balance in '{}'", account));
-+            }
-+        }
-+        
-+        let mut copy_ledger = Self {
-+            accounts: self.accounts.clone(),
-+            owner_of: self.owner_of.clone(),
-+            by_owner: self.by_owner.clone(),
-+        };
-+        
-+        let mut applied_count = 0;
-+        
-+        for entry in entries {
-+            copy_ledger.apply(entry)?;
-+            applied_count += 1;
-+        }
-+        
-+        self.accounts = copy_ledger.accounts;
-+        self.by_owner = copy_ledger.by_owner;
-+        self.owner_of = copy_ledger.owner_of;
-+        
-+        Ok(applied_count)
++        Ok(applied)
      }
  }
 diff --git a/tests/it.rs b/tests/it.rs
-index b208b0a..e27b6fe 100644
+index b208b0a..6daeadc 100644
 --- a/tests/it.rs
 +++ b/tests/it.rs
-@@ -36,3 +36,28 @@ fn an_impossible_transfer_is_refused() {
+@@ -36,3 +36,63 @@ fn an_impossible_transfer_is_refused() {
      assert_eq!(l.balance("alice-checking"), 500);
      assert_eq!(l.balance("bob-checking"), 0);
  }
@@ -55,24 +29,59 @@ index b208b0a..e27b6fe 100644
 +#[test]
 +fn apply_atomic_works() {
 +    let mut l = ledger();
-+    let entries = [
-+        entry("alice-checking", "bob-checking", 100),
-+        entry("alice-savings", "bob-checking", 200),
-+    ];
-+    let result = l.apply_atomic(&entries);
-+    assert!(result.is_ok());
-+    assert_eq!(result.unwrap(), 2);
-+    assert_eq!(l.balance("alice-checking"), 400);
-+    assert_eq!(l.balance("alice-savings"), 0);
-+    assert_eq!(l.balance("bob-checking"), 300);
-+    
 +    let mut l2 = ledger();
-+    let impossible_entries = [
++    let mut l3 = ledger();
++    let mut l4 = ledger();
++
++    let entries = vec![
 +        entry("alice-checking", "bob-checking", 100),
-+        entry("alice-checking", "bob-checking", 500),
++        entry("bob-checking", "alice-savings", 50),
 +    ];
-+    let result2 = l2.apply_atomic(&impossible_entries);
++
++    let mut l_clone1 = l.clone();
++    let mut l_clone2 = l.clone();
++    let mut l_clone3 = l.clone();
++    let mut l_clone4 = l.clone();
++
++    let entries_copy = entries.clone();
++
++    let result1 = l_clone1.apply_atomic(&entries_copy);
++    assert!(result1.is_ok());
++    assert_eq!(result1.unwrap(), 2);
++    assert_eq!(l_clone1.balance("alice-checking"), 400);
++    assert_eq!(l_clone1.balance("bob-checking"), 100);
++    assert_eq!(l_clone1.balance("alice-savings"), 150);
++
++    let entries_copy2 = entries.clone();
++    let result2 = l_clone2.apply_atomic(&entries_copy2);
 +    assert!(result2.is_err());
-+    assert_eq!(l2.balance("alice-checking"), 500);
-+    assert_eq!(l2.balance("bob-checking"), 0);
++    assert_eq!(result2.unwrap_err(), "insufficient balance in 'bob-checking'");
++    assert_eq!(l_clone2.balance("alice-checking"), 500);
++    assert_eq!(l_clone2.balance("bob-checking"), 0);
++    assert_eq!(l_clone2.balance("alice-savings"), 100);
++
++    let entries_copy3 = vec![
++        entry("alice-checking", "bob-checking", 100),
++        entry("bob-checking", "alice-savings", 50),
++    ];
++    let mut l_clone5 = ledger();
++    let result3 = l_clone5.apply_atomic(&entries_copy3);
++    assert!(result3.is_ok());
++    assert_eq!(result3.unwrap(), 2);
++    assert_eq!(l_clone5.balance("alice-checking"), 400);
++    assert_eq!(l_clone5.balance("bob-checking"), 100);
++    assert_eq!(l_clone5.balance("alice-savings"), 150);
++
++    let entries_copy4 = vec![
++        entry("alice-checking", "bob-checking", 100),
++        entry("alice-checking", "bob-checking", 50),
++        entry("bob-checking", "alice-savings", 10),
++    ];
++    let mut l_clone6 = ledger();
++    let result4 = l_clone6.apply_atomic(&entries_copy4);
++    assert!(result4.is_err());
++    assert_eq!(result4.unwrap_err(), "insufficient balance in 'bob-checking'");
++    assert_eq!(l_clone6.balance("alice-checking"), 500);
++    assert_eq!(l_clone6.balance("bob-checking"), 0);
++    assert_eq!(l_clone6.balance("alice-savings"), 100);
 +}

@@ -1,5 +1,17 @@
 # t11, the first real-repo task: the owner's invariant is not the worker's to read
 
+> **Correction (2026-09-15): the `agent_self_report` column in this file is not
+> harness output.** The harness returned a hardcoded `"DONE"` for the real-agent
+> arm, so every claim of `DONE` here was asserted rather than read, and the
+> single `FAILED` row was entered by hand (the only producers of `FAILED` in
+> `run.py` are scripted patches that fail to apply). The bias runs against the
+> baseline, which is to say in UNI's favour: always recording DONE maximises the
+> baseline's claimed successes. The defect is fixed, the affected rows cannot be
+> repaired because the models are non-deterministic, and the honest rule from
+> here is `DONE`/`FAILED` parsed from the worker's last line, anything else
+> `UNPARSED`. Full write-up and the honest re-runs:
+> `RESULTS-2026-09-15-t12-derived-index.md`.
+
 Date: 2026-09-15. Model: `openrouter/cohere/north-mini-code:free` for the real
 arm; scripted patches for the other two. $0 spent.
 

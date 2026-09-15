@@ -38,12 +38,14 @@ def sh(args, cwd, capture=True, timeout=None):
                            stdout=subprocess.PIPE if capture else None,
                            stderr=subprocess.PIPE if capture else None)
     except subprocess.TimeoutExpired as exc:
-        out = exc.stdout or ""
-        err = (exc.stderr or "") + f"\n[harness] killed after {timeout}s"
-        if isinstance(out, bytes):
-            out = out.decode("utf-8", "replace")
-        if isinstance(err, bytes):
-            err = err.decode("utf-8", "replace")
+        # Decode first: subprocess hands back bytes on a timeout even in text
+        # mode, and concatenating a str onto them raises.
+        def as_text(v):
+            if v is None:
+                return ""
+            return v.decode("utf-8", "replace") if isinstance(v, bytes) else v
+        out = as_text(exc.stdout)
+        err = as_text(exc.stderr) + f"\n[harness] killed after {timeout}s"
         return -9, out, err
     return p.returncode, (p.stdout or ""), (p.stderr or "")
 

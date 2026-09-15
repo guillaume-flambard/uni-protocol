@@ -25,6 +25,9 @@ workspace for diff review. Results so far: [RESULTS-2026-09-13.md](RESULTS-2026-
 
 ## Results
 
+- [RESULTS-2026-09-15-t12-derived-index.md](RESULTS-2026-09-15-t12-derived-index.md) -
+  t12, plus the correction of a harness defect that made the `agent_self_report`
+  column meaningless for the real-agent arm.
 - [RESULTS-2026-09-14.md](RESULTS-2026-09-14.md) - corrected real-agent study
   (n=6, FAR 0%, FRR 20%, H1/H2 not supported on this sample).
 - [RESULTS-2026-09-13.md](RESULTS-2026-09-13.md) - INVALIDATED harness-bug run.

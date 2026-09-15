@@ -1,0 +1,4 @@
+issue,model,agent_done,agent_self_report,uni_decision,human_review,claims_total,claims_verified,baseline_decision,brief_mode,contract_visible,agent_seconds,agent_cost_usd,diff_lines
+t12-derived-index,openrouter/cohere/north-mini-code:free,0,UNPARSED,Rejected,0,4,1,Rejected,0,0,,,87
+t12-derived-index,openrouter/inclusionai/ling-3.0-flash-fin:free,0,UNPARSED,Accepted,1,4,4,Rejected,0,0,,,49
+t11-fee-conservation,openrouter/cohere/north-mini-code:free,1,DONE,EvidenceRequired,0,4,3,Rejected,0,0,,,141

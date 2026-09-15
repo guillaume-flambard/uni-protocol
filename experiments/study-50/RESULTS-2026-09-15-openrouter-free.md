@@ -1,5 +1,17 @@
 # Second-model arm 2026-09-15 (OpenRouter free tier, unblocks the ticket)
 
+> **Correction (2026-09-15): the `agent_self_report` column in this file is not
+> harness output.** The harness returned a hardcoded `"DONE"` for the real-agent
+> arm, so every claim of `DONE` here was asserted rather than read, and the
+> single `FAILED` row was entered by hand (the only producers of `FAILED` in
+> `run.py` are scripted patches that fail to apply). The bias runs against the
+> baseline, which is to say in UNI's favour: always recording DONE maximises the
+> baseline's claimed successes. The defect is fixed, the affected rows cannot be
+> repaired because the models are non-deterministic, and the honest rule from
+> here is `DONE`/`FAILED` parsed from the worker's last line, anything else
+> `UNPARSED`. Full write-up and the honest re-runs:
+> `RESULTS-2026-09-15-t12-derived-index.md`.
+
 Model: `openrouter/cohere/north-mini-code:free` (free, $0 spent), headless via
 `opencode run --pure --auto --dir <work>`, one attempt per task, no-brief arm
 (contract + registry visible, issue-only prompt). Harness unchanged

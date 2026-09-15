@@ -1,8 +1,8 @@
 diff --git a/src/ledger.rs b/src/ledger.rs
-index 0c87cb6..cb97ebe 100644
+index 0c87cb6..d09f5d6 100644
 --- a/src/ledger.rs
 +++ b/src/ledger.rs
-@@ -94,7 +94,16 @@ impl Ledger {
+@@ -94,7 +94,12 @@ impl Ledger {
      /// Apply every entry, all or nothing: if any entry is refused, the ledger
      /// is left exactly as it was, accounts and index alike. Returns how many
      /// entries were applied.
@@ -11,18 +11,14 @@ index 0c87cb6..cb97ebe 100644
 +    pub fn apply_atomic(&mut self, entries: &[Entry]) -> Result<usize, String> {
 +        let mut temp = self.clone();
 +        for entry in entries {
-+            if let Err(e) = temp.apply(entry) {
-+                return Err(e);
-+            }
++            temp.apply(entry)?;
 +        }
-+        for entry in entries {
-+            self.apply(entry).unwrap();
-+        }
++        *self = temp;
 +        Ok(entries.len())
      }
  }
 diff --git a/tests/it.rs b/tests/it.rs
-index b208b0a..2eaf89d 100644
+index b208b0a..ebafacc 100644
 --- a/tests/it.rs
 +++ b/tests/it.rs
 @@ -36,3 +36,25 @@ fn an_impossible_transfer_is_refused() {
@@ -33,21 +29,21 @@ index b208b0a..2eaf89d 100644
 +#[test]
 +fn apply_atomic_works() {
 +    let mut l = ledger();
-+    let batch = vec![
-+        entry("alice-checking", "bob-checking", 30),
-+        entry("alice-savings", "bob-checking", 20),
++    let valid = vec![
++        entry("alice-checking", "bob-checking", 100),
++        entry("alice-savings", "bob-checking", 50),
 +    ];
-+    assert!(l.apply_atomic(&batch).is_ok());
-+    assert_eq!(l.balance("alice-checking"), 470);
-+    assert_eq!(l.balance("alice-savings"), 80);
-+    assert_eq!(l.balance("bob-checking"), 50);
++    assert_eq!(l.apply_atomic(&valid), Ok(2));
++    assert_eq!(l.balance("alice-checking"), 400);
++    assert_eq!(l.balance("alice-savings"), 50);
++    assert_eq!(l.balance("bob-checking"), 150);
 +
++    let mut l2 = ledger();
 +    let impossible = vec![
 +        entry("alice-checking", "bob-checking", 300),
-+        entry("alice-savings", "bob-checking", 300),
++        entry("alice-checking", "bob-checking", 300),
 +    ];
-+    assert!(l.apply_atomic(&impossible).is_err());
-+    assert_eq!(l.balance("alice-checking"), 470);
-+    assert_eq!(l.balance("alice-savings"), 80);
-+    assert_eq!(l.balance("bob-checking"), 50);
++    assert!(l2.apply_atomic(&impossible).is_err());
++    assert_eq!(l2.balance("alice-checking"), 500);
++    assert_eq!(l2.balance("bob-checking"), 0);
 +}
