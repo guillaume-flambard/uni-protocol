@@ -1,0 +1,11 @@
+VERSION 0.1
+DOMAIN software
+INTENT identity-google
+GOAL
+  prove who produced the proof with a Google-signed identity
+CLAIM x REQUIRED
+  ENSURE true
+VERIFY x
+  USING pass
+ACCEPT WHEN
+  required_claims == VERIFIED
