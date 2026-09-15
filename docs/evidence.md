@@ -78,10 +78,10 @@ mask a new commit (e2e test: `stale_evidence_does_not_mask_new_commit`).
 
 ## Audit trail
 
-Every verify appends events (IntentVerified, EvidenceRun, EvidenceReused,
-EvidenceStale, RegistryChanged, BindingAuthorized, IdentityVerified,
-IdentityUnverified, DecisionIssued) to `.uni/events.jsonl` with `uni.*`
-attributes. See `uni events`.
+`uni verify` appends IntentVerified, EvidenceRun, EvidenceReused,
+EvidenceStale, RegistryChanged, IdentityVerified, IdentityUnverified and
+DecisionIssued to `.uni/events.jsonl`, with `uni.*` attributes. `uni bind`
+appends BindingAuthorized. See `uni events`.
 
 The journal is append-only but not unbounded: once it passes 1 MiB it is
 archived as `events.<timestamp>.jsonl` and a fresh one starts, keeping the three

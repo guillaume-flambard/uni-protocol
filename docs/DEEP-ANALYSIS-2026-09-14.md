@@ -128,3 +128,8 @@ Score global: **prototype convaincant, produit developer-preview crédible**. Ri
 4. v0.20: action GitHub publique avec release binaire + cross-compiles (macOS/Linux/Windows).
 5. v1.1: sélecteur claim->tests flou, puis study n=50 avec un agent capable (débloque quand l'accès premium/model fort est réglé).
 6. Ensuite seulement: cloud org/dashboards (cost per accepted outcome), `BrowserEvidence` structurée, OTel exporter.
+
+> Correction (2026-09-15): la ligne "Seam haut respecte" de la section 5 cite
+> `assure()`/`evaluate()` comme portes d'entree publiques. Les noms reels sont
+> `uni_verify::assure_contract` et `uni_decision::evaluate`. Le constat (seam
+> tenu, internes caches) reste juste, le nom etait faux.

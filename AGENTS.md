@@ -1,7 +1,7 @@
 # UNI - agent rules
 
 - Constitution: `constitution.md`. Spec source: `specs/001-uni-software-v01/spec.md` (canonical, no duplicate spec).
-- Tickets: `.scratch/tickets.md`. Workflow: implement (TDD at `assure()`) → code-review → `uni verify` → `uni explain` → merge.
+- Tickets: `.scratch/tickets.md`. Workflow: implement (TDD at the seam: `assure_contract` then `evaluate`) → code-review → `uni verify` → `uni explain` → merge.
 - Security: contracts untrusted; trusted registry is `.uni/config.toml` only (`[verifiers]` for what may run, `[identities]` for whose token may be believed). Key material is pinned by path, never fetched.
 - v0.1: filesystem `.uni/`, JSON Schema canonical. No Postgres/Protobuf/MCP/A2A in core.
 

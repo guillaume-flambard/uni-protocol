@@ -11,11 +11,14 @@ then edits the watched file, then verifies again. The second verify is red, and
 ![A failed run, with the drifted claim annotated on src/ledger.rs](assets/stale-annotations-run.png)
 
 ```
-2 errors and 2 warnings
+1 error and 1 warning
 
   claim ledger.frozen: src/ledger.rs#L0
   watched subject moved (changed: src/ledger.rs) (subject_changed); run `uni verify ledger.frozen`
 ```
+
+One annotation per moved file, and one per claim that moved on it: the CRITICAL
+claim lands as an `::error`, a non-critical one as a `::warning`.
 
 The step order is the argument: prove, drift, annotate, then fail.
 

@@ -41,24 +41,34 @@ Release workflow builds five cross-compiled targets; the composite action in
 
 `VERSION DOMAIN INTENT GOAL CLAIM REQUIRE ENSURE INVARIANT FORBID VERIFY ACCEPT REJECT ESCALATE`
 
-Example - `examples/booking/booking.uni`:
+Verbatim from `examples/booking/booking.uni`:
 
 ```
 VERSION 0.1
 DOMAIN software
 INTENT booking.cancel
-
+GOAL
+  Cancel a confirmed booking safely.
 CLAIM booking-state REQUIRED
   ENSURE booking.status == cancelled
+CLAIM inventory REQUIRED
+  ENSURE inventory.available == inventory.before + booking.seats
 INVARIANT ledger-consistency CRITICAL
   ENSURE ledger.balance == expected.balance
-
 VERIFY booking-state
-  USING mini.t.booking
+  USING test.true
+VERIFY inventory
+  USING test.true
+VERIFY ledger-consistency
+  USING test.true
 ACCEPT WHEN
   required_claims == VERIFIED
   AND critical_failures == 0
 ```
+
+Every claim carries its own `VERIFY`, the invariant included: `uni lint` fails
+otherwise. The verifier names resolve through the trusted registry, never
+through the contract.
 
 ## Trusted registry (contracts are untrusted)
 

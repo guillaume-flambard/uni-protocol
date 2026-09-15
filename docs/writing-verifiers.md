@@ -81,5 +81,6 @@ ratio with claim-specific test selection.
 
 Given a fixture workspace + a fixed contract, assert the produced
 `Evidence.state` and the final `Decision`. External behavior only, never
-internals (same rule the core follows: test `assure()`, not the parser).
+internals (same rule the core follows: test `assure_contract` and `evaluate`,
+not the parser or the store).
 `crates/uni-verify` unit tests are the model: `file_hash_adapter_matches_and_mismatches`.

@@ -3,7 +3,7 @@
 Language: Rust 1.98 workspace (`crates/*`), single CLI binary `uni`.
 
 ## Architecture (ADR-001)
-- High seam: `assure(contract, workspace) -> AssuranceResult`; `evaluate(intent) -> Decision`.
+- High seam: `assure_contract(ir, dot_uni, workspace) -> Result<Vec<Evidence>>` in `uni-verify`; `evaluate(ir, evidences) -> DecisionResult` in `uni-decision`, with `apply_policy` applied after the truth table. Both take the compiled IR, not a contract path.
 - Storage: filesystem `.uni/{config.toml,contracts,evidence,decisions,artifacts}`, content-addressed SHA-256.
 - Wire format: JSON IR + JSON Schema (`schemas/uni.schema.json`). No Protobuf until v0.5.
 - Trusted registry: `.uni/config.toml [verifiers]` (run + optional expect/timeout). Contracts untrusted.

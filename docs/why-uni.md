@@ -38,8 +38,8 @@ The product thesis: "UNI ACCEPTED" eventually conveys more confidence than
 | Spec Kit | produces the intent; `uni import-speckit` compiles candidates |
 | Codex / Claude / any agent | executors; UNI only checks outcomes |
 | MCP / A2A | transport and tools; UNI defines what must be true |
-| Temporal / Restate | execution engines; replaceable behind `EXECUTION_PROVIDER` |
+| Temporal / Restate | execution engines; UNI does not orchestrate them, it checks what they delivered |
 | Observability | answers "what happened"; UNI answers "is it sufficient evidence?" |
-| OPA / Cedar | policy engines plugged via `PolicyProvider` (`.uni/policies/opa.rego`) |
+| OPA | the one policy engine wired in, through the `PolicyProvider` trait (`.uni/policies/opa.rego`) |
 
 Spec source: `specs/001-uni-software-v01/spec.md`. Invariants: `constitution.md`.
