@@ -13,6 +13,19 @@ Workflow per `AGENTS.md`: implement (TDD at the seam: `assure_contract` then
 
 ## Closed since v0.9.3, for the record
 
+- **t12, the second real-repo task**, with two independent plausible failure
+  modes, each caught by a named owner property: a batch path that forgets the
+  derived index, and one that checks entries against the starting balances so it
+  can spend the same money twice. Both built and verified as real deliveries.
+- **A harness defect that invalidated a published column.** The worker's
+  self-report was hardcoded to DONE for the real-agent arm, so `agent_self_report`
+  and the "trust every DONE" baseline were asserted rather than observed, biased
+  in UNI's favour. Now parsed, with `UNPARSED` as an honest outcome; the affected
+  results files carry a correction note. First real-model non-acceptance in the
+  study: a correct implementation shipping a self-contradicting test.
+- **Two more harness defects**: no implementer timeout (a hung model blocked the
+  harness for 40 minutes), and a bytes/str bug in the timeout path.
+
 - **The schema is now asserted, not described.** `crates/uni-ir/tests/schema.rs`
   checks both directions between `schemas/uni.schema.json` and the emitted IR:
   no field without a schema entry, no required entry the compiler omits. No
