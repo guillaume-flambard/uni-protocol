@@ -61,20 +61,17 @@ Workflow per `AGENTS.md`: implement (TDD at the seam: `assure_contract` then
   module, and the shared fixture includes are relative to their source file.
   No decision or verification behaviour changed.
 
+- **A non-conforming implementer is rejected.** The scripted `plausible` arm runs
+  t11 and t12 with the contract hidden, the worker's own tests green and a `DONE`
+  self-report, and UNI rejects both at 2/4 claims: the hidden owner invariant and
+  `tests-green`. Committed run, both patches and verification bundles:
+  `experiments/study-50/RESULTS-2026-09-19-adversarial-arm.md`. That note states
+  the limits plainly: the implementer is scripted, not observed, and n=1 per task.
+  The harness gained `--evidence`, which persists the `uni verify` JSON per run.
+  Recorded caveat: a scripted arm must set `UNI_AGENT_MODEL`, or its run
+  overwrites the un-slugged real-agent diff.
+
 ## Open
-
-### U2. Demonstrate rejection of a non-conforming implementer
-
-**Outcome:** one real or deliberately adversarial implementer submits a
-plausible but wrong t11 or t12 delivery, its own tests are green, and UNI
-rejects it through the hidden owner invariant.
-
-**Scope:** use a weak/adversarial implementer or a controlled adversarial
-delivery. Preserve the contract-hidden study design and record the raw worker
-report honestly as `DONE`, `FAILED`, or `UNPARSED`.
-
-**Done when:** the reproducible run, patch, evidence bundle and result row are
-committed; the report states both what was caught and the limits of the sample.
 
 ### U3. Migrate selectors only when a registry changes
 

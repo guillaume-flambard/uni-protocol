@@ -267,7 +267,8 @@ def write_registry(work, task_dir=None):
         raise RuntimeError(f"{task_dir}: could not authorize bindings.toml: {out}{err}")
 
 
-def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_contract=False):
+def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_contract=False,
+             evidence_dir=None):
     tid = os.path.basename(task_dir.rstrip("/"))
     repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     tasks_rel = os.path.join("experiments", "study-50", "tasks")
@@ -415,6 +416,33 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
     })
     print(f"  {tid}: {decision} ({claims_verified}/{n_claims} claims)")
 
+    # Evidence bundle: the verification that produced the row, persisted so a
+    # reader can audit the decision without re-running (and without a temporary
+    # directory surviving). The raw verify output is stored whole, not summarised.
+    if evidence_dir:
+        try:
+            verify_json = json.loads(out_json)
+        except Exception:
+            verify_json = {"raw": out_json, "stderr": uni_err, "exit_code": code}
+        os.makedirs(evidence_dir, exist_ok=True)
+        bundle_name = f"{tid}__{slug or agent_name}"
+        with open(os.path.join(evidence_dir, bundle_name + ".json"), "w") as f:
+            json.dump({
+                "task": tid,
+                "agent": agent_name,
+                "model": os.environ.get("UNI_AGENT_MODEL", agent_name),
+                "baseline_decision": baseline_decision,
+                "agent_self_report": self_report,
+                "agent_done": 1 if self_report == "DONE" else 0,
+                "uni_decision": decision,
+                "claims_total": n_claims,
+                "claims_verified": claims_verified,
+                "contract_visible": 0 if hide_contract else 1,
+                "brief_mode": 1 if brief_mode else 0,
+                "diff_file": os.path.join("diffs", diff_name),
+                "verify": verify_json,
+            }, f, indent=2)
+
     # Post-run guard: same reset, so the next task starts clean.
     fixture_reset(repo, tasks_rel)
 
@@ -435,7 +463,9 @@ if __name__ == "__main__":
     ap.add_argument("--append", action="store_true", help="keep existing rows in --out")
     ap.add_argument("--brief", action="store_true", help="A/B arm: generate uni brief into the agent workspace")
     ap.add_argument("--hide-contract", action="store_true", help="arm: remove the contract from the agent workspace (issue-only handoff)")
+    ap.add_argument("--evidence", default="evidence", help="directory for per-run verification bundles (empty string to disable)")
     args = ap.parse_args()
+    evidence_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), args.evidence) if args.evidence else None
     keep_dir = args.keep
     rows = []
     if args.append and os.path.exists(args.out):
@@ -447,7 +477,8 @@ if __name__ == "__main__":
             continue
         if args.only and args.only != name:
             continue
-        run_task(path, args.agent, rows, args.keep, brief_mode=args.brief, hide_contract=args.hide_contract)
+        run_task(path, args.agent, rows, args.keep, brief_mode=args.brief,
+                 hide_contract=args.hide_contract, evidence_dir=evidence_dir)
     cols = [
         "issue", "model", "agent_done", "agent_self_report", "uni_decision", "human_review",
         "claims_total", "claims_verified", "baseline_decision", "brief_mode", "contract_visible",

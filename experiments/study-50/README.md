@@ -25,6 +25,9 @@ workspace for diff review. Results so far: [RESULTS-2026-09-13.md](RESULTS-2026-
 
 ## Results
 
+- [RESULTS-2026-09-19-adversarial-arm.md](RESULTS-2026-09-19-adversarial-arm.md) -
+  the scripted `plausible` arm on t11 and t12: own tests green, self-report DONE,
+  UNI rejects on the hidden owner invariant. Committed run, patches and evidence.
 - [RESULTS-2026-09-15-t12-derived-index.md](RESULTS-2026-09-15-t12-derived-index.md) -
   t12, plus the correction of a harness defect that made the `agent_self_report`
   column meaningless for the real-agent arm.

@@ -1,0 +1,188 @@
+{
+  "task": "t12-derived-index",
+  "agent": "plausible",
+  "model": "plausible",
+  "baseline_decision": "Rejected",
+  "agent_self_report": "DONE",
+  "agent_done": 1,
+  "uni_decision": "Rejected",
+  "claims_total": 4,
+  "claims_verified": 2,
+  "contract_visible": 0,
+  "brief_mode": 0,
+  "diff_file": "diffs/t12-derived-index__plausible.patch",
+  "verify": {
+    "claims": [
+      {
+        "claim_id": "apply-atomic",
+        "critical": false,
+        "detail": "evidence apply-atomic-36321e79",
+        "required": true,
+        "state": "Valid"
+      },
+      {
+        "claim_id": "index-coherent",
+        "critical": true,
+        "detail": "no valid evidence",
+        "required": true,
+        "state": "Invalid"
+      },
+      {
+        "claim_id": "invariants-frozen",
+        "critical": true,
+        "detail": "evidence invariants-frozen-81eeefbf",
+        "required": true,
+        "state": "Valid"
+      },
+      {
+        "claim_id": "tests-green",
+        "critical": true,
+        "detail": "no valid evidence",
+        "required": true,
+        "state": "Invalid"
+      }
+    ],
+    "decision": "Rejected",
+    "evidence": [
+      {
+        "actor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "artifact_files": {},
+        "artifact_hash": "",
+        "binding_hash": "6eab7d76e969",
+        "claim_id": "apply-atomic",
+        "command": "cargo test apply_atomic_works -- --exact",
+        "commit_sha": "fa9306291b6357a3a175287726a2186de4475e95",
+        "contract_hash": "14ab59e0446f30f4f4558865bd563eb0730e422c620acb660639fe260da47bc1",
+        "created_at": "2026-09-19T12:30:34.129727Z",
+        "duration_ms": 3428,
+        "executor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "exit_code": 0,
+        "expires_at": null,
+        "fingerprint": "ce4f40ee070c",
+        "id": "apply-atomic-36321e79",
+        "output_excerpt": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s\n\n\nrunning 1 test\ntest apply_atomic_works ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s\n\n   Compiling mini-app v0.1.0 (/private/var/folders/9l/jsy6rgt160v3z3vrkqqjhdyh0000gn/T/uni-study-t12-derived-index-v9lmne38)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.45s\n     Running unittests src/lib.rs (target/debug/deps/mini_app-e8c8acdcb9b1e596)\n     Running tests/invariants.rs (target/debug/deps/invariants-a011c5684479acfd)\n     Running tests/it.rs (target/debug/deps/it-d14bf11b7c365c57)\n",
+        "output_hash": "6efb24cd357599a1fe8d2c5e4a73af7d9c7a1f810ab5a0b34a5112e1a3bbda7c",
+        "platform": "macos-aarch64",
+        "policy_hash": "338e7cad5aef87a8c08be6e6b49a3301059b054fc43f11cedd95814a53e05938",
+        "producer": "shell-verifier",
+        "registry_hash": "c07b15c43cb1715e70d89b775717d00020193a7a7a4ba5cfd7c4253a91fd2c59",
+        "state": "Valid",
+        "workspace_dirty": false
+      },
+      {
+        "actor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "artifact_files": {
+          "tests/invariants.rs": "4a57b1e09da36234dcfbaa9a9ed0395628aa091d8fbd33b87d27631bcdc111ec"
+        },
+        "artifact_hash": "66fef28f8cfbb97411d1606241f15f9134ca90c872a0c14c5d85802c05199f2a",
+        "binding_hash": "",
+        "claim_id": "index-coherent",
+        "command": "cargo test --test invariants",
+        "commit_sha": "fa9306291b6357a3a175287726a2186de4475e95",
+        "contract_hash": "14ab59e0446f30f4f4558865bd563eb0730e422c620acb660639fe260da47bc1",
+        "created_at": "2026-09-19T12:30:34.653522Z",
+        "duration_ms": 523,
+        "executor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "exit_code": 101,
+        "expires_at": null,
+        "fingerprint": "8f79e41c0732",
+        "id": "index-coherent-31ae17db",
+        "output_excerpt": "\nrunning 4 tests\ntest an_unknown_account_fails_the_whole_batch ... ok\ntest a_refused_batch_changes_nothing ... ok\ntest a_batch_that_overspends_only_in_total_is_refused ... ok\ntest the_index_keeps_up_with_a_sequence_of_batches ... FAILED\n\nfailures:\n\n---- the_index_keeps_up_with_a_sequence_of_batches stdout ----\n\nthread 'the_index_keeps_up_with_a_sequence_of_batches' (5231683) panicked at tests/invariants.rs:42:9:\nassertion `left == right` failed: after batch 0: owner 'alice' index is out of step with the accounts\n  left: 600\n right: 590\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    the_index_keeps_up_with_a_sequence_of_batches\n\ntest result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running tests/invariants.rs (target/debug/deps/invariants-a011c5684479acfd)\nerror: test failed, to rerun pass `--test invariants`\n",
+        "output_hash": "213f57fd578e2f401c1ee1645fea8827e9ee97e47615315fee339210eea83f87",
+        "platform": "macos-aarch64",
+        "policy_hash": "338e7cad5aef87a8c08be6e6b49a3301059b054fc43f11cedd95814a53e05938",
+        "producer": "shell-verifier",
+        "registry_hash": "c07b15c43cb1715e70d89b775717d00020193a7a7a4ba5cfd7c4253a91fd2c59",
+        "state": "Invalid",
+        "workspace_dirty": false
+      },
+      {
+        "actor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "artifact_files": {
+          "tests/invariants.rs": "4a57b1e09da36234dcfbaa9a9ed0395628aa091d8fbd33b87d27631bcdc111ec"
+        },
+        "artifact_hash": "66fef28f8cfbb97411d1606241f15f9134ca90c872a0c14c5d85802c05199f2a",
+        "binding_hash": "",
+        "claim_id": "invariants-frozen",
+        "command": "file-hash: tests/invariants.rs",
+        "commit_sha": "fa9306291b6357a3a175287726a2186de4475e95",
+        "contract_hash": "14ab59e0446f30f4f4558865bd563eb0730e422c620acb660639fe260da47bc1",
+        "created_at": "2026-09-19T12:30:34.882743Z",
+        "duration_ms": 223,
+        "executor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "exit_code": 0,
+        "expires_at": null,
+        "fingerprint": "aa610ec1c139",
+        "id": "invariants-frozen-81eeefbf",
+        "output_excerpt": "tests/invariants.rs: MATCH (expected 4a57b1e09da3)",
+        "output_hash": "1b0dbb43762d11fdf3a081b1ae7e551af8eec3be6921f6705cdacdffbd08aaa2",
+        "platform": "macos-aarch64",
+        "policy_hash": "338e7cad5aef87a8c08be6e6b49a3301059b054fc43f11cedd95814a53e05938",
+        "producer": "file-hash-verifier",
+        "registry_hash": "c07b15c43cb1715e70d89b775717d00020193a7a7a4ba5cfd7c4253a91fd2c59",
+        "state": "Valid",
+        "workspace_dirty": false
+      },
+      {
+        "actor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "artifact_files": {},
+        "artifact_hash": "",
+        "binding_hash": "",
+        "claim_id": "tests-green",
+        "command": "cargo test",
+        "commit_sha": "fa9306291b6357a3a175287726a2186de4475e95",
+        "contract_hash": "14ab59e0446f30f4f4558865bd563eb0730e422c620acb660639fe260da47bc1",
+        "created_at": "2026-09-19T12:30:35.468956Z",
+        "duration_ms": 585,
+        "executor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "exit_code": 101,
+        "expires_at": null,
+        "fingerprint": "88af872e18b7",
+        "id": "tests-green-0031fd18",
+        "output_excerpt": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 4 tests\ntest a_batch_that_overspends_only_in_total_is_refused ... ok\ntest a_refused_batch_changes_nothing ... ok\ntest an_unknown_account_fails_the_whole_batch ... ok\ntest the_index_keeps_up_with_a_sequence_of_batches ... FAILED\n\nfailures:\n\n---- the_index_keeps_up_with_a_sequence_of_batches stdout ----\n\nthread 'the_index_keeps_up_with_a_sequence_of_batches' (5231793) panicked at tests/invariants.rs:42:9:\nassertion `left == right` failed: after batch 0: owner 'alice' index is out of step with the accounts\n  left: 600\n right: 590\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    the_index_keeps_up_with_a_sequence_of_batches\n\ntest result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s\n     Running unittests src/lib.rs (target/debug/deps/mini_app-e8c8acdcb9b1e596)\n     Running tests/invariants.rs (target/debug/deps/invariants-a011c5684479acfd)\nerror: test failed, to rerun pass `--test invariants`\n",
+        "output_hash": "db8e30a6805f9e5bc90978a1b791ea7a1ba19b2c287266f27b1d4838c8be1175",
+        "platform": "macos-aarch64",
+        "policy_hash": "338e7cad5aef87a8c08be6e6b49a3301059b054fc43f11cedd95814a53e05938",
+        "producer": "shell-verifier",
+        "registry_hash": "c07b15c43cb1715e70d89b775717d00020193a7a7a4ba5cfd7c4253a91fd2c59",
+        "state": "Invalid",
+        "workspace_dirty": false
+      }
+    ],
+    "intent": "study-t12",
+    "reason": "2 critical failure(s)",
+    "trust_boundary_changed": false
+  }
+}
