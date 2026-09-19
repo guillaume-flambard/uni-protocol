@@ -71,21 +71,22 @@ Workflow per `AGENTS.md`: implement (TDD at the seam: `assure_contract` then
   Recorded caveat: a scripted arm must set `UNI_AGENT_MODEL`, or its run
   overwrites the un-slugged real-agent diff.
 
+- **Selector migration is a rule, not a sweep.** Audited every registry against
+  ADR-002. The three `pinned-test-selector` warnings in the repository are
+  `py.t.floor`, `node.t.dash` and `node.t.lower`, all in the root registry on
+  behalf of the two examples that pin a test name as documentation, and no
+  registry has changed since the ADR was written. The freshly written study
+  families, t11 and t12, already use the `{{selector}}` template with a reviewed
+  `uni bind --from` authorization, so the study side migrated where it was
+  rewritten, which is what the ADR asks for. Nothing was forced: the on-touch
+  rule now lives in `AGENTS.md`, and a new pinned selector still surfaces as a
+  `uni lint` warning.
+
 ## Open
 
-### U3. Migrate selectors only when a registry changes
+No open tickets.
 
-**Outcome:** each touched study or dogfood registry uses a `{{selector}}`
-template and reviewed `uni bind --selector` authorization instead of a literal
-test name.
-
-**Scope:** no bulk migration. Preserve historical study comparability and
-example readability, as required by ADR-002.
-
-**Done when:** a touched registry has no new `pinned-test-selector` warning and
-its example or study run still verifies.
-
-## Parked until U2 produces a real need
+## Parked
 
 - A3 with a human Google identity token. GitHub OIDC already proves unattended
   A3.
