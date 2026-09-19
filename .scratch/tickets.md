@@ -53,19 +53,15 @@ Workflow per `AGENTS.md`: implement (TDD at the seam: `assure_contract` then
 - **The action retries its asset download**, which is why the tag commits for
   v0.9.2 and v0.9.3 both went red on the smoke job and needed a manual re-run.
 
+- **The suite is portable again.** The CLI tests resolved `CARGO_BIN_EXE_uni`
+  and `CARGO_MANIFEST_DIR` at compile time, so a moved checkout or target
+  directory left them pointing at the old location and failed for a reason
+  unrelated to the code under test. They now locate the sibling binary and the
+  workspace root from the running test process, through a shared `support`
+  module, and the shared fixture includes are relative to their source file.
+  No decision or verification behaviour changed.
+
 ## Open
-
-### U1. Land the portability hardening
-
-**Outcome:** the full Rust suite works after a checkout or target directory is
-moved, without retaining an obsolete absolute path.
-
-**Scope:** review and commit the current test-path changes. Do not change the
-UNI decision or verification behaviour.
-
-**Done when:** `cargo fmt --check`, `cargo test --workspace`, and
-`cargo clippy --workspace --all-targets -- -D warnings` are green; the commit
-also includes the test support module and the completed spec checklists.
 
 ### U2. Demonstrate rejection of a non-conforming implementer
 
