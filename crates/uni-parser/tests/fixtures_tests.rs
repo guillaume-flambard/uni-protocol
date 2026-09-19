@@ -1,8 +1,26 @@
 use uni_parser::parse;
 
+fn fixtures_dir() -> std::path::PathBuf {
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(root) = executable
+            .parent()
+            .and_then(|deps| deps.parent())
+            .and_then(|profile| profile.parent())
+            .and_then(|target| target.parent())
+        {
+            let fixtures = root.join("crates/uni-parser/tests/fixtures");
+            if fixtures.is_dir() {
+                return fixtures;
+            }
+        }
+    }
+    std::env::current_dir()
+        .expect("test working directory")
+        .join("tests/fixtures")
+}
+
 fn fixture(name: &str) -> String {
-    let base = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
-    std::fs::read_to_string(format!("{base}/{name}")).unwrap()
+    std::fs::read_to_string(fixtures_dir().join(name)).unwrap()
 }
 
 #[test]

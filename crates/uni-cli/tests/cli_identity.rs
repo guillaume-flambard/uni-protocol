@@ -6,14 +6,8 @@ use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use std::path::PathBuf;
 use std::process::Command;
 
-const TEST_PRIVATE_PEM: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../testdata/identity/test.key.pem"
-));
-const TEST_JWKS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../testdata/identity/test.jwks.json"
-));
+const TEST_PRIVATE_PEM: &str = include_str!("../../../testdata/identity/test.key.pem");
+const TEST_JWKS: &str = include_str!("../../../testdata/identity/test.jwks.json");
 
 const CONTRACT: &str = "VERSION 0.1
 DOMAIN software
@@ -28,9 +22,8 @@ ACCEPT WHEN
   required_claims == VERIFIED
 ";
 
-fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_uni")
-}
+mod support;
+use support::bin;
 
 fn mk_repo(tag: &str) -> PathBuf {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -154,10 +147,7 @@ fn an_untrusted_issuer_is_refused() {
     assert!(out.contains("rejected by every trusted issuer"), "{out}");
 }
 
-const REAL_GOOGLE_JWKS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../examples/identity-google/google.jwks.json"
-));
+const REAL_GOOGLE_JWKS: &str = include_str!("../../../examples/identity-google/google.jwks.json");
 
 /// The pinned snapshot is real, parseable key material: at least two RSA
 /// signing keys. This fails loudly when the snapshot goes stale or is

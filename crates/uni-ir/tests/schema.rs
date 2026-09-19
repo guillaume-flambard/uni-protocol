@@ -9,12 +9,32 @@
 //! `required` key the compiler does not emit, fails here rather than being
 //! discovered by a reader.
 
-use std::path::PathBuf;
-
 use uni_ir::{compile, to_json};
 
+fn workspace_root() -> std::path::PathBuf {
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(root) = executable
+            .parent()
+            .and_then(|deps| deps.parent())
+            .and_then(|profile| profile.parent())
+            .and_then(|target| target.parent())
+        {
+            if root.join("schemas/uni.schema.json").is_file() {
+                return root.to_path_buf();
+            }
+        }
+    }
+    let mut root = std::env::current_dir().expect("test working directory");
+    while !root.join("schemas/uni.schema.json").is_file() {
+        if !root.pop() {
+            panic!("could not find schemas/uni.schema.json from the test directory");
+        }
+    }
+    root
+}
+
 fn schema() -> serde_json::Value {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../schemas/uni.schema.json");
+    let path = workspace_root().join("schemas/uni.schema.json");
     let text =
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     serde_json::from_str(&text).expect("schemas/uni.schema.json must be valid JSON")

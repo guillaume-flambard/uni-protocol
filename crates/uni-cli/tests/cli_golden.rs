@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+mod support;
+use support::bin;
 
 fn git(cwd: &PathBuf, args: &[&str]) {
     assert!(Command::new("git")
@@ -10,12 +12,8 @@ fn git(cwd: &PathBuf, args: &[&str]) {
         .success());
 }
 
-fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_uni")
-}
-
 fn run(cmd: &[&str], cwd: &PathBuf) -> i32 {
-    Command::new(bin())
+    Command::new(support::bin())
         .args(cmd)
         .current_dir(cwd)
         .status()
@@ -24,17 +22,8 @@ fn run(cmd: &[&str], cwd: &PathBuf) -> i32 {
         .unwrap()
 }
 
-fn manifest_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
-
 fn repo_root() -> PathBuf {
-    manifest_dir()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf()
+    support::workspace_root()
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -474,12 +463,7 @@ VERIFY x
 /// v0.13: doctor — healthy exit 0 on a prepared workspace, failure exit without .uni.
 #[test]
 fn golden_doctor_healthy_and_fail() {
-    let dup = manifest_dir()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf();
+    let dup = repo_root();
     let ok = bin_state(&dup);
     assert!(ok, "uni repo doctor must be healthy");
     let dir = std::env::temp_dir().join(format!(
@@ -542,12 +526,7 @@ fn golden_stack_independence() {
 /// v0.16: software pack ships, lists, and materializes lint-clean contracts.
 #[test]
 fn golden_software_pack() {
-    let root = manifest_dir()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf();
+    let root = repo_root();
     let o = Command::new(bin())
         .args(["pack", "list", "--json"])
         .current_dir(&root)

@@ -55,32 +55,57 @@ Workflow per `AGENTS.md`: implement (TDD at the seam: `assure_contract` then
 
 ## Open
 
-### 1. A non-conforming implementer
-The study's one honest gap. t11 on five free implementers with the owner
-invariant and the contract hidden: all five Accepted, all integer arithmetic,
-all named the required test. The trap is deterministic (the scripted float
-delivery is Rejected while its own tests are green), but no model on hand is
-careless. Needs a weak or adversarial implementer.
+### U1. Land the portability hardening
 
-### 2. A second real-repo task
-`tasks/t11-fee-conservation/` is the shape to copy. Derived-index coherence is
-the natural next one: a denormalized index a plausible fix forgets to update,
-checked only by the owner's hidden invariant.
+**Outcome:** the full Rust suite works after a checkout or target directory is
+moved, without retaining an obsolete absolute path.
 
-### 3. Migrate the study and dogfood registries to selector templates
-They pin literal test names, so they lint with `pinned-test-selector` warnings.
-ADR-002 records why this is deferred on both sides (study comparability,
-example-as-documentation). Do it as each file is touched, not as a sweep.
+**Scope:** review and commit the current test-path changes. Do not change the
+UNI decision or verification behaviour.
 
-### 4. Low value, do not start before the above
-- A3 against a workforce issuer with a human token (the Google example). GitHub
-  OIDC already proves the path live and unattended.
-- Cloud and org: organizations, dashboards, cost per accepted outcome.
-- `CODE_OF_CONDUCT.md`. **decision:** add one or not.
-- `A1` is unreferenced by the assurance scale (only the legacy decision-only
-  fallback in `assurance_of_json` can produce it). Decide whether
-  `assurance_of(decision)` stays at all.
-- The Google JWKS snapshot ages; re-fetch it before any live use of that example.
+**Done when:** `cargo fmt --check`, `cargo test --workspace`, and
+`cargo clippy --workspace --all-targets -- -D warnings` are green; the commit
+also includes the test support module and the completed spec checklists.
+
+### U2. Demonstrate rejection of a non-conforming implementer
+
+**Outcome:** one real or deliberately adversarial implementer submits a
+plausible but wrong t11 or t12 delivery, its own tests are green, and UNI
+rejects it through the hidden owner invariant.
+
+**Scope:** use a weak/adversarial implementer or a controlled adversarial
+delivery. Preserve the contract-hidden study design and record the raw worker
+report honestly as `DONE`, `FAILED`, or `UNPARSED`.
+
+**Done when:** the reproducible run, patch, evidence bundle and result row are
+committed; the report states both what was caught and the limits of the sample.
+
+### U3. Migrate selectors only when a registry changes
+
+**Outcome:** each touched study or dogfood registry uses a `{{selector}}`
+template and reviewed `uni bind --selector` authorization instead of a literal
+test name.
+
+**Scope:** no bulk migration. Preserve historical study comparability and
+example readability, as required by ADR-002.
+
+**Done when:** a touched registry has no new `pinned-test-selector` warning and
+its example or study run still verifies.
+
+## Parked until U2 produces a real need
+
+- A3 with a human Google identity token. GitHub OIDC already proves unattended
+  A3.
+- Cloud organisations, dashboards and cost per accepted outcome.
+- Decide whether to add `CODE_OF_CONDUCT.md`.
+- Decide whether the legacy A1 fallback in `assurance_of_json` should exist.
+- Refresh the Google JWKS snapshot immediately before a live Google example.
+
+## Closed
+
+- **t12 / derived-index coherence.** This was previously duplicated as “a
+  second real-repo task”. It is already delivered and recorded above: its two
+  hidden owner invariants catch both a forgotten index update and double spend
+  across a batch. No new task is required.
 
 ---
-

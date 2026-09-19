@@ -234,14 +234,8 @@ mod tests {
     use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 
     // A throwaway RSA keypair used only by these tests. It guards nothing.
-    const TEST_PRIVATE_PEM: &str = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../testdata/identity/test.key.pem"
-    ));
-    const TEST_JWKS: &str = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../testdata/identity/test.jwks.json"
-    ));
+    const TEST_PRIVATE_PEM: &str = include_str!("../../../testdata/identity/test.key.pem");
+    const TEST_JWKS: &str = include_str!("../../../testdata/identity/test.jwks.json");
 
     fn tmp(suffix: &str) -> std::path::PathBuf {
         let d = std::env::temp_dir().join(format!(

@@ -1,9 +1,6 @@
 use std::path::PathBuf;
 use std::process::Command;
-
-fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_uni")
-}
+mod support;
 
 fn mk_repo(tag: &str) -> PathBuf {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -28,7 +25,7 @@ fn git(cwd: &PathBuf, args: &[&str]) {
 }
 
 fn run(args: &[&str], dir: &PathBuf) -> std::process::Output {
-    Command::new(bin())
+    Command::new(support::bin())
         .args(args)
         .current_dir(dir)
         .output()

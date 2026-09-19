@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 use std::process::Command;
+mod support;
+use support::bin;
 
 fn mk_repo(tag: &str) -> PathBuf {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -15,12 +17,8 @@ fn mk_repo(tag: &str) -> PathBuf {
     dir
 }
 
-fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_uni")
-}
-
 fn out(cmd: &[&str], cwd: &PathBuf) -> String {
-    let o = Command::new(bin())
+    let o = Command::new(support::bin())
         .args(cmd)
         .current_dir(cwd)
         .output()
@@ -420,7 +418,7 @@ fn concurrent_verify_never_corrupts_state() {
         ],
     );
 
-    let exe1 = bin().to_string();
+    let exe1 = bin().to_string_lossy().into_owned();
     let exe2 = exe1.clone();
     let d1 = dir.clone();
     let d2 = dir.clone();
