@@ -1,0 +1,3 @@
+# The file-hash example pins the bytes of this fixture. Keep checkout
+# conversion from changing those bytes on Windows.
+examples/artifact/digest.txt text eol=lf

@@ -49,6 +49,8 @@ grep -Fq 'magic="$(od -An -tx1 -N2 "$archive"' adapters/github/action.yml ||
 grep -Fq 'tar -czf "$env:GITHUB_WORKSPACE/uni-${{ matrix.target }}.tar.gz"' \
   .github/workflows/release.yml ||
   fail "Windows release is not packaged as a real tar gzip archive"
+grep -Fq 'examples/artifact/digest.txt text eol=lf' .gitattributes ||
+  fail "file-hash smoke fixture can change bytes on Windows checkout"
 
 for path in \
   CODE_OF_CONDUCT.md \
