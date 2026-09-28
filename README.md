@@ -98,7 +98,7 @@ specification.
 ## Dogfood & tests
 
 ```bash
-cargo test                  # 142 tests incl. property-based decision determinism
+cargo test                  # 158 tests incl. property-based decision determinism
 ./target/release/uni verify examples/hello/hello.uni && echo OK
 ```
 

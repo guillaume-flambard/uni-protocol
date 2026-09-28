@@ -1,0 +1,37 @@
+# The silent-measurement defect, reproduced with the pre-guard harness.
+# Captured 2026-09-28T13:32:25Z. Reproduce with the commands in the
+# 'The defect' section of RESULTS-2026-09-28-drift-arm.md; the pre-guard
+# harness is the pre-guard revision of run.py, recoverable as
+#   git show c1d4c1f:experiments/study-50/run.py
+# (c1d4c1f is the commit before the guard landed in 01bb570).
+# The only edit made to the captured output is that the absolute temporary
+# working directory is shown as <work>.
+
+# 1. OLD harness, t11 with no regression.patch (the shipped defect)
+$ git show c1d4c1f:experiments/study-50/run.py > run-old.py
+$ UNI_BIN=target/release/uni UNI_AGENT_MODEL=careless python3 run-old.py \
+    --tasks tasks --agent careless --only t11-fee-conservation \
+    --out defect-row.csv --evidence ''
+    arm: the owner's invariant is hidden from the agent
+    careless: cargo test exit=0 (tests were green at this revision)
+    careless: uni verify at this revision -> code:1
+  t11-fee-conservation: Accepted (4/4 claims)
+wrote <work>/defect-row.csv
+exit=0
+
+# the row it wrote. diff_lines=0: nothing was ever delivered.
+issue,model,agent_done,agent_self_report,uni_decision,human_review,claims_total,claims_verified,baseline_decision,brief_mode,contract_visible,agent_seconds,agent_cost_usd,diff_lines
+t11-fee-conservation,careless,1,DONE,Accepted,,4,4,Rejected,0,1,,,0
+
+# 2. NEW harness, same task, same missing patch
+$ UNI_AGENT_MODEL=careless python3 run.py --tasks tasks --agent careless \
+    --only t11-fee-conservation --out new-row.csv --evidence ''
+                      ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "<work>/run-new.py", line 202, in agent_careless
+    raise RuntimeError(
+    ...<5 lines>...
+    )
+RuntimeError: <work>/tasks/t11-fee-conservation: no regression.patch. The careless arm is 'verified at one revision, edited at a later one', so without a patch there is no later revision and no drift to detect. Ship a regression.patch that breaks an owner invariant while leaving the worker's own suite green, or use another agent.
+
+# 3. did it write a row?
+no. new-row.csv does not exist.

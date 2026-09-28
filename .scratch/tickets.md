@@ -97,6 +97,24 @@ No open tickets.
 
 ## Closed
 
+- **The drift case the study assigned and the board did not carry.**
+  `RESULTS-2026-09-19-adversarial-arm.md` closed by naming the gap: drift after
+  verification "belongs to the `careless` arm", which had only ever run on t09,
+  a one-function task with no hidden invariant. t11 and t12 now each carry a
+  `regression.patch`, and both have a committed careless run: evidence stale on
+  `commit_changed`, re-run, Rejected on the hidden owner invariant with 2
+  critical failures, worker's own claim Valid. See
+  `experiments/study-50/RESULTS-2026-09-28-drift-arm.md`.
+- **A third silent-measurement defect in the study harness, and a false
+  positive rather than a bias.** `agent_careless` guarded the late edit with
+  `if os.path.exists(regression.patch)` and no `else`, so a task with no patch
+  fell through to `return True, "DONE"`: a DONE self-report and a result row
+  for a run with no drift, measured at `Accepted` 4/4 with `diff_lines=0`.
+  Three refusals now stand in its place, and a fourth silent inference beside
+  it is gone: the arm named its pre-drift decision from the exit code, which
+  separates Accepted from Rejected but not Rejected from EvidenceRequired, both
+  measured at 1, and t11's pre-drift Rejected printed exactly that `code:1`.
+  Previous two: the hardcoded self-report and the missing timeout.
 - **t12 / derived-index coherence.** This was previously duplicated as “a
   second real-repo task”. It is already delivered and recorded above: its two
   hidden owner invariants catch both a forgotten index update and double spend

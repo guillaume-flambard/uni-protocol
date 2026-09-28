@@ -25,6 +25,11 @@ workspace for diff review. Results so far: [RESULTS-2026-09-13.md](RESULTS-2026-
 
 ## Results
 
+- [RESULTS-2026-09-28-drift-arm.md](RESULTS-2026-09-28-drift-arm.md) -
+  the `careless` arm on t11 and t12: verified at one revision, edited at a
+  later one, evidence stale on `commit_changed`, rejected on the hidden owner
+  invariant. Plus a silent-measurement defect the run exposed: the arm reported
+  DONE for a task with no regression patch.
 - [RESULTS-2026-09-19-adversarial-arm.md](RESULTS-2026-09-19-adversarial-arm.md) -
   the scripted `plausible` arm on t11 and t12: own tests green, self-report DONE,
   UNI rejects on the hidden owner invariant. Committed run, patches and evidence.

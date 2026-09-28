@@ -73,7 +73,8 @@ Ordered by what unblocks the most:
   `tasks/t11-fee-conservation/` is the shape to copy: a multi-file base, an owner
   invariant the worker never sees, a ground-truth `fix.patch`, and a scripted
   `wrong.patch` that must be rejected. A derived-index coherence task is the
-  natural next one.
+  natural next one. Done: `tasks/t12-derived-index/` shipped, and the board
+  records it under closed, so skip this and pick the next one.
 - **A non-conforming implementer.** The study's honest gap: every model tested
   writes careful code, so UNI's detection is demonstrated against scripted
   deliveries rather than against a careless model. If you have access to a weak

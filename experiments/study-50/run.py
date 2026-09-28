@@ -160,25 +160,40 @@ def agent_careless(task, work):
     tcode, tout, _ = sh(["cargo", "test"], work)
     print(f"    careless: cargo test exit={tcode} (tests were green at this revision)")
     # And an explicit UNI verification at this revision, recorded on disk.
-    # The whole arm is "verified, then edited late", so an Accepted decision
-    # here is the premise. Without one there is no earlier proof to go stale
-    # and the run would report a drift measurement that never happened.
-    vcode, vout, _ = sh([UNI, "verify", "contract.uni"], work)
+    # The premise of the arm is that valid evidence exists here and goes stale
+    # on the late edit, so what is asserted is evidence, not a self-report.
+    # `--json` because the decision is only machine-readable there. This used to
+    # read the plain output, never got JSON, and fell back to the exit code:
+    # 0 became "ACCEPTED" and anything else became "code:1", so a Rejected and
+    # an EvidenceRequired were indistinguishable on the line that states the
+    # arm's premise. Measured on t11: exit 0 on Accepted, exit 1 on Rejected,
+    # and the pre-drift Rejected used to print "code:1". Naming the decision is
+    # the point, for the same reason parse_self_report stopped hardcoding DONE.
+    #
+    # The test is per claim, because staleness is per claim. On a task that
+    # withholds its owner invariants.rs until delivery, the contract can never
+    # be Accepted here by construction, and requiring that would refuse the
+    # arm for the wrong reason; the claims that can carry evidence (the
+    # behavioural one and the suite) do, and those are what go stale.
+    vcode, vout, _ = sh([UNI, "--json", "verify", "contract.uni"], work)
     try:
-        decision = json.loads(vout).get("decision", "")
+        pre = json.loads(vout)
+        decision = pre.get("decision", "")
+        valid_now = sum(1 for c in pre.get("claims", []) if c.get("state") == "Valid")
     except Exception:
-        decision = ""
-    if decision != "Accepted":
+        decision, valid_now = "", 0
+    print(f"    careless: uni verify at this revision -> {decision} "
+          f"({valid_now} claim(s) with valid evidence to go stale)")
+    if not valid_now:
         seen = decision if decision else f"no decision (uni verify exit {vcode})"
         raise RuntimeError(
-            f"{task}: the careless arm never reached an Accepted decision at the "
-            f"pre-drift revision ({seen}), so there is no earlier evidence to go "
-            "stale. Two usual causes: --hide-contract removed the contract the "
-            "agent verifies against, or the task's fix is not Accepted. Either "
-            "way this run measures nothing, and it is refused rather than "
-            "reported."
+            f"{task}: no claim carries valid evidence at the pre-drift revision "
+            f"({seen}), so there is nothing to go stale and this run would report "
+            "a drift measurement that never happened. The arm needs a revision "
+            "it can actually verify; --hide-contract removes the contract it "
+            "verifies against, and a task whose fix cannot be verified here is "
+            "not a candidate for this arm."
         )
-    print(f"    careless: uni verify at this revision -> {decision}")
     # Then a late edit, no re-run, no re-verify. The regression patch IS the
     # arm: no patch means no late edit, so there is no second revision, no
     # stale evidence and no drift. `if os.path.exists` used to swallow that and
@@ -295,6 +310,34 @@ def write_registry(work, task_dir=None):
     code, out, err = sh([UNI, "bind", "--from", ".uni/reviewed-bindings.toml"], work)
     if code != 0:
         raise RuntimeError(f"{task_dir}: could not authorize bindings.toml: {out}{err}")
+
+
+def verification_trace(work):
+    """The lifecycle trail of the verification that just produced the decision:
+    the journal's event names in order, and the stale dimensions and revision
+    it recorded.
+
+    A bundle otherwise says what was decided but not why an earlier proof was
+    not reused, which is the entire question on a drifted delivery. Both parts
+    are raw CLI output: the event names verbatim, and the `stale` block and
+    commit of `decisions/last.json` untouched."""
+    trace = {}
+    journal = os.path.join(work, ".uni", "events.jsonl")
+    if os.path.exists(journal):
+        with open(journal) as f:
+            trace["journal"] = [
+                json.loads(line).get("event", "") for line in f if line.strip()
+            ]
+    last = os.path.join(work, ".uni", "decisions", "last.json")
+    if os.path.exists(last):
+        try:
+            with open(last) as f:
+                data = json.load(f)
+            trace["commit"] = data.get("commit")
+            trace["stale"] = data.get("stale", {})
+        except Exception:
+            pass
+    return trace
 
 
 def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_contract=False,
@@ -471,6 +514,7 @@ def run_task(task_dir, agent_name, out_rows, keep_dir, brief_mode=False, hide_co
                 "brief_mode": 1 if brief_mode else 0,
                 "diff_file": os.path.join("diffs", diff_name),
                 "verify": verify_json,
+                "trace": verification_trace(work),
             }, f, indent=2)
 
     # Post-run guard: same reset, so the next task starts clean.

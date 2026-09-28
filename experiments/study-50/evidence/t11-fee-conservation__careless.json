@@ -1,0 +1,230 @@
+{
+  "task": "t11-fee-conservation",
+  "agent": "careless",
+  "model": "careless",
+  "baseline_decision": "Rejected",
+  "agent_self_report": "DONE",
+  "agent_done": 1,
+  "uni_decision": "Rejected",
+  "claims_total": 4,
+  "claims_verified": 2,
+  "contract_visible": 1,
+  "brief_mode": 0,
+  "diff_file": "diffs/t11-fee-conservation__careless.patch",
+  "verify": {
+    "claims": [
+      {
+        "claim_id": "fee-is-exact",
+        "critical": false,
+        "detail": "evidence fee-is-exact-c5ae8ff1",
+        "required": true,
+        "state": "Valid"
+      },
+      {
+        "claim_id": "conservation",
+        "critical": true,
+        "detail": "no valid evidence",
+        "required": true,
+        "state": "Invalid"
+      },
+      {
+        "claim_id": "invariants-frozen",
+        "critical": true,
+        "detail": "evidence invariants-frozen-81eeefbf",
+        "required": true,
+        "state": "Valid"
+      },
+      {
+        "claim_id": "tests-green",
+        "critical": true,
+        "detail": "no valid evidence",
+        "required": true,
+        "state": "Invalid"
+      }
+    ],
+    "decision": "Rejected",
+    "evidence": [
+      {
+        "actor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "artifact_files": {},
+        "artifact_hash": "",
+        "binding_hash": "d8f4b098fd4d",
+        "claim_id": "fee-is-exact",
+        "command": "cargo test fee_is_exact -- --exact",
+        "commit_sha": "62df57cce585661b72a9e91cb6721029b287a56e",
+        "contract_hash": "a31d69a9d839423d22d75972d2ca184f67108553a162e23950f9f466cffcd747",
+        "created_at": "2026-09-28T13:31:16.239357Z",
+        "duration_ms": 684,
+        "executor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "exit_code": 0,
+        "expires_at": null,
+        "fingerprint": "a8aa4d8f6dc0",
+        "id": "fee-is-exact-c5ae8ff1",
+        "output_excerpt": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s\n\n\nrunning 1 test\ntest fee_is_exact ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s\n\n   Compiling mini-app v0.1.0 (/private/var/folders/9l/jsy6rgt160v3z3vrkqqjhdyh0000gn/T/uni-study-t11-fee-conservation-cy6ss12i)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s\n     Running unittests src/lib.rs (target/debug/deps/mini_app-e8c8acdcb9b1e596)\n     Running tests/invariants.rs (target/debug/deps/invariants-a011c5684479acfd)\n     Running tests/it.rs (target/debug/deps/it-d14bf11b7c365c57)\n",
+        "output_hash": "fb7fdf26cce2392d4dd176535eda659d0090cee6181181185c19cf843611ef2d",
+        "platform": "macos-aarch64",
+        "policy_hash": "338e7cad5aef87a8c08be6e6b49a3301059b054fc43f11cedd95814a53e05938",
+        "producer": "shell-verifier",
+        "registry_hash": "c07b15c43cb1715e70d89b775717d00020193a7a7a4ba5cfd7c4253a91fd2c59",
+        "state": "Valid",
+        "workspace_dirty": false
+      },
+      {
+        "actor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "artifact_files": {
+          "tests/invariants.rs": "3a5b846f8f598ac7c0924dc772b4cf322a8c83004927be00e579bcfb73b25659"
+        },
+        "artifact_hash": "8d94715c4ccb634807aadc9c33700d649a58d39033c3b5b057d09367fb93584d",
+        "binding_hash": "",
+        "claim_id": "conservation",
+        "command": "cargo test --test invariants",
+        "commit_sha": "62df57cce585661b72a9e91cb6721029b287a56e",
+        "contract_hash": "a31d69a9d839423d22d75972d2ca184f67108553a162e23950f9f466cffcd747",
+        "created_at": "2026-09-28T13:31:16.278139Z",
+        "duration_ms": 38,
+        "executor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "exit_code": 101,
+        "expires_at": null,
+        "fingerprint": "24739f2ea76d",
+        "id": "conservation-31ae17db",
+        "output_excerpt": "\nrunning 3 tests\ntest total_is_conserved_across_holds_and_fees ... FAILED\ntest a_settled_hold_is_not_settled_twice ... FAILED\ntest fee_is_the_exact_integer_floor ... FAILED\n\nfailures:\n\n---- total_is_conserved_across_holds_and_fees stdout ----\n\nthread 'total_is_conserved_across_holds_and_fees' (2991947) panicked at tests/invariants.rs:28:5:\nassertion `left == right` failed: money was created or destroyed\n  left: 1000011\n right: 1000000\n\n---- a_settled_hold_is_not_settled_twice stdout ----\n\nthread 'a_settled_hold_is_not_settled_twice' (2991945) panicked at tests/invariants.rs:74:5:\nassertion `left == right` failed\n  left: 1002\n right: 1000\n\n---- fee_is_the_exact_integer_floor stdout ----\n\nthread 'fee_is_the_exact_integer_floor' (2991946) panicked at tests/invariants.rs:57:9:\nassertion `left == right` failed: conservation broke at amount=100\n  left: 243\n right: 210\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    a_settled_hold_is_not_settled_twice\n    fee_is_the_exact_integer_floor\n    total_is_conserved_across_holds_and_fees\n\ntest result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s\n     Running tests/invariants.rs (target/debug/deps/invariants-a011c5684479acfd)\nerror: test failed, to rerun pass `--test invariants`\n",
+        "output_hash": "6fb87cdd4bf8f3c2eba33af07d943975fc8c5725961e05050c342c3a1b4763e8",
+        "platform": "macos-aarch64",
+        "policy_hash": "338e7cad5aef87a8c08be6e6b49a3301059b054fc43f11cedd95814a53e05938",
+        "producer": "shell-verifier",
+        "registry_hash": "c07b15c43cb1715e70d89b775717d00020193a7a7a4ba5cfd7c4253a91fd2c59",
+        "state": "Invalid",
+        "workspace_dirty": false
+      },
+      {
+        "actor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "artifact_files": {
+          "tests/invariants.rs": "3a5b846f8f598ac7c0924dc772b4cf322a8c83004927be00e579bcfb73b25659"
+        },
+        "artifact_hash": "8d94715c4ccb634807aadc9c33700d649a58d39033c3b5b057d09367fb93584d",
+        "binding_hash": "",
+        "claim_id": "invariants-frozen",
+        "command": "file-hash: tests/invariants.rs",
+        "commit_sha": "62df57cce585661b72a9e91cb6721029b287a56e",
+        "contract_hash": "a31d69a9d839423d22d75972d2ca184f67108553a162e23950f9f466cffcd747",
+        "created_at": "2026-09-28T13:31:16.294444Z",
+        "duration_ms": 16,
+        "executor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "exit_code": 0,
+        "expires_at": null,
+        "fingerprint": "a3b2c3dff7ed",
+        "id": "invariants-frozen-81eeefbf",
+        "output_excerpt": "tests/invariants.rs: MATCH (expected 3a5b846f8f59)",
+        "output_hash": "b96934adc17a6c2cf9ebded6687cb5d8ba239a4f55ebc7138701f04495558eea",
+        "platform": "macos-aarch64",
+        "policy_hash": "338e7cad5aef87a8c08be6e6b49a3301059b054fc43f11cedd95814a53e05938",
+        "producer": "file-hash-verifier",
+        "registry_hash": "c07b15c43cb1715e70d89b775717d00020193a7a7a4ba5cfd7c4253a91fd2c59",
+        "state": "Valid",
+        "workspace_dirty": false
+      },
+      {
+        "actor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "artifact_files": {},
+        "artifact_hash": "",
+        "binding_hash": "",
+        "claim_id": "tests-green",
+        "command": "cargo test",
+        "commit_sha": "62df57cce585661b72a9e91cb6721029b287a56e",
+        "contract_hash": "a31d69a9d839423d22d75972d2ca184f67108553a162e23950f9f466cffcd747",
+        "created_at": "2026-09-28T13:31:16.329760Z",
+        "duration_ms": 35,
+        "executor": {
+          "assurance": "self-declared",
+          "id": "local:memo",
+          "source": "local"
+        },
+        "exit_code": 101,
+        "expires_at": null,
+        "fingerprint": "88af872e18b7",
+        "id": "tests-green-0031fd18",
+        "output_excerpt": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 3 tests\ntest a_settled_hold_is_not_settled_twice ... FAILED\ntest total_is_conserved_across_holds_and_fees ... FAILED\ntest fee_is_the_exact_integer_floor ... FAILED\n\nfailures:\n\n---- a_settled_hold_is_not_settled_twice stdout ----\n\nthread 'a_settled_hold_is_not_settled_twice' (2992046) panicked at tests/invariants.rs:74:5:\nassertion `left == right` failed\n  left: 1002\n right: 1000\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n---- total_is_conserved_across_holds_and_fees stdout ----\n\nthread 'total_is_conserved_across_holds_and_fees' (2992048) panicked at tests/invariants.rs:28:5:\nassertion `left == right` failed: money was created or destroyed\n  left: 1000011\n right: 1000000\n\n---- fee_is_the_exact_integer_floor stdout ----\n\nthread 'fee_is_the_exact_integer_floor' (2992047) panicked at tests/invariants.rs:57:9:\nassertion `left == right` failed: conservation broke at amount=100\n  left: 243\n right: 210\n\n\nfailures:\n    a_settled_hold_is_not_settled_twice\n    fee_is_the_exact_integer_floor\n    total_is_conserved_across_holds_and_fees\n\ntest result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s\n     Running unittests src/lib.rs (target/debug/deps/mini_app-e8c8acdcb9b1e596)\n     Running tests/invariants.rs (target/debug/deps/invariants-a011c5684479acfd)\nerror: test failed, to rerun pass `--test invariants`\n",
+        "output_hash": "4305d66556dbb38a96d2931bdae6881bd78efe05202261fa6bb6c70b47e62dd6",
+        "platform": "macos-aarch64",
+        "policy_hash": "338e7cad5aef87a8c08be6e6b49a3301059b054fc43f11cedd95814a53e05938",
+        "producer": "shell-verifier",
+        "registry_hash": "c07b15c43cb1715e70d89b775717d00020193a7a7a4ba5cfd7c4253a91fd2c59",
+        "state": "Invalid",
+        "workspace_dirty": false
+      }
+    ],
+    "intent": "study-t11",
+    "reason": "2 critical failure(s)",
+    "trust_boundary_changed": false
+  },
+  "trace": {
+    "journal": [
+      "BindingAuthorized",
+      "IntentVerified",
+      "EvidenceRun",
+      "EvidenceRun",
+      "EvidenceRun",
+      "EvidenceRun",
+      "DecisionIssued",
+      "IntentVerified",
+      "EvidenceRun",
+      "EvidenceRun",
+      "EvidenceRun",
+      "EvidenceRun",
+      "DecisionIssued",
+      "IntentVerified",
+      "EvidenceStale",
+      "EvidenceStale",
+      "EvidenceStale",
+      "EvidenceStale",
+      "EvidenceRun",
+      "EvidenceRun",
+      "EvidenceRun",
+      "EvidenceRun",
+      "DecisionIssued"
+    ],
+    "commit": "62df57cce585661b72a9e91cb6721029b287a56e",
+    "stale": {
+      "conservation": [
+        {
+          "detail": "artifact moved from commit c1300f93 to 62df57cc",
+          "dimension": "commit_changed"
+        }
+      ],
+      "tests-green": [
+        {
+          "detail": "artifact moved from commit c1300f93 to 62df57cc",
+          "dimension": "commit_changed"
+        }
+      ]
+    }
+  }
+}
