@@ -160,19 +160,49 @@ def agent_careless(task, work):
     tcode, tout, _ = sh(["cargo", "test"], work)
     print(f"    careless: cargo test exit={tcode} (tests were green at this revision)")
     # And an explicit UNI verification at this revision, recorded on disk.
+    # The whole arm is "verified, then edited late", so an Accepted decision
+    # here is the premise. Without one there is no earlier proof to go stale
+    # and the run would report a drift measurement that never happened.
     vcode, vout, _ = sh([UNI, "verify", "contract.uni"], work)
     try:
-        decision = json.loads(vout).get("decision", "?")
+        decision = json.loads(vout).get("decision", "")
     except Exception:
-        decision = "ACCEPTED" if vcode == 0 else f"code:{vcode}"
+        decision = ""
+    if decision != "Accepted":
+        seen = decision if decision else f"no decision (uni verify exit {vcode})"
+        raise RuntimeError(
+            f"{task}: the careless arm never reached an Accepted decision at the "
+            f"pre-drift revision ({seen}), so there is no earlier evidence to go "
+            "stale. Two usual causes: --hide-contract removed the contract the "
+            "agent verifies against, or the task's fix is not Accepted. Either "
+            "way this run measures nothing, and it is refused rather than "
+            "reported."
+        )
     print(f"    careless: uni verify at this revision -> {decision}")
-    # Then a late edit, no re-run, no re-verify.
+    # Then a late edit, no re-run, no re-verify. The regression patch IS the
+    # arm: no patch means no late edit, so there is no second revision, no
+    # stale evidence and no drift. `if os.path.exists` used to swallow that and
+    # fall through to `return True, "DONE"`, which wrote a green result row and
+    # a DONE self-report for a measurement that never happened. A missing or
+    # inapplicable patch is a broken fixture, not a result.
     reg = os.path.abspath(os.path.join(task, "regression.patch"))
-    if os.path.exists(reg):
-        rcode, rout, rerr = sh(["git", "apply", "--whitespace=nowarn", reg], work)
-        print(f"    careless: regression applied={rcode == 0}")
-        if rcode != 0:
-            print(f"  [careless] regression failed: {rout}{rerr}", file=sys.stderr)
+    if not os.path.exists(reg):
+        raise RuntimeError(
+            f"{task}: no regression.patch. The careless arm is 'verified at one "
+            "revision, edited at a later one', so without a patch there is no "
+            "later revision and no drift to detect. Ship a regression.patch "
+            "that breaks an owner invariant while leaving the worker's own "
+            "suite green, or use another agent."
+        )
+    rcode, rout, rerr = sh(["git", "apply", "--whitespace=nowarn", reg], work)
+    if rcode != 0:
+        raise RuntimeError(
+            f"{task}: regression.patch does not apply to the fixed revision "
+            f"(git apply exit {rcode}): {rout}{rerr}. The drift was never "
+            "applied, so the arm ran nothing; fix the patch against the tree "
+            "that fix.patch leaves behind."
+        )
+    print(f"    careless: regression applied={rcode == 0}")
     sh(["git", "add", "-A"], work)
     sh(["git", "-c", "user.email=s@t", "-c", "user.name=s", "commit", "-qm", "late-edit"], work)
     return True, "DONE"

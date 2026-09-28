@@ -1,0 +1,15 @@
+diff --git a/src/settlement.rs b/src/settlement.rs
+index 7cdd7b5..d76e566 100644
+--- a/src/settlement.rs
++++ b/src/settlement.rs
+@@ -93,7 +93,9 @@ impl Settlement {
+         }
+         // Integer floor: no floating point, no rounding to nearest.
+         let fee = hold.amount.saturating_mul(fee_bps as i64) / 10_000;
+-        ledger.debit(&hold.to, fee);
++        // The hold already moved the amount out of `from`, so the fee is only a
++        // slice of what `to` was credited and paying it is a credit to the fees
++        // account. There is nothing left to debit here.
+         ledger.credit(FEES_ACCOUNT, fee);
+         hold.settled = true;
+         Ok(fee)

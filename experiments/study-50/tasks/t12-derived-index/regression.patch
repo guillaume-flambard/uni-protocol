@@ -1,0 +1,19 @@
+diff --git a/src/ledger.rs b/src/ledger.rs
+index ae52654..f7204ee 100644
+--- a/src/ledger.rs
++++ b/src/ledger.rs
+@@ -117,9 +117,12 @@ impl Ledger {
+             *projected.get_mut(&entry.to).unwrap() += entry.amount;
+         }
+         // Nothing can fail from here: every entry was checked, and the accounts
+-        // only move as the projection said they would.
++        // only move as the projection said they would. The projection already
++        // holds the outcome, so write the balances straight across rather than
++        // re-checking each entry through `apply`.
+         for entry in entries {
+-            self.apply(entry)?;
++            *self.accounts.get_mut(&entry.from).unwrap() -= entry.amount;
++            *self.accounts.get_mut(&entry.to).unwrap() += entry.amount;
+         }
+         Ok(entries.len())
+     }
