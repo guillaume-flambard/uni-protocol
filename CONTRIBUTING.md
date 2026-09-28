@@ -1,7 +1,7 @@
 # Contributing to UNI
 
-Thanks for looking. This is a small, opinionated project, so the fastest path is
-short: read the constitution, run the tests, then pick something.
+Thanks for looking. This is a small, opinionated project. Read the constitution,
+run the tests, then coordinate the change through GitHub Issues.
 
 ## What UNI is, in three sentences
 
@@ -69,17 +69,14 @@ asked to change even if it works:
 
 Ordered by what unblocks the most:
 
-- **A second multi-file study task.** `experiments/study-50/` is the harness, and
-  `tasks/t11-fee-conservation/` is the shape to copy: a multi-file base, an owner
-  invariant the worker never sees, a ground-truth `fix.patch`, and a scripted
-  `wrong.patch` that must be rejected. A derived-index coherence task is the
-  natural next one. Done: `tasks/t12-derived-index/` shipped, and the board
-  records it under closed, so skip this and pick the next one.
-- **A non-conforming implementer.** The study's honest gap: every model tested
-  writes careful code, so UNI's detection is demonstrated against scripted
-  deliveries rather than against a careless model. If you have access to a weak
-  or adversarial implementer, the harness already supports it
-  (`UNI_AGENT_MODEL=<model> python3 run.py --agent opencode`).
+- **Independent reproductions.** Re-run a published study arm, preserve the
+  result row and evidence bundle, and report any disagreement before changing
+  the harness. The scripted adversarial arms prove that the mechanism fires on
+  two fixtures. They do not establish a model failure rate.
+- **A real non-conforming implementer.** The study's honest gap remains: the
+  committed wrong deliveries are scripted. A run from a real implementer that
+  reports completion while missing a hidden owner invariant would add evidence
+  the current study does not have.
 - **Verifier adapters.** The shell verifier is the only executor today. A
   first-class adapter for a real runtime is a contained, well-tested change:
   `docs/writing-verifiers.md` has the interface and the `file-hash` adapter is
@@ -99,14 +96,21 @@ A2A servers. See
 ## Pull requests
 
 Small and focused beats large and complete. For anything larger than a bug fix,
-open an issue first so we can disagree about the shape before you write it. In
+open a GitHub issue first so the outcome and proof can be agreed before you
+write it. Check for an existing issue before creating a new one. In
 the pull request, say what would have to be true for the change to be wrong
 (that is the useful review question), and include the exact command you ran when
 the answer is not obvious from the diff.
 
+Public contribution work is coordinated in GitHub Issues. The maintainer may
+keep local notes for solo work, but contributors are not expected to discover
+or update those notes.
+
 ## Security
 
 Please do not open a public issue for a vulnerability. See `SECURITY.md`.
+
+Participation in the project is governed by `CODE_OF_CONDUCT.md`.
 
 ## Licence
 

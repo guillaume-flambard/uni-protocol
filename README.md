@@ -1,6 +1,11 @@
 # UNI - Outcome Assurance Protocol
 
-**Never trust "done" from an agent. Verify the outcome.**
+[![CI](https://github.com/guillaume-flambard/uni-protocol/actions/workflows/uni.yml/badge.svg?branch=main)](https://github.com/guillaume-flambard/uni-protocol/actions/workflows/uni.yml)
+[![Live identity check](https://github.com/guillaume-flambard/uni-protocol/actions/workflows/identity-live.yml/badge.svg?branch=main)](https://github.com/guillaume-flambard/uni-protocol/actions/workflows/identity-live.yml)
+[![Release](https://img.shields.io/github/v/release/guillaume-flambard/uni-protocol)](https://github.com/guillaume-flambard/uni-protocol/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](LICENSE-MIT)
+
+**An agent saying DONE is not evidence. Verify the outcome.**
 
 ```
 INTENT → CLAIMS → EVIDENCE → POLICY → DECISION
@@ -8,11 +13,33 @@ INTENT → CLAIMS → EVIDENCE → POLICY → DECISION
 
 Rust workspace, single CLI binary `uni`. Deterministic. Filesystem-only. No cloud required.
 
+> Developer Preview. The latest published binary is v0.9.4. See
+> [current status](docs/current-status.md) for what is shipped, what is measured,
+> and what is still deliberately out of scope.
+
+## Quickstart
+
+Prerequisites: Git, a stable Rust toolchain, and the build tools required by
+your project.
+
+```bash
+git clone https://github.com/guillaume-flambard/uni-protocol.git
+cd uni-protocol
+cargo build --release
+./target/release/uni verify examples/hello/hello.uni
+./target/release/uni report
+```
+
+That example runs `cargo check` through the trusted registry and records the
+evidence under `.uni/`. To start in another repository, follow the complete
+[quickstart](docs/quickstart.md). A fresh `uni init` uses Cargo commands as its
+starter registry; replace those entries for Python, Node, or another stack.
+
 ## Capability map (v0.9)
 
 | Area | Command | Behavior |
 |---|---|---|
-| Contract | `uni init` | creates `.uni/{config.toml,contracts,evidence,decisions,policies} + uni/intents` |
+| Contract | `uni init` | creates `.uni/{config.toml,contracts,evidence,decisions,artifacts,policies} + uni/intents` |
 | | `uni compile | inspect` | `.uni` DSL → canonical JSON IR (schema `schemas/uni.schema.json`) |
 | | `uni import-speckit <dir>` | Spec Kit spec.md/plan.md → **candidate** DSL for human review |
 | | `uni lint <contract>` | preflight without execution (coverage, registry refs, duplicates, selector bindings, pinned test names) |
@@ -88,12 +115,15 @@ evidence invalidation by SHA-256 over watched files.
 
 ## Documentation
 
-The complete report, including what is proven and what is not:
-[docs/REPORT-2026-09-14.md](docs/REPORT-2026-09-14.md).
+Start with [current status](docs/current-status.md), which separates shipped
+behavior, measured evidence, and known limits.
 
 Start at [docs/index.md](docs/index.md): why UNI, quickstart, language,
 claims, evidence, verification, decisions, GitHub, writing verifiers,
 specification.
+
+The dated [September 2026 report](docs/REPORT-2026-09-14.md) is kept as a
+historical snapshot. It is not the current project status.
 
 ## Dogfood & tests
 
@@ -102,7 +132,7 @@ cargo test                  # 158 tests incl. property-based decision determinis
 ./target/release/uni verify examples/hello/hello.uni && echo OK
 ```
 
-Evidence so far, in four parts:
+Evidence so far, with the limits kept beside the result:
 
 - **The check, in the pull request**: a drifted proof lands as an inline
   annotation on the file that moved. [docs/flagship-check.md](docs/flagship-check.md)
@@ -111,30 +141,35 @@ Evidence so far, in four parts:
   exit-code CI stayed green 50 times, a cached CI 70 times, UNI 0 times. UNI
   detection 86 percent (100 percent in every detectable category), false-stale 0
   percent. [experiments/stale-bench/RESULTS-2026-09-14.md](experiments/stale-bench/RESULTS-2026-09-14.md)
-- **Agent study**, 15 reviewed runs plus a five-model sweep: 0 false accepts; the
-  false rejects were all test naming, and `uni brief` plus selector bindings
-  remove the class. The models never misreported. H1/H2 (UNI beats an honest
-  agent's self-report) are **not** supported, and the write-up says so.
+- **Reviewed real-agent study**, corrected sample n=6: 0 false accepts and 1
+  false reject. H1/H2 (UNI beats an honest agent's self-report) are **not**
+  supported. An older self-report column was invalid because the harness
+  asserted DONE on the agent's behalf; those rows cannot be repaired, and the
+  report says so.
   [experiments/study-50/RESULTS-2026-09-14.md](experiments/study-50/RESULTS-2026-09-14.md)
-- **The task where it counts** (`t11`), a multi-file delivery whose own test
-  suite is green and whose author reports DONE, on an owner invariant the author
-  never saw: **Rejected**. The plausible implementation is wrong at exactly one
-  boundary, and the owner's invariant is the only place it shows.
-  [experiments/study-50/RESULTS-2026-09-15-t11-real-task.md](experiments/study-50/RESULTS-2026-09-15-t11-real-task.md)
+- **Hidden owner invariants**, on two multi-file tasks: scripted plausible
+  deliveries report DONE and keep their own tests green, while UNI rejects the
+  property the implementer never saw. This proves the mechanism on these
+  fixtures, not a population-level failure rate for coding models.
+  [Adversarial arm](experiments/study-50/RESULTS-2026-09-19-adversarial-arm.md)
+- **Drift after verification**, on the same two tasks: a correct revision is
+  verified, later code moves, prior evidence becomes stale, and the delivered
+  revision is re-verified and rejected.
+  [Drift arm](experiments/study-50/RESULTS-2026-09-28-drift-arm.md)
 
 ## Contributing
 
-Issues and pull requests are welcome. Start with
+Issues and pull requests are welcome. GitHub Issues is the public coordination
+surface. Start with
 [CONTRIBUTING.md](CONTRIBUTING.md): it covers the one workflow worth knowing
 (contract first, then `uni verify`), how to write a verifier adapter, and the
 house rule that every claim is proven by a verifier rather than asserted in
-prose. If you want to work on something and are not sure where, open an issue
-with what you tried and what you expected.
+prose. Check the existing issues first. If none matches, open a focused proposal
+with the outcome you want and how it could be proved.
 
-Two things make this project easy to contribute to on purpose: a single binary
-with no cloud dependency (`git clone` to a green `uni verify` in under a
-minute), and a test suite that runs the real CLI on real files, so a change that
-works locally is very likely to work in CI.
+The project has a single binary with no cloud dependency, and its integration
+tests run the real CLI on real files. Please also read the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Constitution
 

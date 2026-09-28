@@ -5,10 +5,13 @@ trusts it. Reports are welcome and taken seriously.
 
 ## Reporting a vulnerability
 
-Do not open a public issue. Use GitHub's private reporting: the **Security** tab,
-then **Report a vulnerability**. If that is unavailable to you, open a
-minimal public issue saying only that you have a security report and how to
-reach you, with no detail, and we will move it to a private channel.
+Do not disclose vulnerability details in a public issue.
+
+GitHub private vulnerability reporting is the intended channel, but it is not
+enabled for this repository yet. Until the **Report a vulnerability** button is
+available under the Security tab, open a minimal issue titled `Private security
+report requested`. Include no technical detail. The maintainer will arrange a
+private channel and close the public coordination issue.
 
 A useful report contains: what an attacker can do that they should not be able
 to, the smallest reproduction (a contract, a registry, a command sequence), the

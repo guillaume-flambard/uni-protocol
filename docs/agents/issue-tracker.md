@@ -1,3 +1,5 @@
 # Issue tracker
 
-Local markdown under `.scratch/` (solo phase). Tickets in `.scratch/tickets.md` with `Blocked by` edges. GitHub Issues later; then apply `ready-for-agent`.
+Maintainer-only work may be tracked in local markdown under `.scratch/`.
+Public contribution work is coordinated through GitHub Issues. Contributors do
+not need access to the local tracker and should not update it in a pull request.

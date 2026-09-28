@@ -14,13 +14,15 @@
 | [brief.md](brief.md) | the work order handed to an implementing agent |
 | [run.md](run.md) | the execute half: run your command, then verify |
 | [specification.md](specification.md) | grammar, canonical IR, behavior contract |
-| [REPORT-2026-09-14.md](REPORT-2026-09-14.md) | **complete report**: thesis, architecture, capabilities, study, what is proven |
+| [current-status.md](current-status.md) | current release, CI evidence, measured results, known limits |
+| [REPORT-2026-09-14.md](REPORT-2026-09-14.md) | historical September 2026 snapshot; not current status |
 | [DEEP-ANALYSIS-2026-09-14.md](DEEP-ANALYSIS-2026-09-14.md) | earlier audit at v0.18, superseded; kept as the record of how two real bugs were found |
 
-Everything here describes the shipped binary (`cargo build --release`,
-`./target/release/uni`). When in doubt, run it: what executes beats what a doc
-describes. Constitution: `../constitution.md`. Spec source:
-`../specs/001-uni-software-v01/spec.md`.
+The behavior guides describe the binary built from the current source
+(`cargo build --release`, `./target/release/uni`). Dated reports are historical
+records of the revision named in each file. When in doubt, run the current
+binary: what executes beats what a doc describes. Constitution:
+`../constitution.md`. Spec source: `../specs/001-uni-software-v01/spec.md`.
 
 ## Stale evidence
 
@@ -34,5 +36,5 @@ describes. Constitution: `../constitution.md`. Spec source:
 - [End-to-end proof, run against the built binary](../crates/uni-cli/tests/cli_identity.rs)
 - [Registry keys for `[identities]`](verification.md)
 - [**Live, against a real issuer**: GitHub Actions OIDC, run unattended](../examples/identity-github-actions/README.md)
-  (`.github/workflows/identity-live.yml`; run `34939375852` reached A3)
+  (`.github/workflows/identity-live.yml`; the scheduled workflow is the current proof)
 - [Worked example: Google, needs a human-minted token](../examples/identity-google/README.md)

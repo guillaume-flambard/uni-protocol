@@ -1,10 +1,7 @@
 name: uni
 
-# All jobs run on GitHub-hosted runners. The repository is public, so those are
-# free and unlimited, and they are disposable: every build script and test from
-# every dependency executes in a throwaway VM rather than on the lab VPS. A
-# self-hosted runner was tried and removed on 2026-09-14: it saved ~40 s per
-# push and put that code on the production host.
+# All jobs run on disposable GitHub-hosted runners. No repository workflow
+# executes third-party build scripts on maintainer-operated infrastructure.
 on: [push, pull_request]
 
 concurrency:
@@ -83,13 +80,33 @@ jobs:
     # release workflow, which has not finished when this starts. That race made
     # the tag commits for v0.9.2 and v0.9.3 go red on an unrelated job.
     if: github.ref_type != 'tag'
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Verify with the published action (default version)
         uses: ./adapters/github
         with:
           contract: examples/artifact/artifact.uni
+      - name: Exercise the future Windows release archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = "$env:RUNNER_TEMP/uni-windows-smoke.tar.gz"
+          $unpack = "$env:RUNNER_TEMP/uni-windows-smoke"
+          tar -czf $archive -C "$env:RUNNER_TEMP/uni-bin" uni.exe
+          $bytes = [System.IO.File]::ReadAllBytes($archive)
+          if ($bytes[0] -ne 0x1f -or $bytes[1] -ne 0x8b) {
+            throw "Windows release archive is not gzip"
+          }
+          New-Item -ItemType Directory -Force -Path $unpack | Out-Null
+          tar -xzf $archive -C $unpack
+          if (-not (Test-Path "$unpack/uni.exe")) {
+            throw "Windows release archive does not contain uni.exe"
+          }
 
   # Hygiene, on one platform because these are platform-independent. Both were
   # green-ish by accident before (rustc warned nothing; clippy and rustfmt were
@@ -112,6 +129,8 @@ jobs:
           # allowed to drift (rule 7, one source of truth).
           scripts/sync-constitution.sh
           git diff --exit-code -- .specify/memory/constitution.md
+      - name: Public documentation matches the shipped paths and version
+        run: bash scripts/check-public-surface.sh
       - name: Every shipped contract lints clean
         run: |
           cargo build --release

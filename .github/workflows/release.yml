@@ -1,7 +1,7 @@
 name: release
 
 # Cross-compiled release binaries. Triggered by pushing a version tag
-# (git tag v0.7.0 && git push origin v0.3.0). The action in
+# (git tag v0.9.5 && git push origin v0.9.5). The action in
 # adapters/github/action.yml downloads these assets by target triple.
 on:
   push:
@@ -49,7 +49,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path "target/${{ matrix.target }}/release/uni.exe" -DestinationPath "uni-${{ matrix.target }}.tar.gz"
+          tar -czf "$env:GITHUB_WORKSPACE/uni-${{ matrix.target }}.tar.gz" `
+            -C "target/${{ matrix.target }}/release" uni.exe
       - uses: softprops/action-gh-release@v2
         with:
           files: uni-${{ matrix.target }}.tar.gz

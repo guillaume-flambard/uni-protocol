@@ -1,4 +1,5 @@
 /target
+.DS_Store
 
 # Runtime state of a workspace. `**/` because an example may carry its own
 # `.uni/` beside its registry (examples/identity-github-actions), and a

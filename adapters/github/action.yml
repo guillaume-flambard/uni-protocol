@@ -33,6 +33,7 @@ runs:
           *) echo "unsupported runner OS: $RUNNER_OS" >&2; exit 1 ;;
         esac
         bin_dir="$RUNNER_TEMP/uni-bin"
+        archive="$bin_dir/uni.tar.gz"
         mkdir -p "$bin_dir"
         url="https://github.com/${{ inputs.repository }}/releases/download/${{ inputs.version }}/uni-${target}.tar.gz"
         echo "downloading $url"
@@ -41,7 +42,7 @@ runs:
         # races it; a transient CDN miss looks identical. Both are worth six
         # attempts before failing, and the failure still names the URL.
         for attempt in 1 2 3 4 5 6; do
-          if curl -fsSL "$url" -o "$bin_dir/uni.tar.gz"; then
+          if curl -fsSL "$url" -o "$archive"; then
             break
           fi
           if [ "$attempt" = 6 ]; then
@@ -51,8 +52,35 @@ runs:
           echo "attempt $attempt failed, retrying in 10s" >&2
           sleep 10
         done
-        tar -xzf "$bin_dir/uni.tar.gz" -C "$bin_dir"
-        rm -f "$bin_dir/uni.tar.gz"
+        magic="$(od -An -tx1 -N2 "$archive" | tr -d ' \n')"
+        case "$magic" in
+          1f8b)
+            tar -xzf "$archive" -C "$bin_dir"
+            ;;
+          504b)
+            # v0.9.4 packaged the Windows binary as ZIP but named it .tar.gz.
+            # Keep the published asset usable while future releases use gzip.
+            if [ "$RUNNER_OS" != "Windows" ]; then
+              echo "unexpected ZIP archive for $RUNNER_OS: $url" >&2
+              exit 1
+            fi
+            legacy_zip="$bin_dir/uni.zip"
+            mv "$archive" "$legacy_zip"
+            export UNI_ARCHIVE="$legacy_zip" UNI_BIN_DIR="$bin_dir"
+            pwsh -NoLogo -NoProfile -NonInteractive -Command \
+              'Expand-Archive -LiteralPath $env:UNI_ARCHIVE -DestinationPath $env:UNI_BIN_DIR -Force'
+            rm -f "$legacy_zip"
+            ;;
+          *)
+            echo "unsupported archive format from $url (magic=$magic)" >&2
+            exit 1
+            ;;
+        esac
+        rm -f "$archive"
+        if [ ! -x "$bin_dir/uni" ] && [ ! -f "$bin_dir/uni.exe" ]; then
+          echo "archive did not contain the uni binary: $url" >&2
+          exit 1
+        fi
         echo "$bin_dir" >> "$GITHUB_PATH"
     - name: Verify
       id: verify

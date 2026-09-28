@@ -28,21 +28,11 @@ Exit codes map 1:1 to review gates:
 
 ## Where the jobs run
 
-All jobs run on GitHub-hosted runners. The repository is public, so those are
-free and unlimited, and they are disposable: every `build.rs` and every test from
-every dependency runs in a throwaway VM, never on the lab VPS.
+Repository CI runs on disposable GitHub-hosted runners. No project workflow uses
+a self-hosted runner. The workflow files are the source of truth for this
+boundary.
 
-A self-hosted runner on the lab was tried on 2026-09-14 and removed the same day
-(lab-infra PR #68 added it, PR #69 took it out). It worked: 84 s warm for the
-full Linux job against ~2 min hosted, and the runner user was properly confined
-(non-root, not in the `docker` group, no access to the stacks' `.env`). The
-trade was still bad for a public repository: ~40 s per push, paid for by running
-supply-chain code on the machine that hosts production. GitHub's own guidance
-says the same. Self-hosting is the right call for **private** repositories,
-where minutes are billed and images must be built next to a local registry, which
-is exactly where the lab's other runners live.
-
-## Supported platforms (v0.3)
+## Supported platforms (v0.9)
 
 `cargo test` and the pure-Rust examples (`hello`, `multi`, `booking`) run on
 ubuntu, macos, and windows in CI. The shell verifier is platform-gated
@@ -78,7 +68,12 @@ Inputs: `contract` (required), `version` (default `v0.9.4`), `repository`
 (default `guillaume-flambard/uni-protocol`, replace with your fork), `report-to-summary`
 (default true). Unknown runner OS fails loudly instead of silently skipping.
 
-## Verified in CI (last checked 2026-09-15)
+The v0.9.4 Windows asset is a ZIP payload with a `.tar.gz` name. The action on
+`main` detects that legacy payload, while future releases produce a real gzip
+archive on Windows. A new release is still required before the corrected action
+can be pinned by version.
+
+## Verified in CI (last checked 2026-09-28)
 
 All of the above ran for real on the published repository:
 
@@ -88,10 +83,10 @@ All of the above ran for real on the published repository:
   every shipped contract), all green.
 - `release` workflow: five targets built and attached on tag push
   (`uni-<target>.tar.gz`), for every release since `v0.5.0`.
-- the composite action itself: an `action-smoke` job downloads the released
-  binary and verifies a runtime-free contract (`examples/artifact`). It passes
-  **no** `version`, so it exercises the default the action ships rather than a
-  pinned old tag.
+- the composite action itself: an `action-smoke` matrix on Linux, macOS, and
+  Windows downloads the released binary and verifies a runtime-free contract
+  (`examples/artifact`). It passes **no** `version`, so it exercises the action's
+  default release.
 - `identity-live` workflow: a real GitHub OIDC token, verified offline against a
   pinned JWKS, must reach `A3`; the same token with the issuer undeclared must
   be refused. See `examples/identity-github-actions/`.

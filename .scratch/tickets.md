@@ -13,15 +13,6 @@ Workflow per `AGENTS.md`: implement (TDD at the seam: `assure_contract` then
 
 ## Closed since v0.9.3, for the record
 
-- **Vault.** `1-Projects/uni.md` existed but described v0.8.0 with 114 tests and
-  called the identity adapters stubs. It now describes v0.9.4, the live A3, ADR-002,
-  the hidden-owner-invariant design, and the self-report correction. Three vault
-  side-effects: `Projects-MOC.md` described `[[uni]]` as an unrelated old project,
-  which is fixed; the log-grading note in `3-Garden/tech/` gained Lie 4 (the grader
-  that invents the verdict), which is where that lesson belongs; and a new note,
-  `Evaluating a Checker with a Hidden Specification`, holds the task-design lesson.
-  Vault audit: 0 schema issues, 0 broken wikilinks, 0 duplicates.
-
 - **t12, the second real-repo task**, with two independent plausible failure
   modes, each caught by a named owner property: a batch path that forgets the
   derived index, and one that checks entries against the starting balances so it
